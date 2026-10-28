@@ -1,0 +1,19 @@
+# Optional MVP development route. Select this overlay explicitly when ordinary
+# Docker outbound connectivity is wanted; it does not configure a proxy gateway.
+services:
+  control:
+    environment:
+      # Local panel opens without asking the operator to copy a token.
+      # Session cookies, CSRF, Host/Origin checks and separate MCP auth remain active.
+      BROWSER_MCP_OPERATOR_AUTH: local
+  browser:
+    environment:
+      EGRESS_READY: "true"
+      ROUTE_GENERATION: "1"
+      PROXY_ASSIGNMENT_ID: direct-development
+    networks:
+      - service_net
+      - browser_direct_uplink
+
+networks:
+  browser_direct_uplink: {}

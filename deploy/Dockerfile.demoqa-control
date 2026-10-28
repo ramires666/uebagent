@@ -1,0 +1,6 @@
+FROM browser-mcp-local-control:latest
+ENV PYTHONPATH=/app/src
+COPY src /app/src
+COPY ui /app/ui
+COPY config /app/config
+COPY scripts/test_demoqa.py /app/scripts/test_demoqa.py

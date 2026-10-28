@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+.pytest_cache
+runtime
+.runtime
+secrets
+.env
+.env.local
+debug.log
+vendor/**/.git
+

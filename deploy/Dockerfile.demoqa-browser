@@ -1,0 +1,3 @@
+FROM browser-mcp-browser-verified-candidate:latest
+COPY worker /app/worker
+COPY src /app/src

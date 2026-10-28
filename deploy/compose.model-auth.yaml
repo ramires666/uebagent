@@ -1,0 +1,11 @@
+services:
+  control:
+    environment:
+      MODEL_API_KEY_FILE: /run/model-secrets/key
+    volumes:
+      - model_credentials:/run/model-secrets:ro
+
+volumes:
+  model_credentials:
+    external: true
+    name: browser-mcp-model-credentials

@@ -1,0 +1,21 @@
+{
+  "browser_fork": {
+    "repository": "https://github.com/WebRobot-Ltd/browser-use-camoufox.git",
+    "commit": "7293a9b33fac988a1485566d0bdecffeda856c9f",
+    "adapter_path": "browser_use/browser/adapter.py",
+    "adapter_sha256": "225c2aa8bd76693949160966fe84fe7762998e0ea7290a3ff64ba91405e11c78",
+    "license_path": "LICENSE"
+  },
+  "python_runtime": "3.12",
+  "camoufox": "0.4.11",
+  "playwright": "1.51.0",
+  "fara_prompt": {
+    "repository": "https://github.com/microsoft/fara",
+    "commit": "a675d6d61c41c47ae87bacefeab22caad18e3e84",
+    "source_sha256": "727c6c7d3111d28b3508089eb5645020f6ea145c008549bbdf974e78f0a16854",
+    "prompt_sha256": "e27d9606fefc243f0a1f5d04854f75e39af9f9aa3e5965124ad24a1dd59ca93c",
+    "coordinate_space": 1000,
+    "recommended_viewport": {"width": 1440, "height": 900},
+    "viewport_source": "https://huggingface.co/microsoft/Fara1.5-9B"
+  }
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Browser MCP</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>Local Browser MCP</h1>
+    <p id="status" role="status">Checking connection…</p>
+    <form id="pair-form">
+      <label>Local API origin
+        <input id="api-origin" type="url" value="http://localhost:8080" required autocomplete="url">
+      </label>
+      <label>Pairing code
+        <input id="pairing-code" type="password" required autocomplete="off" maxlength="200">
+      </label>
+      <label>Source label
+        <input id="source-label" type="text" value="My Chrome" maxlength="80">
+      </label>
+      <button type="submit">Pair / reconnect</button>
+    </form>
+    <section id="permission-section" hidden>
+      <h2>Site access needed</h2>
+      <p>Cookie access requests exact HTTPS and HTTP host permissions for the selected open HTTPS sites and their eligible parent domains. HTTP permission is needed to read non-Secure cookies. Parent sites do not need to be open. No subdomain wildcard is requested.</p>
+      <p id="permission-list"></p>
+      <button id="grant-button" type="button">Grant selected site access</button>
+    </section>
+    <button id="connect-button" type="button">Reconnect</button>
+    <button id="panel-button" type="button">Open web panel</button>
+    <p class="note">Cookie access is requested only for selected open HTTPS sites and exact parent domains. Values are sent only for cookies you select in the web panel.</p>
+    <p id="message" aria-live="polite"></p>
+    <small id="extension-version" aria-label="Extension version"></small>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

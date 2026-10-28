@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Ручное управление браузером</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background: #10151a; color: #e4ebe7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 50% -15%, #26322c 0, #10151a 58%); }
+    button, input { font: inherit; }
+    button, .link { border: 1px solid #3c4b45; border-radius: 8px; background: #1b2525; color: #dce7df; padding: 9px 12px; cursor: pointer; text-decoration: none; }
+    button:hover:not(:disabled), .link:hover { border-color: #a6d47e; background: #253126; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    input { min-width: 0; border: 1px solid #39474a; border-radius: 8px; padding: 9px 11px; color: #ecf2ef; background: #121a20; outline: none; }
+    input:focus { border-color: #a6d47e; box-shadow: 0 0 0 2px #a6d47e22; }
+    .shell { max-width: 1500px; margin: 0 auto; padding: 20px clamp(12px, 3vw, 36px) 34px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .mark { width: 35px; height: 35px; display: grid; place-items: center; border: 1px solid #455945; border-radius: 11px; color: #c7eb9c; background: #202b23; font-size: 18px; }
+    h1 { margin: 0; font-size: clamp(20px, 3vw, 27px); letter-spacing: -.025em; }
+    .subtitle { margin-top: 4px; color: #94a19e; font-size: 12px; }
+    .top-actions { display: flex; align-items: center; gap: 9px; }
+    .status { display: flex; align-items: center; gap: 8px; padding: 8px 11px; color: #b4c2bc; background: #171f23; border: 1px solid #2d383e; border-radius: 999px; font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #88918f; }
+    .status.good .dot { background: #a6d47e; box-shadow: 0 0 10px #a6d47e55; }
+    .status.bad .dot { background: #e18f83; }
+    .notice { min-height: 39px; margin-bottom: 12px; padding: 10px 13px; border: 1px solid #39434a; border-radius: 9px; color: #b5c1c0; background: #161d22; font-size: 12px; }
+    .notice.error { color: #f0aaa1; border-color: #62413e; background: #251b1c; }
+    .notice.warning { color: #e2c67d; border-color: #5a4e32; background: #242117; }
+    .task-progress { margin-bottom: 12px; padding: 10px 13px; border: 1px solid #344147; border-radius: 9px; background: #161e23; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    .task-progress h2 { display: inline; margin: 0 8px 0 0; color: #acbbb5; font-size: 12px; }
+    .task-progress p { margin: 4px 0 0; }
+    .screen-card { overflow: hidden; border: 1px solid #344147; border-radius: 12px; background: #090d10; box-shadow: 0 16px 50px #0005; }
+    .screen-head { min-height: 41px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 13px; border-bottom: 1px solid #29353b; background: #172026; color: #97a5a4; font-size: 11px; }
+    #site-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .viewport { position: relative; display: grid; place-items: center; min-height: min(67vh, 690px); max-height: 78vh; overflow: auto; background: #080b0e; }
+    #remote-keyboard { position: absolute; left: 1px; bottom: 1px; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; }
+    #browser-image { display: block; max-width: 100%; max-height: 75vh; width: auto; height: auto; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+    #browser-image.interactive { cursor: crosshair; }
+    .empty { padding: 48px 20px; text-align: center; color: #879391; font-size: 13px; }
+    .empty strong { display: block; margin-bottom: 7px; color: #c3ceca; font-size: 15px; }
+    .controls { display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(240px, 1fr) minmax(280px, 1.4fr); gap: 12px; margin-top: 12px; }
+    .control-card { min-width: 0; padding: 13px; border: 1px solid #2d393e; border-radius: 10px; background: #161e23; }
+    .control-card h2 { margin: 0 0 10px; color: #acbbb5; font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+    .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+    .button-row button { min-height: 36px; padding: 8px 10px; font-size: 12px; }
+    .text-form, .navigate-form { display: flex; gap: 7px; }
+    .text-form input, .navigate-form input { flex: 1; }
+    .help { margin: 8px 1px 0; color: #80908f; font-size: 10px; line-height: 1.5; }
+    footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 14px 2px 0; color: #71817f; font-size: 10px; }
+    @media (max-width: 900px) { .controls { grid-template-columns: 1fr 1fr; } .control-card:last-child { grid-column: 1 / -1; } }
+    @media (max-width: 600px) { .shell { padding-top: 12px; } header { align-items: flex-start; flex-direction: column; } .top-actions { width: 100%; justify-content: space-between; } .viewport { min-height: 40vh; max-height: 62vh; } #browser-image { max-height: 60vh; } .controls { grid-template-columns: 1fr; } .control-card:last-child { grid-column: auto; } }
+  </style>
+  <script src="/desktop.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand">
+        <div class="mark" aria-hidden="true">↗</div>
+        <div><h1>Ручное управление браузером</h1><div class="subtitle">Просмотр содержимого текущего браузера и ручной ввод</div></div>
+      </div>
+      <div class="top-actions">
+        <div id="owner-status" class="status"><span class="dot" aria-hidden="true"></span><span id="owner-label">Загрузка состояния…</span></div>
+        <button id="takeover" type="button" disabled>Забрать управление</button>
+        <button id="release-control" type="button" disabled>Вернуть управление</button>
+        <button id="refresh" type="button">Обновить</button>
+        <a class="link" href="/">Назад в панель</a>
+      </div>
+    </header>
+
+    <div id="notice" class="notice" role="status">Подключение к локальному браузеру…</div>
+
+    <section class="task-progress" aria-label="Ход задачи" aria-live="polite">
+      <h2>Задача</h2><span id="task-status">Загрузка…</span>
+      <p id="task-goal"></p><p id="task-detail"></p>
+    </section>
+
+    <section class="screen-card" aria-label="Содержимое браузера">
+      <div class="screen-head"><span id="site-label">Браузер недоступен</span><span id="browser-runtime"></span><span id="image-size"></span></div>
+      <div class="viewport">
+        <div id="empty-state" class="empty"><strong>Ожидание снимка экрана</strong>Здесь появится содержимое браузера, когда он станет доступен.</div>
+        <img id="browser-image" alt="Текущий снимок содержимого браузера" hidden draggable="false">
+        <input id="remote-keyboard" type="password" aria-label="Клавиатура браузера" tabindex="-1" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Ручные действия">
+      <div class="control-card">
+        <h2>Навигация</h2>
+        <form id="navigate-form" class="navigate-form">
+          <input id="navigate-url" type="url" inputmode="url" placeholder="https://example.com" aria-label="HTTPS-адрес" autocomplete="off" spellcheck="false">
+          <button type="submit" data-mutate>Перейти</button>
+        </form>
+        <p class="help">Разрешён переход только по HTTPS-адресу без логина и пароля в URL.</p>
+      </div>
+      <div class="control-card">
+        <h2>Клавиши</h2>
+        <div class="button-row">
+          <button type="button" data-key="Tab" data-mutate>Tab</button>
+          <button type="button" data-key="Shift+Tab" data-mutate>Shift + Tab</button>
+          <button type="button" data-key="Backspace" data-mutate>⌫</button>
+          <button type="button" data-key="Enter" data-mutate>Enter</button>
+          <button type="button" data-key="Escape" data-mutate>Esc</button>
+        </div>
+        <div class="button-row" style="margin-top:8px">
+          <button type="button" data-scroll="-480" data-mutate>↑ Прокрутить вверх</button>
+          <button type="button" data-scroll="480" data-mutate>↓ Прокрутить вниз</button>
+        </div>
+      </div>
+      <div class="control-card">
+        <h2>Ввод текста</h2>
+        <form id="text-form" class="text-form">
+          <input id="text-input" type="text" placeholder="Введите текст" aria-label="Текст для ввода в браузер" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="4000">
+          <button type="submit" data-mutate>Ввести</button>
+        </form>
+        <p class="help">Нажмите поле на снимке и печатайте с клавиатуры. Можно также ввести текст здесь и нажать «Ввести».</p>
+      </div>
+    </section>
+    <footer><span>Картинка показывает содержимое браузера. Это не удалённый рабочий стол ОС.</span><span>Управление включается только после передачи контроля оператору.</span></footer>
+  </main>
+</body>
+</html>

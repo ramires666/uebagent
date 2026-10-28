@@ -1,0 +1,402 @@
+[CmdletBinding()]
+param(
+    [string[]]$Cases = @('text_box', 'invalid_email', 'checkbox', 'web_table', 'notify_then_click'),
+    [switch]$ExtendedComplex,
+    [string]$RunLabel = 'v4',
+    [switch]$SkipBuild,
+    [switch]$ProbeOnly,
+    [switch]$RunCasesAfterReadableCandidate,
+    [switch]$RemoveTestVolume,
+    [switch]$DiagnosticGate,
+    [ValidateRange(0, 600)][int]$DiagnosticHoldSeconds = 120,
+    [ValidatePattern('^[A-Za-z0-9_-]{1,32}$')][string]$ProbeFramePrefix = 'frame',
+    [string[]]$FontMatrixVariants = @('baseline', 'arial_normal', 'arial_medium', 'system_normal', 'system_bold', 'monospace')
+)
+
+$ErrorActionPreference = 'Stop'
+$Root = Split-Path -Parent $PSScriptRoot
+$ComposeFile = Join-Path $Root 'deploy/compose.demoqa-test.yaml'
+$Project = 'browser-mcp-demoqa-test'
+$ServiceUrl = 'http://127.0.0.1:18080'
+$ResultsPath = Join-Path $Root "runtime/demoqa/results-$RunLabel.jsonl"
+$workerKey = $null
+$stackCleanupNeeded = $false
+$productionContainerId = $null
+$productionWasRunning = $false
+$productionStopAttempted = $false
+$productionStopped = $false
+$continueCases = $false
+$resultLines = [System.Collections.Generic.List[string]]::new()
+
+function Invoke-NativeCaptured {
+    param([string]$FilePath, [string[]]$Arguments)
+    $previousPreference = $ErrorActionPreference
+    $output = @()
+    $exitCode = 1
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = @(& $FilePath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+    return [pscustomobject]@{ ExitCode = $exitCode; Output = @($output) }
+}
+
+function Invoke-DockerChecked {
+    param([string[]]$Arguments, [string]$FailureMessage)
+    $result = Invoke-NativeCaptured -FilePath 'docker' -Arguments $Arguments
+    if ($result.ExitCode -ne 0) {
+        $details = ($result.Output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+        throw "$FailureMessage (exit $($result.ExitCode)). $details"
+    }
+    return ,$result.Output
+}
+
+function Get-TestProfileDigest {
+    $code = "from pathlib import Path;import hashlib;p=Path('/app/runtime/worker-state/profiles/default.camoufox-fingerprint.json');print(hashlib.sha256(p.read_bytes()).hexdigest())"
+    $result = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('exec', '-T', 'browser', 'python', '-c', $code))
+    if ($result.ExitCode -ne 0) { throw 'Could not read the disposable test fingerprint digest.' }
+    $digest = (($result.Output | ForEach-Object { [string]$_ }) -join '').Trim()
+    if ($digest -notmatch '^[0-9a-f]{64}$') { throw 'Disposable worker fingerprint digest was missing or malformed.' }
+    return $digest
+}
+
+function Get-ComposeArgs {
+    return @('compose', '-p', $Project, '-f', $ComposeFile)
+}
+
+function Save-ViewerScreenshot {
+    param([string]$FileName)
+    if ($FileName -notmatch '^[a-z0-9_-]+\.png$') { throw 'Invalid screenshot filename.' }
+    $screensDirectory = Join-Path (Join-Path $Root 'runtime/demoqa') "$RunLabel/screens"
+    New-Item -ItemType Directory -Path $screensDirectory -Force | Out-Null
+    $target = Join-Path $screensDirectory $FileName
+    $null = Invoke-WebRequest -Uri "$ServiceUrl/api/v1/desktop/screenshot" -Method Get -WebSession $script:DemoqaWebSession -TimeoutSec 15 -UseBasicParsing -OutFile $target -ErrorAction Stop
+    $bytes = [System.IO.File]::ReadAllBytes($target)
+    if ($bytes.Length -lt 8 -or $bytes.Length -gt 16MB -or $bytes[0] -ne 137 -or
+        [System.Text.Encoding]::ASCII.GetString($bytes, 1, 3) -ne 'PNG') {
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        throw "Viewer screenshot $FileName failed PNG validation."
+    }
+    Write-Host "Saved screenshot: $target"
+}
+
+function Invoke-RunnerStream {
+    param([string[]]$RunnerArgs)
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & docker @RunnerArgs 2>&1 | ForEach-Object {
+            $line = [string]$_
+            Write-Host $line
+            if ($line.TrimStart().StartsWith('{')) {
+                $resultLines.Add($line)
+                try {
+                    $row = $line | ConvertFrom-Json -ErrorAction Stop
+                    if ($row.scenario -eq 'font_probe_phase' -and $row.phase -eq 'one_second') { Save-ViewerScreenshot 'font-probe-1s.png' }
+                    elseif ($row.scenario -eq 'font_probe_phase' -and $row.phase -eq 'five_seconds') { Save-ViewerScreenshot 'font-probe-5s.png' }
+                    elseif ($row.screenshot_saved -eq $true -and $row.scenario -is [string]) { Save-ViewerScreenshot "$($row.scenario).png" }
+                } catch { throw }
+            }
+        }
+        return $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+}
+
+function Invoke-HostProbe {
+    param([string]$ProbePath)
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & python -u $ProbePath 2>&1 | ForEach-Object {
+            $line = [string]$_
+            Write-Host $line
+            if ($line.TrimStart().StartsWith('{')) { $resultLines.Add($line) }
+        }
+        return $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+}
+
+function Copy-DemoqaScreenshots {
+    $screensDirectory = Join-Path (Join-Path $Root 'runtime/demoqa') "$RunLabel/screens"
+    New-Item -ItemType Directory -Path $screensDirectory -Force | Out-Null
+    $screensToCopy = @{}
+    $artifactDirectory = '/tmp/demoqa-artifacts'
+    foreach ($line in $resultLines) {
+        try {
+            $row = $line | ConvertFrom-Json -ErrorAction Stop
+            if ($row.artifact_directory -is [string] -and
+                $row.artifact_directory -in @('/tmp/demoqa-artifacts', '/app/runtime/control-data/demoqa-artifacts')) {
+                $artifactDirectory = $row.artifact_directory
+            }
+            if ($row.screenshot_saved -eq $true -and $row.scenario -is [string]) { $screensToCopy["$($row.scenario).png"] = $true }
+            if ($row.screenshot_files -is [array]) {
+                foreach ($name in $row.screenshot_files) {
+                    if ($name -is [string] -and $name -match '^[a-z0-9_-]+\.png$') { $screensToCopy[$name] = $true }
+                }
+            }
+        } catch { }
+    }
+    if ($screensToCopy.Count -eq 0) { return }
+    $controlQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'control'))
+    $controlIds = @($controlQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($controlQuery.ExitCode -ne 0 -or $controlIds.Count -ne 1) { throw 'Could not identify the isolated control container before copying screenshots.' }
+    foreach ($name in $screensToCopy.Keys) {
+        $sourcePath = "$artifactDirectory/$name"
+        $source = "$($controlIds[0]):$sourcePath"
+        $target = Join-Path $screensDirectory $name
+        if (Test-Path -LiteralPath $target -PathType Leaf) { continue }
+        $copiedScreen = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', $source, $target)
+        if ($copiedScreen.ExitCode -ne 0) {
+            $readerCode = 'import base64,pathlib,sys; p=pathlib.Path(sys.argv[1]); print(base64.b64encode(p.read_bytes()).decode("ascii"))'
+            $readArgs = @('exec', '-T', $controlIds[0], 'python', '-c', $readerCode, $sourcePath)
+            $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments $readArgs
+            if ($encoded.ExitCode -ne 0) { throw "Could not export screenshot $name before test-stack cleanup." }
+            try { $bytes = [Convert]::FromBase64String(($encoded.Output -join '').Trim()) }
+            catch { throw "Screenshot $name could not be decoded from the isolated container." }
+            if ($bytes.Length -lt 8 -or $bytes.Length -gt 16MB -or $bytes[0] -ne 137 -or
+                [System.Text.Encoding]::ASCII.GetString($bytes, 1, 3) -ne 'PNG') {
+                throw "Screenshot $name failed PNG validation."
+            }
+            [System.IO.File]::WriteAllBytes($target, $bytes)
+        }
+        Write-Host "Saved screenshot: $target"
+    }
+}
+
+try {
+    if (-not (Test-Path -LiteralPath $ComposeFile -PathType Leaf)) { throw 'Disposable DemoQA compose file is missing.' }
+    if ($RunLabel -notmatch '^[A-Za-z0-9_-]{1,20}$') { throw 'RunLabel may contain only letters, digits, underscores and dashes.' }
+    $FontMatrixVariants = @($FontMatrixVariants | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $allowedFontVariants = @('baseline', 'arial_normal', 'arial_medium', 'system_normal', 'system_bold', 'monospace', 'system_thin100', 'arial_thin100', 'baseline_normal')
+    if (@($FontMatrixVariants | Where-Object { $_ -notin $allowedFontVariants }).Count -gt 0) { throw 'FontMatrixVariants contains an unknown style.' }
+    $allowed = @('text_box', 'invalid_email', 'checkbox', 'web_table', 'radio', 'double_click', 'single_click', 'dynamic', 'notify_then_click')
+    $Cases = @($Cases | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($Cases.Count -eq 0 -or @($Cases | Where-Object { $_ -notin $allowed }).Count -gt 0) { throw 'Cases contains an unknown or empty scenario name.' }
+    if ($RunCasesAfterReadableCandidate) {
+        if (-not $ProbeOnly -or -not $ExtendedComplex -or ($Cases -join ',') -ne 'checkbox,web_table') {
+            throw 'RunCasesAfterReadableCandidate requires ProbeOnly, ExtendedComplex, and exactly checkbox,web_table.'
+        }
+    }
+
+    $keyBytes = [byte[]]::new(48)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($keyBytes) } finally { $rng.Dispose() }
+    $workerKey = [Convert]::ToBase64String($keyBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    $env:DEMOQA_WORKER_KEY = $workerKey
+    $env:DEMOQA_CASES = ($Cases -join ',')
+    if ($ExtendedComplex) { $env:DEMOQA_EXTENDED_COMPLEX = '1' } else { Remove-Item Env:DEMOQA_EXTENDED_COMPLEX -ErrorAction SilentlyContinue }
+
+    # Building the isolated image is safe while production is live and ensures it is ready
+    # before the one production browser is paused.
+    if (-not $SkipBuild) {
+        Invoke-DockerChecked -Arguments ((Get-ComposeArgs) + @('build')) -FailureMessage 'Could not build the isolated DemoQA images' | Out-Null
+    }
+
+    # Never run two Camoufox workers at once. Inspect status before stopping the exact
+    # production container, and refuse to interrupt any active worker or task.
+    $productionQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', 'label=com.docker.compose.project=browser-mcp-local', '--filter', 'label=com.docker.compose.service=browser')
+    $productionWorkers = $productionQuery.Output
+    if ($productionQuery.ExitCode -ne 0) { throw 'Could not inspect running Docker containers; no test services were started.' }
+    $productionWorkers = @($productionWorkers | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($productionWorkers.Count -gt 1) { throw 'More than one production browser container is running; refusing to change services.' }
+    if ($productionWorkers.Count -eq 1) {
+        $productionContainerId = $productionWorkers[0]
+        $productionWasRunning = $true
+        $preflight = Invoke-NativeCaptured -FilePath 'python' -Arguments @((Join-Path $PSScriptRoot 'demoqa_preflight.py'))
+        if ($preflight.ExitCode -ne 0) { throw 'Production preflight did not prove that its browser and tasks are idle; production was left running.' }
+        try { $preflightState = ($preflight.Output -join '') | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Production preflight returned unreadable state; production was left running.' }
+        if ($preflightState.ready -ne $true) { throw 'Production preflight did not prove idle state; production was left running.' }
+        $productionStopAttempted = $true
+        Invoke-DockerChecked -Arguments @('stop', $productionContainerId) -FailureMessage 'Could not stop the idle production browser container' | Out-Null
+        $productionStopped = $true
+        $stillRunning = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "id=$productionContainerId")
+        if ($stillRunning.ExitCode -ne 0 -or @($stillRunning.Output | Where-Object { [string]$_ }).Count -gt 0) { throw 'Production browser did not stop cleanly; disposable stack was not started.' }
+    }
+
+    # Mark cleanup before `up`: compose can partially create the browser even when it fails.
+    $stackCleanupNeeded = $true
+    Invoke-DockerChecked -Arguments ((Get-ComposeArgs) + @('up', '-d', '--no-build')) -FailureMessage 'Could not start the disposable DemoQA stack' | Out-Null
+
+    # Create the local UI cookie session first; otherwise the auth middleware can return a
+    # browser redirect instead of JSON and obscure whether the test service is ready.
+    $web = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+    $uiReady = $false
+    $deadline = [DateTime]::UtcNow.AddSeconds(90)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $session = Invoke-RestMethod -Uri "$ServiceUrl/api/v1/operator/session" -Method Get -WebSession $web -TimeoutSec 3
+            if ($session.authenticated -eq $true) { $uiReady = $true; break }
+        } catch { Start-Sleep -Seconds 2 }
+    }
+    if (-not $uiReady) { throw 'Disposable local UI session did not become ready within 90 seconds.' }
+    $script:DemoqaWebSession = $web
+
+    $healthReady = $false
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $health = Invoke-RestMethod -Uri "$ServiceUrl/health/ready" -Method Get -WebSession $web -TimeoutSec 3
+            if ($health.status -eq 'ok' -or $health.ready -eq $true) { $healthReady = $true; break }
+        } catch { Start-Sleep -Seconds 2 }
+    }
+    if (-not $healthReady) { throw 'Disposable control service health did not become ready within 60 seconds.' }
+
+    $profileDigestBefore = Get-TestProfileDigest
+
+    if ($ProbeOnly) {
+        $gateDir = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+        New-Item -ItemType Directory -Path $gateDir -Force | Out-Null
+        $readableGate = Join-Path $gateDir 'run-readable-cases'
+        Remove-Item -LiteralPath $readableGate -Force -ErrorAction SilentlyContinue
+        $env:DEMOQA_RUN_LABEL = $RunLabel
+        $env:DEMOQA_FRAME_PREFIX = $ProbeFramePrefix
+        $env:DEMOQA_FONT_VARIANTS = ($FontMatrixVariants -join ',')
+        $env:DEMOQA_DIAGNOSTIC_HOLD_SECONDS = [string]$DiagnosticHoldSeconds
+        $probePath = Join-Path $PSScriptRoot 'demoqa_live_probe.py'
+        $probeExit = Invoke-HostProbe -ProbePath $probePath
+        Remove-Item Env:DEMOQA_RUN_LABEL -ErrorAction SilentlyContinue
+        Remove-Item Env:DEMOQA_FRAME_PREFIX -ErrorAction SilentlyContinue
+        Remove-Item Env:DEMOQA_FONT_VARIANTS -ErrorAction SilentlyContinue
+        Remove-Item Env:DEMOQA_DIAGNOSTIC_HOLD_SECONDS -ErrorAction SilentlyContinue
+        if ($probeExit -ne 0) { throw "Read-only live probe failed (exit $probeExit)." }
+        if ($RunCasesAfterReadableCandidate) {
+            if (Test-Path -LiteralPath $readableGate -PathType Leaf) {
+                Remove-Item -LiteralPath $readableGate -Force
+                $runnerArgs = (Get-ComposeArgs) + @('exec', '-T', '-e', 'DEMOQA_CASES=checkbox,web_table', '-e', 'DEMOQA_EXTENDED_COMPLEX=1', 'control', 'python', '/app/scripts/test_demoqa.py')
+                $testExitCode = Invoke-RunnerStream -RunnerArgs $runnerArgs
+                Copy-DemoqaScreenshots
+                if ($testExitCode -ne 0) { throw "Readability-gated DemoQA runner failed (exit $testExitCode)." }
+            }
+            else {
+                $resultLines.Add('{"scenario":"font_readability_gate","status":"not_signaled","model_cases_run":false}')
+                Write-Host 'Natural-font review gate was not signaled; checkbox and web_table were not run.'
+            }
+        }
+    }
+    elseif ($DiagnosticGate) {
+        $diagnosticArgs = (Get-ComposeArgs) + @('exec', '-T', '-e', 'DEMOQA_DIAGNOSTIC_ONLY=1', 'control', 'python', '/app/scripts/test_demoqa.py')
+        $diagnosticExit = Invoke-RunnerStream -RunnerArgs $diagnosticArgs
+        if ($diagnosticExit -ne 0) { throw "Diagnostic probe failed (exit $diagnosticExit)." }
+        Copy-DemoqaScreenshots
+        Write-Host "Font probe is live at $ServiceUrl/desktop; waiting up to $DiagnosticHoldSeconds seconds for review before starting model cases."
+        $gateDir = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+        New-Item -ItemType Directory -Path $gateDir -Force | Out-Null
+        $gateFile = Join-Path $gateDir 'continue-cases'
+        $continueCases = $false
+        $reviewDeadline = [DateTime]::UtcNow.AddSeconds($DiagnosticHoldSeconds)
+        while ([DateTime]::UtcNow -lt $reviewDeadline) {
+            if (Test-Path -LiteralPath $gateFile -PathType Leaf) {
+                Remove-Item -LiteralPath $gateFile -Force
+                $continueCases = $true
+                break
+            }
+            Start-Sleep -Seconds 1
+        }
+        if (-not $continueCases) {
+            $resultLines.Add('{"scenario":"font_gate","status":"review_timeout","model_cases_run":false}')
+            Write-Host 'No diagnostic continuation signal arrived; no model cases were run.'
+        }
+    }
+
+    if (-not $ProbeOnly -and (-not $DiagnosticGate -or $continueCases)) {
+        $runnerArgs = (Get-ComposeArgs) + @('exec', '-T', '-e', "DEMOQA_CASES=$($Cases -join ',')")
+        if ($ExtendedComplex) { $runnerArgs += @('-e', 'DEMOQA_EXTENDED_COMPLEX=1') }
+        $runnerArgs += @('control', 'python', '/app/scripts/test_demoqa.py')
+        $testExitCode = Invoke-RunnerStream -RunnerArgs $runnerArgs
+        Copy-DemoqaScreenshots
+        if ($testExitCode -ne 0) { throw "DemoQA scenario runner failed (exit $testExitCode)." }
+    }
+
+    $profileDigestAfter = Get-TestProfileDigest
+    $profileDigestRow = [pscustomobject]@{ scenario = 'test_profile_fingerprint'; status = 'read_only'; sha256_before = $profileDigestBefore; sha256_after = $profileDigestAfter; unchanged = ($profileDigestBefore -eq $profileDigestAfter) }
+    $profileDigestJson = $profileDigestRow | ConvertTo-Json -Compress
+    $resultLines.Add($profileDigestJson)
+    Write-Host $profileDigestJson
+    if ($profileDigestBefore -ne $profileDigestAfter) { throw 'Disposable worker fingerprint changed during the run; same-profile comparison is invalid.' }
+}
+finally {
+    $cleanupError = $null
+    if ($stackCleanupNeeded) {
+        # Scope cleanup to this project's name; the stack uses no persistent volumes.
+        $downArgs = (Get-ComposeArgs) + @('down', '--remove-orphans')
+        $down = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
+        if ($down.ExitCode -ne 0) {
+            $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
+            if ($retryDown.ExitCode -ne 0) { $cleanupError = 'Could not remove the disposable DemoQA containers and network.' }
+        }
+        $testWorkersResult = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project")
+        $testWorkers = $testWorkersResult.Output
+        if ($testWorkersResult.ExitCode -ne 0) { $cleanupError = 'Could not verify that the test containers were removed.' }
+        else {
+            $testWorkers = @($testWorkers | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+            if ($testWorkers.Count -gt 0) {
+                # Retry only the disposable project; do not use global prune or volume removal.
+                $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
+                $remainingTest = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project")
+                if ($remainingTest.ExitCode -ne 0 -or @($remainingTest.Output | Where-Object { [string]$_ }).Count -gt 0) {
+                    $testBrowserResult = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project", '--filter', 'label=com.docker.compose.service=browser')
+                    $testBrowserIds = $testBrowserResult.Output
+                    if ($testBrowserResult.ExitCode -eq 0 -and $testBrowserIds.Count -gt 0) {
+                        $stopTest = Invoke-NativeCaptured -FilePath 'docker' -Arguments (@('stop') + $testBrowserIds)
+                    }
+                    $cleanupError = 'Test container cleanup did not fully succeed; production restore is allowed only after no test browser is running.'
+                }
+            }
+        }
+    }
+    if ($productionWasRunning -and $productionStopAttempted) {
+        $testWorkers = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "label=com.docker.compose.project=$Project", '--filter', 'label=com.docker.compose.service=browser')
+        if ($testWorkers.ExitCode -ne 0 -or @($testWorkers.Output | Where-Object { [string]$_ }).Count -gt 0) {
+            $cleanupError = 'Test browser is still running; production will not be restarted concurrently.'
+        }
+        else {
+            $currentProduction = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "id=$productionContainerId")
+            if ($currentProduction.ExitCode -ne 0) { $cleanupError = 'Could not verify production browser state before restore.' }
+            else {
+                if (@($currentProduction.Output | Where-Object { [string]$_ }).Count -eq 0) {
+                    $startProduction = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('start', $productionContainerId)
+                    if ($startProduction.ExitCode -ne 0) { $cleanupError = 'Could not restore the production browser container.' }
+                }
+                if (-not $cleanupError) {
+                    $verifiedProduction = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "id=$productionContainerId")
+                    if ($verifiedProduction.ExitCode -ne 0 -or @($verifiedProduction.Output | Where-Object { [string]$_ }).Count -ne 1) {
+                        $cleanupError = 'Production browser did not return to its original running state.'
+                    }
+                }
+            }
+        }
+    }
+    if ($RemoveTestVolume) {
+        $volumeName = 'browser-mcp-demoqa-test-worker-state'
+        $volumeInfo = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('volume', 'inspect', $volumeName)
+        if ($volumeInfo.ExitCode -eq 0) {
+            try { $volumeRecord = (($volumeInfo.Output -join '') | ConvertFrom-Json -ErrorAction Stop)[0] }
+            catch { $cleanupError = 'Could not verify the project label before removing the test worker volume.' }
+            if (-not $cleanupError -and $volumeRecord.Labels.'com.docker.compose.project' -ne $Project) {
+                $cleanupError = 'The named volume is not owned by this disposable DemoQA project; it was kept.'
+            }
+            if (-not $cleanupError) {
+                $removedVolume = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('volume', 'rm', $volumeName)
+                if ($removedVolume.ExitCode -ne 0) { $cleanupError = 'Could not remove the verified disposable test worker volume.' }
+            }
+        }
+    }
+    if ($resultLines.Count -gt 0) {
+        $resultsDirectory = Split-Path -Parent $ResultsPath
+        New-Item -ItemType Directory -Path $resultsDirectory -Force | Out-Null
+        [System.IO.File]::WriteAllLines($ResultsPath, $resultLines, [System.Text.UTF8Encoding]::new($false))
+    }
+    Remove-Item Env:DEMOQA_WORKER_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:DEMOQA_CASES -ErrorAction SilentlyContinue
+    Remove-Item Env:DEMOQA_EXTENDED_COMPLEX -ErrorAction SilentlyContinue
+    Remove-Item Env:DEMOQA_FRAME_PREFIX -ErrorAction SilentlyContinue
+    Remove-Item Env:DEMOQA_FONT_VARIANTS -ErrorAction SilentlyContinue
+    Remove-Item Env:DEMOQA_DIAGNOSTIC_HOLD_SECONDS -ErrorAction SilentlyContinue
+    $workerKey = $null
+    if ($cleanupError) { throw $cleanupError }
+}
+
+Write-Host "Saved sanitized test output to $ResultsPath"

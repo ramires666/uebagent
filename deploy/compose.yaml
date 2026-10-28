@@ -1,0 +1,82 @@
+name: browser-mcp-local
+
+services:
+  control:
+    init: true
+    mem_limit: ${CONTROL_MEMORY_LIMIT:-768m}
+    memswap_limit: ${CONTROL_MEMORY_LIMIT:-768m}
+    cpus: ${CONTROL_CPU_LIMIT:-2.0}
+    pids_limit: 128
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.control
+    restart: unless-stopped
+    environment:
+      BROWSER_MCP_DATA_DIR: /app/runtime/control-data
+      BROWSER_MCP_ORIGIN: ${BROWSER_MCP_ORIGIN:-http://localhost:8080}
+      BROWSER_MCP_OPERATOR_AUTH: local
+      BROWSER_MCP_UI_DIR: /app/ui
+      MODEL_BASE_URL: ${MODEL_BASE_URL:-http://host.docker.internal:8081/v1}
+      MODEL_ALIAS: ${MODEL_ALIAS:-fara-browser}
+      BROWSER_WORKER_URL: http://browser:7070
+      WORKER_API_KEY_FILE: /run/worker-secrets/key
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - control_data:/app/runtime/control-data
+      - worker_credentials:/run/worker-secrets:ro
+    networks:
+      - service_net
+      - host_model_net
+    depends_on:
+      - browser
+
+  browser:
+    init: true
+    mem_limit: ${BROWSER_MEMORY_LIMIT:-2g}
+    memswap_limit: ${BROWSER_MEMORY_LIMIT:-2g}
+    cpus: ${BROWSER_CPU_LIMIT:-4.0}
+    pids_limit: 512
+    shm_size: 256m
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.browser
+    restart: unless-stopped
+    environment:
+      WORKER_API_KEY_FILE: /run/worker-secrets/key
+      WORKER_DATA_DIR: /app/runtime/worker-state
+      BROWSER_BACKEND: camoufox
+      BROWSER_HEADLESS: "false"
+      # Fail readiness until a real per-browser transparent egress route is installed and checked.
+      EGRESS_READY: "false"
+    volumes:
+      - worker_state:/app/runtime/worker-state
+      - browser_profile:/app/runtime/worker-state/profiles/default
+      - worker_credentials:/run/worker-secrets:ro
+    networks:
+      - service_net
+
+networks:
+  service_net:
+    internal: true
+  host_model_net: {}
+
+volumes:
+  control_data:
+  browser_profile:
+  worker_state:
+  worker_credentials:
+    external: true
+    name: browser-mcp-worker-credentials

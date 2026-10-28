@@ -1,0 +1,72 @@
+name: browser-mcp-demoqa-test
+
+# Disposable test stack. Start only after the production browser has stopped;
+# never mount production state, credentials, profiles, or cookies here.
+services:
+  browser:
+    image: browser-mcp-demoqa-browser:test
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.demoqa-browser
+    init: true
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2.0
+    pids_limit: 512
+    shm_size: 256m
+    restart: "no"
+    tmpfs:
+      - /run/demoqa-secrets:mode=0700
+    volumes:
+      - worker_state:/app/runtime/worker-state
+    environment:
+      DEMOQA_WORKER_KEY: ${DEMOQA_WORKER_KEY:?set a fresh test-only secret}
+      WORKER_API_KEY_FILE: /run/demoqa-secrets/key
+      WORKER_DATA_DIR: /app/runtime/worker-state
+      EGRESS_READY: "true"
+      ROUTE_GENERATION: "1"
+      PROXY_ASSIGNMENT_ID: demoqa-test
+      BROWSER_HEADLESS: "false"
+      APP_ENV: test
+      DEMOQA_DIAGNOSTICS: "1"
+    entrypoint: ["sh", "-c"]
+    command:
+      - 'printf %s "$$DEMOQA_WORKER_KEY" > /run/demoqa-secrets/key; unset DEMOQA_WORKER_KEY; exec xvfb-run -a -s "-screen 0 1440x1000x24" python -m worker.app --host 0.0.0.0 --port 7070'
+    networks: [test_net]
+
+  control:
+    image: browser-mcp-demoqa-control:test
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.demoqa-control
+    init: true
+    mem_limit: 768m
+    cpus: 2.0
+    pids_limit: 128
+    restart: "no"
+    tmpfs:
+      - /app/runtime/control-data:mode=0700
+      - /run/demoqa-secrets:mode=0700
+    environment:
+      DEMOQA_WORKER_KEY: ${DEMOQA_WORKER_KEY:?set a fresh test-only secret}
+      BROWSER_MCP_DATA_DIR: /app/runtime/control-data
+      DEMOQA_ARTIFACT_DIR: /app/runtime/control-data/demoqa-artifacts
+      BROWSER_MCP_ORIGIN: http://localhost:18080
+      BROWSER_MCP_OPERATOR_AUTH: local
+      BROWSER_MCP_UI_DIR: /app/ui
+      MODEL_BASE_URL: http://host.docker.internal:8081/v1
+      MODEL_ALIAS: fara-browser
+      BROWSER_WORKER_URL: http://browser:7070
+      WORKER_API_KEY_FILE: /run/demoqa-secrets/key
+    entrypoint: ["sh", "-c"]
+    command:
+      - 'printf %s "$$DEMOQA_WORKER_KEY" > /run/demoqa-secrets/key; unset DEMOQA_WORKER_KEY; exec python -m browser_mcp.cli --host 0.0.0.0 --port 8080'
+    ports: ["127.0.0.1:18080:8080"]
+    networks: [test_net]
+
+networks:
+  test_net: {}
+
+volumes:
+  worker_state:
+    name: browser-mcp-demoqa-test-worker-state

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Браузерный помощник</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Основная навигация">
+      <a class="brand" href="#overview" aria-label="Браузерный помощник — обзор">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span><strong>Браузерный</strong><small>помощник</small></span>
+      </a>
+      <div class="side-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+      <nav class="nav-tabs" role="tablist" aria-label="Разделы">
+        <button id="tab-overview" class="nav-link active" role="tab" aria-selected="true" aria-controls="panel-overview" data-tab="overview"><span class="nav-icon" aria-hidden="true">⌂</span>Обзор</button>
+        <button id="tab-tasks" class="nav-link" role="tab" aria-selected="false" aria-controls="panel-tasks" data-tab="tasks"><span class="nav-icon" aria-hidden="true">◷</span>Задачи</button>
+        <button id="tab-cookies" class="nav-link" role="tab" aria-selected="false" aria-controls="panel-cookies" data-tab="cookies"><span class="nav-icon" aria-hidden="true">▤</span>Cookies</button>
+        <button id="tab-settings" class="nav-link" role="tab" aria-selected="false" aria-controls="panel-settings" data-tab="settings"><span class="nav-icon" aria-hidden="true">⚙</span>Настройки</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div id="proxy-sidebar" class="host-route"><span class="route-dot"></span><div><b id="proxy-sidebar-title">Маршрут сети</b><small id="proxy-sidebar-detail">Проверка статуса маршрута</small></div></div>
+        <div class="side-footer">Локальный сервис <span id="sidebar-health" class="health-dot" title="Состояние сервиса"></span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumb"><span>Рабочее пространство</span><span class="crumb-sep">/</span><b id="crumb-current">Обзор</b></div>
+        <div class="top-actions"><span class="local-badge"><span></span>Локально</span><button id="refresh-all" class="icon-button" type="button" aria-label="Обновить данные" title="Обновить данные">↻</button><button id="logout" class="quiet-button hidden" type="button">Выйти</button></div>
+      </header>
+      <section id="browser-toolbar" class="browser-toolbar hidden" aria-label="Управление браузером">
+        <div class="browser-toolbar-label"><span class="toolbar-browser-icon" aria-hidden="true">◈</span><span><b>Профиль браузера</b><small id="browser-control-state">Состояние не проверено</small></span></div>
+        <div class="browser-toolbar-actions">
+          <button id="toolbar-open-browser" class="secondary-button" type="button" disabled>Открыть браузер</button>
+          <button id="toolbar-takeover" class="secondary-button" type="button" disabled>Забрать управление</button>
+          <button id="toolbar-release" class="secondary-button hidden" type="button">Вернуть управление</button>
+        </div>
+      </section>
+      <section id="desktop-viewer" class="desktop-viewer hidden" aria-label="Окно браузера">
+        <div class="desktop-viewer-head"><div><b>Окно браузера</b><span id="desktop-viewer-detail">Локальная сессия</span></div><div class="desktop-viewer-actions"><a class="text-button" href="/desktop" target="_blank" rel="noopener">Открыть отдельно <span aria-hidden="true">↗</span></a><button id="close-desktop-viewer" class="close-button" type="button" aria-label="Скрыть окно браузера">×</button></div></div>
+        <div id="desktop-frame-wrap" class="desktop-frame-wrap"></div>
+      </section>
+
+      <section id="auth-gate" class="auth-wrap hidden" aria-labelledby="auth-title">
+        <div class="auth-card">
+          <div class="eyebrow">ЛОКАЛЬНЫЙ ДОСТУП</div>
+          <h1 id="auth-title">Войдите в панель</h1>
+          <p>Введите операторский токен, чтобы управлять локальным браузером.</p>
+          <form id="login-form"><label for="login-token">Токен оператора</label><div class="token-row"><input id="login-token" name="token" type="password" autocomplete="current-password" required><button class="primary-button" type="submit">Войти <span aria-hidden="true">→</span></button></div></form>
+          <div id="login-error" class="inline-error" role="alert"></div>
+          <div class="auth-foot"><span class="secure-icon" aria-hidden="true">⌑</span>Сессия защищена cookie и CSRF-токеном</div>
+        </div>
+      </section>
+
+      <div id="workspace" class="workspace">
+        <section id="panel-overview" class="tab-panel" role="tabpanel" aria-labelledby="tab-overview">
+          <div class="page-heading"><div><div class="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</div><h1>Добро пожаловать</h1><p>Состояние локального окружения и быстрый доступ к действиям.</p></div><div class="heading-meta"><span class="live-indicator"><i></i>Обновляется вручную</span></div></div>
+          <div id="service-banner" class="notice hidden" role="status"></div>
+          <div class="section-title"><div><h2>Состояние системы</h2><p>Компоненты локального браузерного агента</p></div><span class="updated" id="last-updated">Нет данных</span></div>
+          <div class="status-grid">
+            <article class="status-card"><div class="status-card-top"><span class="service-icon model-icon">✳</span><span id="model-pill" class="status-pill pending">Проверка</span></div><h3>Языковая модель</h3><p id="model-detail">Ожидание ответа сервера</p><div class="card-meta"><span>llama.cpp</span><span id="model-config">—</span></div></article>
+            <article class="status-card"><div class="status-card-top"><span class="service-icon worker-icon">◈</span><span id="worker-pill" class="status-pill pending">Проверка</span></div><h3>Браузерный исполнитель</h3><p id="worker-detail">Ожидание ответа сервера</p><div class="card-meta"><span>Docker · WSL2</span><span id="worker-config">—</span></div></article>
+            <article class="status-card profile-status"><div class="status-card-top"><span class="service-icon profile-icon">▣</span><span id="profile-count" class="status-pill neutral">—</span></div><h3>Профили</h3><p id="profile-summary">Список профилей загрузится вместе со статусом</p><div class="card-meta"><span>Источники Chrome</span><span id="source-count">—</span></div></article>
+          </div>
+          <div class="overview-columns">
+            <section class="surface-card quick-card"><div class="surface-heading"><div><h2>Быстрый старт</h2><p>Выберите действие для продолжения</p></div><span class="heading-symbol">↗</span></div><button class="quick-action" type="button" data-go="tasks"><span class="quick-icon">＋</span><span><b>Создать задачу</b><small>Опишите, что нужно сделать в браузере</small></span><span class="arrow">→</span></button><button class="quick-action" type="button" data-go="cookies"><span class="quick-icon cookie-quick">▤</span><span><b>Подключить cookies</b><small>Выберите сайты в открытом Chrome</small></span><span class="arrow">→</span></button></section>
+            <section class="surface-card recent-card"><div class="surface-heading"><div><h2>Последние задачи</h2><p>Текущая активность</p></div><button class="text-button" type="button" data-go="tasks">Все задачи <span>→</span></button></div><div id="recent-tasks" class="recent-list"><div class="empty-state compact"><span class="empty-mark">◷</span><b>Задач пока нет</b><span>Новая задача появится здесь</span></div></div></section>
+          </div>
+        </section>
+
+        <section id="panel-tasks" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-tasks">
+          <div class="page-heading"><div><div class="eyebrow">ВЫПОЛНЕНИЕ</div><h1>Задачи</h1><p>Управляйте действиями браузерного агента и отслеживайте ход выполнения.</p></div><button class="primary-button" type="button" id="new-task-button"><span>＋</span> Новая задача</button></div>
+          <div id="task-notice" class="notice hidden" role="status"></div>
+          <section id="task-create-card" class="surface-card form-card hidden"><div class="surface-heading"><div><h2 id="task-form-heading">Новая задача</h2><p>Задайте цель и разрешённые сайты для работы</p></div><button class="close-button" type="button" id="close-task-form" aria-label="Закрыть">×</button></div>
+            <form id="task-form"><div class="form-grid"><div class="field full" id="task-workflow-field"><label for="task-workflow">Тип задачи</label><select id="task-workflow"><option value="agent">Задача в браузере</option><option value="gemini_prompt_submit">Быстро отправить запрос в Gemini</option></select><small id="task-workflow-help">В быстром режиме используется только поле текста ниже и отправляется один точный запрос. Интерфейс не ждёт ответ и не подтверждает, что Gemini его подготовил.</small></div><div class="field full" id="task-cookie-sync-field"><label class="cookie-sync-label"><input id="task-sync-cookies" type="checkbox" checked>Копировать cookies сайта из моего Chrome перед запуском</label><small>Копируются подходящие cookies разрешённого сайта, включая cookies родительского домена, если они применимы. Cookies других сайтов не затрагиваются. Если снять отметку, используются cookies профиля браузера; проверка входа всё равно обязательна.</small></div><div id="task-gemini-auth-panel" class="field full gemini-auth-panel hidden" role="status"><div><span id="task-gemini-auth-pill" class="status-pill pending">Проверка</span><p id="task-gemini-auth-detail">Состояние входа не проверено.</p><small>Вход подтверждается отдельно от наличия cookies. Если потребуется, войдите вручную в окне браузера или используйте существующий импорт cookies; токен оператора повторно вводить не нужно.</small></div><div class="gemini-auth-actions"><button id="task-gemini-auth-open-browser" class="secondary-button" type="button">Открыть браузер</button><button id="task-gemini-auth-refresh" class="text-button" type="button">Проверить снова</button></div></div><div class="field full" id="task-execution-field"><label for="task-execution-mode">Режим выполнения</label><select id="task-execution-mode"><option value="supervised">С подтверждениями</option><option value="autonomous">Автономно — без подтверждения кнопок и отправки форм</option></select><small>Действия выполняются на разрешённых сайтах в рамках цели задачи. Неизвестный исход и нехватка обязательных данных могут остановить выполнение.</small></div><div class="field full" id="task-goal-field"><label for="task-goal">Что нужно сделать?</label><textarea id="task-goal" name="goal" rows="3" required placeholder="Например: найдите расписание поездов на завтра и сравните время отправления"></textarea></div><div class="field"><label for="task-profile">Профиль браузера</label><select id="task-profile" name="profile_id" required><option value="default">Профиль по умолчанию</option></select></div><div class="field" id="task-origins-field"><label for="task-origins">Разрешённые сайты</label><input id="task-origins" name="origins" type="text" required placeholder="https://example.com, https://site.ru"><small>Укажите один или несколько HTTPS-origin через запятую, без путей</small></div><div class="field full" id="task-verbatim-field"><label for="task-verbatim-text">Точный текст для ввода <span class="optional">необязательно</span></label><textarea id="task-verbatim-text" rows="3" placeholder="Введите точное значение"></textarea><small>Агент использует этот текст буквально, без перевода, переписывания или изменений.</small></div><div class="field full hidden" id="task-gemini-prompt-field"><label for="task-gemini-prompt">Текст для Gemini</label><textarea id="task-gemini-prompt" rows="5" placeholder="Введите запрос для отправки" aria-describedby="task-gemini-prompt-help"></textarea><small id="task-gemini-prompt-help">В этом режиме используется только это поле. Текст отправляется без изменений; ответ не ожидается и не проверяется.</small></div><div class="field full" id="task-success-field"><label for="task-success-text">Текст для проверки результата <span class="optional">необязательно</span></label><input id="task-success-text" name="success_text" type="text" maxlength="1000" placeholder="Например: Заказ подтверждён"><small id="task-success-help">Без критерия результат будет отмечен как не проверенный независимо.</small></div><div class="field full hidden" id="task-advanced-wrap"><label for="task-advanced-options">Дополнительные параметры (JSON)</label><textarea id="task-advanced-options" rows="8" spellcheck="false" aria-describedby="task-advanced-help"></textarea><small id="task-advanced-help">Проверьте значения перед повторным запуском. Ссылки на секреты отображаются как ссылки; сами секреты не показываются.</small></div><div id="gemini-capability-wrap" class="field full hidden"><label style="display:flex;align-items:center;gap:8px"><input id="task-gemini-capability" type="checkbox" style="width:auto" disabled>Разрешить отправить один запрос в Gemini</label><small>Другие действия это не разрешает.</small></div></div><div class="form-footer"><span id="task-form-limit">Лимит: 80 шагов · 15 минут</span><button id="task-form-submit" class="primary-button" type="submit">Создать задачу <span aria-hidden="true">→</span></button></div></form>
+          </section>
+          <section class="surface-card list-card"><div class="surface-heading"><div><h2>Все задачи</h2><p id="task-list-count">Загрузка списка</p></div><button class="secondary-button" type="button" id="refresh-tasks">↻ Обновить</button></div><div id="tasks-list" class="task-list"><div class="loading-state"><span class="spinner"></span>Загружаем задачи…</div></div></section>
+        </section>
+
+        <section id="panel-cookies" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-cookies">
+          <div class="page-heading"><div><div class="eyebrow">ПЕРЕНОС СЕССИИ</div><h1>Cookies</h1><p>Импортируйте выбранные cookies из открытых сайтов Chrome в профиль браузера.</p></div><span class="secure-badge"><span>⌑</span>Значения скрыты</span></div>
+          <div class="cookie-warning"><span class="warning-icon">i</span><p><b>Точный выбор — ваша ответственность.</b> Выберите сайты и cookies вручную. Для восстановления авторизации могут понадобиться все cookies сайта. Значения cookies не отображаются.</p></div>
+          <section class="surface-card pairing-card"><div class="pairing-copy"><div class="eyebrow">ШАГ 1 · ПОДКЛЮЧИТЕ CHROME</div><h2>Свяжите расширение</h2><p>Откройте страницу расширений Chrome, включите режим разработчика и загрузите папку <code>chrome_extension</code> как распакованное расширение.</p><div class="pair-steps"><span><i>1</i>Откройте <code>chrome://extensions</code></span><span><i>2</i>Нажмите «Загрузить распакованное»</span><span><i>3</i>Введите код в расширении</span></div></div><div class="pairing-action"><button id="pairing-button" class="secondary-button" type="button">Создать код привязки</button><div id="pairing-code-wrap" class="pairing-code-wrap hidden"><div id="pairing-code" class="pairing-code"></div><span id="pairing-expiry" class="muted"></span></div><div id="pairing-message" class="muted" role="status">Код действует ограниченное время</div></div></section>
+          <section class="cookie-workflow">
+            <div class="workflow-heading"><div><div class="eyebrow">ШАГ 2 · ВЫБЕРИТЕ СОДЕРЖИМОЕ</div><h2>Открытые сайты</h2><p>Данные берутся из вкладок подключённого профиля Chrome.</p></div><div class="workflow-actions"><label class="compact-field"><span>Профиль для импорта</span><select id="cookie-profile"><option value="default">Профиль по умолчанию</option></select></label><button id="refresh-sites" class="secondary-button" type="button">↻ Обновить список</button></div></div>
+            <div class="surface-card source-card"><div class="source-indicator"><span class="source-icon">◉</span></div><div class="source-copy"><b id="source-name">Источник Chrome не выбран</b><span id="source-state">Проверьте подключённые профили Chrome</span></div><select id="source-select" class="source-select hidden" aria-label="Профиль Chrome"></select><span id="source-pill" class="status-pill pending">Не подключён</span></div>
+            <div class="polling-toolbar"><div id="sites-message" class="notice hidden" role="status"></div><button id="poll-sites-status" class="secondary-button hidden" type="button">Обновить</button></div>
+            <div id="sites-panel" class="surface-card sites-card"><div id="sites-empty" class="empty-state"><span class="empty-mark">⌕</span><b>Список сайтов ещё не загружен</b><span>Обновите список, чтобы увидеть подходящие открытые вкладки.</span></div><div id="sites-list" class="site-list hidden"></div><div id="sites-footer" class="sites-footer hidden"><span><span id="site-selection-count">Выбрано: 0 сайтов</span><br>Затем отметьте нужные cookies в списке ниже.</span><button id="load-cookies" class="secondary-button" type="button" disabled>Загрузить список cookies <span aria-hidden="true">→</span></button></div></div>
+            <div class="polling-toolbar"><div id="catalog-message" class="notice hidden" role="status"></div><button id="poll-catalog-status" class="secondary-button hidden" type="button">Обновить каталог</button></div>
+            <section id="catalog-panel" class="surface-card catalog-card hidden"><div class="surface-heading"><div><div class="eyebrow">ШАГ 3 · ОТМЕТЬТЕ COOKIES</div><h2>Cookies выбранных сайтов</h2><p>Отметьте только те записи, которые хотите перенести</p></div><span id="catalog-revision" class="revision-badge"></span></div><div id="cookie-groups" class="cookie-groups"></div></section>
+            <section class="surface-card selection-summary" aria-label="Перенос выбранных cookies"><div><b id="selection-total">0 cookies выбрано</b><span id="selection-sites">Для 0 сайтов</span><span id="selection-hint">Выберите сайты, загрузите список и отметьте cookies.</span></div><button id="import-cookies" class="primary-button" type="button" disabled>Перенести выбранные cookies в Camoufox <span aria-hidden="true">→</span></button></section>
+            <section id="import-panel" class="surface-card import-card hidden"><div class="surface-heading"><div><div class="eyebrow">ШАГ 4 · РЕЗУЛЬТАТ</div><h2>Импорт cookies</h2></div><span id="import-status" class="status-pill pending">Ожидание</span></div><div id="import-progress" class="progress-line hidden"><span></span></div><p id="import-detail" class="import-detail">Подготовка отчёта…</p><div id="import-report" class="report-grid"></div><div id="import-manual" class="manual-login hidden"><span>↗</span><p>Импорт cookies не гарантирует вход. Если сайт запросит подтверждение, выполните вход вручную в целевом браузере.</p></div><button id="refresh-import" class="text-button hidden" type="button">Обновить статус <span>↻</span></button></section>
+          </section>
+        </section>
+
+        <section id="panel-settings" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-settings">
+          <div class="page-heading"><div><div class="eyebrow">ОКРУЖЕНИЕ</div><h1>Настройки</h1><p>Параметры и подключённые компоненты локального сервиса.</p></div></div>
+          <section class="surface-card settings-card"><div class="surface-heading"><div><h2>Локальная среда</h2><p>Служба управления браузерным помощником</p></div><span class="local-badge"><span></span>На этом компьютере</span></div><div class="settings-row"><div><b>Языковая модель</b><span>Локальный сервер llama.cpp</span></div><span id="settings-model" class="status-pill pending">Проверка</span></div><div class="settings-row"><div><b>Исполнитель браузера</b><span>Изолированное окружение Docker в WSL2</span></div><span id="settings-worker" class="status-pill pending">Проверка</span></div><div class="settings-row"><div><b id="proxy-settings-title">Сетевой маршрут</b><span id="proxy-settings-detail">Проверка статуса маршрута</span></div><span id="proxy-settings-mode" class="host-config-badge">Проверка</span></div></section>
+          <section class="surface-card settings-card"><div class="surface-heading"><div><h2>Профили браузера</h2><p>Профили, доступные этому сервису</p></div></div><div id="settings-profiles" class="settings-profiles"><span class="muted">Загрузка профилей…</span></div></section>
+        </section>
+      </div>
+      <footer class="app-footer"><span>Браузерный помощник</span><span>Работает локально на вашем компьютере</span></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

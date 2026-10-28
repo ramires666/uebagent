@@ -1,0 +1,4 @@
+FROM browser-mcp-local-browser:latest
+
+COPY worker /app/worker
+COPY src/browser_mcp /app/src/browser_mcp

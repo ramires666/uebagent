@@ -1,0 +1,5 @@
+FROM browser-mcp-local-control:latest
+
+COPY src/browser_mcp /app/src/browser_mcp
+COPY src/browser_mcp /usr/local/lib/python3.12/site-packages/browser_mcp
+COPY ui /app/ui

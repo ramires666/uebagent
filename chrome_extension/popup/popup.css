@@ -1,0 +1,14 @@
+* { box-sizing: border-box; }
+body { width: 340px; margin: 0; color: #202124; font: 14px/1.45 system-ui, sans-serif; background: #fff; }
+main { padding: 16px; }
+h1 { margin: 0 0 8px; font-size: 18px; }
+h2 { margin: 0 0 4px; font-size: 14px; }
+#status { margin: 0 0 12px; color: #4a5568; }
+label { display: block; margin: 10px 0; font-weight: 600; }
+input { display: block; width: 100%; margin-top: 4px; padding: 8px; border: 1px solid #aeb4bc; border-radius: 5px; font: inherit; }
+button { width: 100%; margin: 6px 0; padding: 9px; border: 0; border-radius: 5px; color: #fff; background: #185abc; font: inherit; cursor: pointer; }
+button:hover { background: #174ea6; }
+#permission-section { margin: 12px 0; padding: 10px; border: 1px solid #e2b45b; border-radius: 6px; background: #fff8e1; }
+#permission-list { max-height: 80px; overflow: auto; overflow-wrap: anywhere; white-space: pre-line; }
+.note { margin: 12px 0 0; color: #59636e; font-size: 12px; }
+#message { min-height: 1.2em; margin: 6px 0 0; color: #b3261e; }

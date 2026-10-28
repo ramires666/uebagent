@@ -1,0 +1,8 @@
+{
+  "base_image": "browser-mcp-local-browser:latest",
+  "base_lock": "config/artifacts.lock.json",
+  "python": {"PyAutoGUI": "0.9.54", "python-xlib": "0.33", "Pillow": "11.3.0", "numpy": "1.26.4", "opencv-python-headless": "4.10.0.84"},
+  "system_observed": {"xclip": "0.13-2", "libtk8.6": "8.6.13-2"},
+  "licenses": {"PyAutoGUI": "BSD-3-Clause", "python-xlib": "LGPL-2.1-or-later", "Pillow": "HPND", "numpy": "BSD-3-Clause", "opencv-python-headless": "Apache-2.0", "xclip": "GPL-2.0-or-later"},
+  "status": "experimental; isolated test passed, integration not reviewed"
+}

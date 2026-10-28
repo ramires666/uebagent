@@ -1,0 +1,6 @@
+﻿FROM browser-mcp-local-browser:latest
+RUN apt-get update && apt-get install -y --no-install-recommends xclip libtk8.6 && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir 'PyAutoGUI==0.9.54' 'python-xlib==0.33' 'Pillow==11.3.0' 'numpy==1.26.4' 'opencv-python-headless==4.10.0.84'
+COPY worker/native_input.py /app/worker/native_input.py
+COPY tests/test_native_input.py /tmp/test_native_input.py
+

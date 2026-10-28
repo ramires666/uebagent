@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Local Browser MCP Cookie Selector",
+  "version": "0.1.2",
+  "description": "Pairs with a local Browser MCP service and transfers only cookies for explicitly allowed sites.",
+  "permissions": ["tabs", "cookies", "storage", "alarms"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "service_worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Local Browser MCP",
+    "default_popup": "popup/popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*"
+  }
+}

@@ -1,0 +1,33 @@
+[project]
+name = "browser-mcp-local"
+version = "0.1.0"
+description = "Local MCP browser service with a native Windows llama.cpp endpoint"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi==0.129.2",
+  "uvicorn[standard]==0.41.0",
+  "pydantic==2.13.4",
+  "httpx==0.28.1",
+  "mcp==1.27.2",
+  "PyYAML==6.0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.0.3", "pytest-asyncio==1.4.0", "playwright==1.51.0"]
+worker = ["camoufox==0.4.11", "playwright>=1.51,<2"]
+
+[project.scripts]
+browser-mcp = "browser_mcp.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/browser_mcp"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
