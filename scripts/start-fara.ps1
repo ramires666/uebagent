@@ -9,7 +9,7 @@ param(
     [int]$Parallel = 1,
     [string]$ListenAddress = '127.0.0.1',
     [ValidateRange(1, 65535)]
-    [int]$Port = 8081,
+    [int]$Port = 8080,
     [switch]$Background,
     [switch]$CheckOnly
 )

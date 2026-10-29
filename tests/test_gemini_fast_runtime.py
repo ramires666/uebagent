@@ -134,6 +134,42 @@ def make_runner(tmp_path, worker: FastWorker, spec=None):
     return runner, repo, model, record
 
 
+def test_unresolved_dispatch_scan_paginates_past_activity_events(tmp_path):
+    worker = FastWorker()
+    runner, repo, _model, record = make_runner(tmp_path, worker)
+    try:
+        for index in range(1_005):
+            repo.add_event(record.task_id, "task.activity", {"stage": "observing", "step": index})
+        repo.add_event(record.task_id, "action.planned", {
+            "action_id": "late-unresolved-action", "kind": "click",
+        })
+
+        assert runner._unresolved_action_dispatch(record.task_id) is True
+    finally:
+        repo.close()
+
+
+def test_blocked_teardown_failure_reason_is_typed_but_not_recoverable(tmp_path):
+    runner, repo, _model, record = make_runner(tmp_path, FastWorker())
+    try:
+        health = {
+            "recovery_needed": True,
+            "recovery_state": "blocked",
+            "recovery_reason": "context_close_failed",
+            "recovery_generation": 0,
+            "recovery_attempts": 1,
+            "resource_violation": False,
+            "egress_ready": True,
+        }
+        eligible, reason = runner._worker_recovery_metadata(health)
+        assert eligible is False
+        assert reason == "context_close_failed"
+        context = {"worker_recovery_reason": reason}
+        assert "context_close_failed" in runner._worker_not_ready_message(context)
+    finally:
+        repo.close()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("auth_status", "code"), [
     ({"status": "signed_out", "reason_code": "SIGN_IN_CONTROL_PRESENT"}, "AUTH_REQUIRED"),
@@ -162,6 +198,11 @@ async def test_task_cookie_sync_runs_before_model_or_browser_work_and_is_persist
     worker = FastWorker()
     repo = TaskRepository(tmp_path / "tasks.sqlite")
     order = []
+    original_health = worker.health
+    async def worker_health():
+        order.append("worker_health")
+        return await original_health()
+    worker.health = worker_health
     class Model:
         async def health(self):
             order.append("model_health")
@@ -185,11 +226,354 @@ async def test_task_cookie_sync_runs_before_model_or_browser_work_and_is_persist
         sync_cookies=True, idempotency_key="cookie-sync-order-001"))
     try:
         await runner._run(record.task_id)
-        assert order[0] == "cookie_sync"
+        assert order[:2] == ["worker_health", "cookie_sync"]
         receipt = [e for e in repo.events(record.task_id) if e["event_type"] == "cookie.sync_completed"]
         assert len(receipt) == 1
         assert receipt[0]["payload"]["job_id"] == f"taskcookie-{record.task_id}"
         assert receipt[0]["payload"]["counts"] == {"total": 0, "applied": 0, "failed": 0}
+    finally:
+        await runner.close()
+        repo.close()
+
+
+@pytest.mark.asyncio
+async def test_fresh_navigation_after_cookie_sync_counts_as_session_refresh(tmp_path):
+    worker = FastWorker(current_url="about:blank")
+    repo = TaskRepository(tmp_path / "tasks.sqlite")
+    class Model:
+        def __init__(self):
+            self.actions = [
+                {"kind": "navigate", "url": f"{GEMINI}/app"},
+                {"kind": "finish", "summary": "completed"},
+            ]
+        async def health(self):
+            return {"ready": True}
+        def begin_task(self, *_args):
+            return None
+        async def next_action(self, *_args, **_kwargs):
+            return self.actions.pop(0)
+        def discard_task(self, *_args):
+            return None
+    runner = TaskRunner(Settings(data_dir=tmp_path, worker_url="http://worker"), repo,
+                        worker=worker, model=Model())
+    async def cookie_sync(*_args):
+        return {"total": 2, "applied": 2, "failed": 0}
+    runner.cookie_sync = cookie_sync
+    record = repo.create(TaskSpec(goal="Inspect Gemini", allowed_origins=[GEMINI],
+        sync_cookies=True, idempotency_key="cookie-sync-fresh-navigation-001"))
+    try:
+        await runner._run(record.task_id)
+        assert repo.get(record.task_id).status == TaskStatus.SUCCEEDED
+        assert [cmd["action"]["kind"] for cmd in worker.executes] == ["navigate"]
+        assert any(event["event_type"] == "cookie.session_refreshed"
+                   for event in repo.events(record.task_id))
+    finally:
+        await runner.close()
+        repo.close()
+
+
+@pytest.mark.asyncio
+async def test_browser_generation_change_resyncs_cookies_before_reacquiring_agent_lease(tmp_path):
+    class ScopeWorker(FastWorker):
+        def __init__(self):
+            super().__init__(current_url="https://shop.example")
+            self.recovery_generation = 0
+            self.instance_id = "browser-instance-a"
+            self.order = []
+        async def health(self):
+            return {
+                "ready": True, "browser_instance_id": self.instance_id,
+                "recovery_generation": self.recovery_generation,
+            }
+        async def state(self):
+            return {
+                "control_owner": self.control_owner, "context_count": 1, "page_count": 1,
+                "browser_started": True, "action_in_progress": False, "import_in_progress": False,
+                "resource_violation": False, "egress_ready": True,
+            }
+        async def gate(self, owner):
+            self.order.append(f"gate:{owner}")
+            return await super().gate(owner)
+        async def call(self, method, path, data=None, raw=False):
+            if path == "/observe" and self.observations == 1:
+                self.control_owner = "none"
+                self.control_epoch += 1
+                self.recovery_generation += 1
+                self.observations += 1
+                return {"url": self.current_url, "width": 1440, "height": 900,
+                        "control_epoch": self.control_epoch,
+                        "observation_id": f"watchdog-{self.observations}",
+                        "screenshot_png_b64": PNG_B64}
+            result = await super().call(method, path, data, raw)
+            if path == "/observe":
+                result.setdefault("width", 1440)
+                result.setdefault("height", 900)
+            return result
+
+    class Model:
+        def __init__(self):
+            self.actions = [{"kind": "click", "x": 10, "y": 10},
+                            {"kind": "finish", "summary": "done"}]
+        async def health(self):
+            return {"ready": True}
+        def begin_task(self, *_args):
+            return None
+        async def next_action(self, *_args, **_kwargs):
+            return self.actions.pop(0)
+        def discard_task(self, *_args):
+            return None
+
+    worker = ScopeWorker()
+    repo = TaskRepository(tmp_path / "tasks.sqlite")
+    runner = TaskRunner(Settings(data_dir=tmp_path, worker_url="http://worker"), repo,
+                        worker=worker, model=Model())
+    syncs = []
+    async def cookie_sync(task_id, profile_id, origins, *, job_id=None,
+                          browser_instance_id=None, recovery_generation=None):
+        worker.order.append(f"sync:{recovery_generation}")
+        syncs.append((job_id, browser_instance_id, recovery_generation))
+        return {"total": 0, "applied": 0, "failed": 0}
+    runner.cookie_sync = cookie_sync
+    record = repo.create(TaskSpec(goal="Inspect shop", allowed_origins=["https://shop.example"],
+        sync_cookies=True, idempotency_key="cookie-recovery-generation-001"))
+    # A pre-scope receipt cannot establish which browser incarnation received
+    # the session cookies, so the first typed scope must import once again.
+    repo.add_event(record.task_id, "cookie.sync_completed", {
+        "job_id": f"taskcookie-{record.task_id}",
+        "counts": {"total": 0, "applied": 0, "failed": 0},
+    })
+    try:
+        await runner._run(record.task_id)
+        assert repo.get(record.task_id).status == TaskStatus.SUCCEEDED, (
+            repo.get(record.task_id).error, worker.order, syncs, worker.executes,
+            [(event["event_type"], (event.get("payload") or {}).get("kind"))
+             for event in repo.events(record.task_id)],
+        )
+        assert len(syncs) == 2
+        assert syncs[0][0].startswith(f"taskcookie-{record.task_id}-r0-")
+        assert syncs[0][1:] == ("browser-instance-a", 0)
+        assert syncs[1][0].startswith(f"taskcookie-{record.task_id}-r1-")
+        assert syncs[1][1:] == ("browser-instance-a", 1)
+        assert worker.order.index("sync:1") < worker.order.index("gate:agent", worker.order.index("gate:agent") + 1)
+        assert [cmd["action"]["kind"] for cmd in worker.executes] == ["click"]
+    finally:
+        await runner.close()
+        repo.close()
+
+
+@pytest.mark.asyncio
+async def test_fast_workflow_auto_recovers_dead_browser_without_model_calls(tmp_path):
+    class RecoverableFastWorker(FastWorker):
+        def __init__(self):
+            super().__init__()
+            self.needs_recovery = True
+            self.recover_calls = 0
+        async def health(self):
+            return {
+                "ready": not self.needs_recovery,
+                "recovery_needed": self.needs_recovery,
+                "recovery_state": "idle",
+                "recovery_reason": "canonical_page_closed" if self.needs_recovery else "healthy",
+                "recovery_generation": 0 if self.needs_recovery else 1,
+                "recovery_attempts": 0,
+                "recovery_retry_after_seconds": None,
+                "resource_violation": False, "egress_ready": True,
+            }
+        async def state(self):
+            return {
+                "control_owner": self.control_owner,
+                "context_count": 1, "page_count": 0 if self.needs_recovery else 1,
+                "browser_started": not self.needs_recovery,
+                "action_in_progress": False, "import_in_progress": False,
+                "resource_violation": False, "egress_ready": True,
+            }
+        async def recover(self):
+            self.recover_calls += 1
+            self.needs_recovery = False
+            return {
+                "outcome": "recovered", "recovery_state": "idle",
+                "recovery_reason": "canonical_page_closed", "recovery_generation": 1,
+                "recovery_attempts": 1, "recovery_retry_after_seconds": None,
+                "browser_started": True, "context_count": 1, "page_count": 1,
+            }
+
+    worker = RecoverableFastWorker()
+    runner, repo, model, record = make_runner(tmp_path, worker, fast_spec(sync_cookies=False))
+    try:
+        await runner._run(record.task_id)
+        assert repo.get(record.task_id).status == TaskStatus.SUCCEEDED
+        assert worker.recover_calls == 1
+        assert [cmd["action"]["kind"] for cmd in worker.executes] == ["gemini_submit_prompt"]
+        assert model.calls == []
+        kinds = [event["event_type"] for event in repo.events(record.task_id)]
+        assert "browser.recovery_started" in kinds and "browser.recovery_completed" in kinds
+    finally:
+        await runner.close()
+        repo.close()
+
+
+@pytest.mark.asyncio
+async def test_watchdog_recovery_before_observe_discards_stale_epoch_and_reobserves(tmp_path):
+    class WatchdogRecoveredWorker(FastWorker):
+        def __init__(self):
+            super().__init__()
+            self.did_watchdog_recover = False
+        async def state(self):
+            return {
+                "control_owner": self.control_owner,
+                "context_count": 1, "page_count": 1, "browser_started": True,
+                "action_in_progress": False, "import_in_progress": False,
+                "resource_violation": False, "egress_ready": True,
+            }
+        async def call(self, method, path, data=None, raw=False):
+            if path == "/observe" and not self.did_watchdog_recover:
+                self.did_watchdog_recover = True
+                self.control_owner = "none"
+                self.control_epoch += 1
+                self.observations += 1
+                return {"url": self.current_url, "control_epoch": self.control_epoch,
+                        "observation_id": f"stale-observation-{self.observations}",
+                        "screenshot_png_b64": PNG_B64}
+            return await super().call(method, path, data, raw)
+
+    worker = WatchdogRecoveredWorker()
+    runner, repo, model, record = make_runner(tmp_path, worker, fast_spec(sync_cookies=False))
+    try:
+        await runner._run(record.task_id)
+        assert repo.get(record.task_id).status == TaskStatus.SUCCEEDED
+        assert worker.gates == ["agent", "agent", "none"]
+        assert worker.observations == 2
+        assert [cmd["action"]["kind"] for cmd in worker.executes] == ["gemini_submit_prompt"]
+        assert model.calls == []
+    finally:
+        await runner.close()
+        repo.close()
+
+
+@pytest.mark.asyncio
+async def test_fast_readonly_observe_failure_recovers_without_replaying_action(tmp_path):
+    class ObserveFailureWorker(FastWorker):
+        def __init__(self):
+            super().__init__()
+            self.health_calls = 0
+            self.recover_calls = 0
+            self.needs_recovery = False
+            self.fail_first_observe = True
+        async def health(self):
+            self.health_calls += 1
+            if self.health_calls == 2:
+                self.needs_recovery = True
+            return {
+                "ready": not self.needs_recovery,
+                "recovery_needed": self.needs_recovery,
+                "recovery_state": "idle",
+                "recovery_reason": "canonical_page_closed" if self.needs_recovery else "healthy",
+                "recovery_generation": 0 if self.needs_recovery else 1,
+                "recovery_attempts": 0, "recovery_retry_after_seconds": None,
+                "resource_violation": False, "egress_ready": True,
+            }
+        async def state(self):
+            return {
+                "control_owner": self.control_owner,
+                "context_count": 1, "page_count": 0 if self.needs_recovery else 1,
+                "browser_started": not self.needs_recovery,
+                "action_in_progress": False, "import_in_progress": False,
+                "resource_violation": False, "egress_ready": True,
+            }
+        async def recover(self):
+            self.recover_calls += 1
+            self.needs_recovery = False
+            self.control_owner = "none"
+            return {
+                "outcome": "recovered", "recovery_state": "idle",
+                "recovery_reason": "canonical_page_closed", "recovery_generation": 1,
+                "recovery_attempts": 1, "recovery_retry_after_seconds": None,
+                "browser_started": True, "context_count": 1, "page_count": 1,
+            }
+        async def call(self, method, path, data=None, raw=False):
+            if path == "/observe" and self.fail_first_observe:
+                self.fail_first_observe = False
+                raise DomainError("WORKER_UNAVAILABLE", "safe fixture")
+            return await super().call(method, path, data, raw)
+
+    worker = ObserveFailureWorker()
+    runner, repo, model, record = make_runner(tmp_path, worker, fast_spec(sync_cookies=False))
+    try:
+        await runner._run(record.task_id)
+        assert repo.get(record.task_id).status == TaskStatus.SUCCEEDED
+        assert worker.recover_calls == 1
+        assert [cmd["action"]["kind"] for cmd in worker.executes] == ["gemini_submit_prompt"]
+        assert model.calls == []
+        assert any(event["event_type"] == "browser.recovery_completed"
+                   for event in repo.events(record.task_id))
+    finally:
+        await runner.close()
+        repo.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fast_workflow", [False, True])
+async def test_unready_worker_fails_before_task_cookie_sync(tmp_path, fast_workflow):
+    worker = FastWorker()
+    health_calls = []
+    async def unready_health():
+        health_calls.append(True)
+        return {"ready": False, "detail": "safe fixture"}
+    worker.health = unready_health
+    if fast_workflow:
+        spec = fast_spec(sync_cookies=True)
+    else:
+        spec = TaskSpec(goal="Inspect Gemini", allowed_origins=[GEMINI],
+            sync_cookies=True, idempotency_key="cookie-sync-unready-001")
+    runner, repo, model, record = make_runner(tmp_path, worker, spec)
+    sync_calls = []
+    async def cookie_sync(*_args):
+        sync_calls.append(True)
+        return {"total": 0, "applied": 0, "failed": 0}
+    runner.cookie_sync = cookie_sync
+    try:
+        await runner._run(record.task_id)
+        state = repo.get(record.task_id)
+        assert state.status == TaskStatus.WAITING_HUMAN
+        assert state.phase == "dependencies_not_ready"
+        assert state.error["code"] == "DEPENDENCIES_NOT_READY"
+        assert health_calls == [True]
+        assert sync_calls == []
+        assert not any(event["event_type"].startswith("cookie.sync_") for event in repo.events(record.task_id))
+        assert worker.calls == [] and worker.gates == [] and worker.executes == []
+        assert model.calls == []
+    finally:
+        await runner.close()
+        repo.close()
+
+
+@pytest.mark.asyncio
+async def test_resume_rechecks_worker_before_retrying_task_cookie_sync(tmp_path):
+    worker = FastWorker()
+    health_results = iter([False, True, True])
+    health_calls = []
+    async def changing_health():
+        health_calls.append(True)
+        return {"ready": next(health_results)}
+    worker.health = changing_health
+    runner, repo, _model, record = make_runner(tmp_path, worker, fast_spec(sync_cookies=True))
+    sync_calls = []
+    async def cookie_sync(*_args):
+        sync_calls.append(True)
+        return {"total": 0, "applied": 0, "failed": 0}
+    runner.cookie_sync = cookie_sync
+    try:
+        await runner._run(record.task_id)
+        waiting = repo.get(record.task_id)
+        assert waiting.status == TaskStatus.WAITING_HUMAN
+        assert sync_calls == []
+
+        await runner.control(record.task_id, "resume", waiting.version)
+        await runner.jobs[record.task_id]
+        assert repo.get(record.task_id).status == TaskStatus.SUCCEEDED
+        assert health_calls == [True, True, True]
+        assert sync_calls == [True]
+        assert len([e for e in repo.events(record.task_id) if e["event_type"] == "cookie.sync_completed"]) == 1
     finally:
         await runner.close()
         repo.close()

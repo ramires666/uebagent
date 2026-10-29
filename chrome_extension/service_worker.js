@@ -1,6 +1,6 @@
 import { PSL_RULES } from "./public_suffix_rules.js";
 
-const DEFAULT_API_ORIGIN = "http://localhost:8080";
+const DEFAULT_API_ORIGIN = "http://localhost:8090";
 const RECONNECT_ALARM = "local-mcp-reconnect";
 const MAX_MESSAGE_BYTES = 1024 * 1024;
 const MAX_TASK_COOKIE_COUNT = 500;
@@ -553,7 +553,8 @@ async function connect() {
     });
     ws.addEventListener("error", () => setStatus("offline", "Could not reach the local service."));
     ws.addEventListener("close", () => {
-      if (socket === ws) socket = null;
+      if (socket !== ws) return;
+      socket = null;
       stopHeartbeat();
       void setStatus("offline", "The local service connection closed.");
     });
@@ -591,12 +592,36 @@ if (typeof chrome !== "undefined") {
     void connect().then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (message.type === "switch_to_public_service") {
+    void switchApiOrigin().then((result) => {
+      if (result.ok) void connect();
+      sendResponse(result);
+    });
+    return true;
+  }
   if (message.type === "open_panel") {
     void getState().then((state) => chrome.tabs.create({ url: state.api_origin })).then(() => sendResponse({ ok: true }));
     return true;
   }
   return false;
   });
+}
+
+async function switchApiOrigin() {
+  if (reconnecting) return { ok: false, error: "Подключение сейчас обновляется. Повторите перенос через несколько секунд." };
+  const saved = await chrome.storage.local.get(["source_id", "token", "api_origin"]);
+  if (typeof saved.source_id !== "string" || !saved.source_id || typeof saved.token !== "string" || !saved.token) {
+    return { ok: false, error: "Расширение ещё не связано с панелью." };
+  }
+  // This is a single fixed loopback destination, invoked only from the popup.
+  // Preserve the existing source identity and pairing token.
+  await chrome.storage.local.set({ api_origin: DEFAULT_API_ORIGIN });
+  if (socket) {
+    stopHeartbeat();
+    socket.close();
+    socket = null;
+  }
+  return { ok: true };
 }
 
 async function pair(message) {
@@ -638,6 +663,7 @@ export {
   jobCookieExport,
   jobTaskCookieExport,
   jobOpenSites,
-  requirePermissions
+  requirePermissions,
+  switchApiOrigin
 };
 

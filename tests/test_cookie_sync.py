@@ -62,19 +62,56 @@ async def test_task_cookie_sync_is_atomic_task_scoped_and_does_not_persist_value
         return {"allowed_origins": ["https://app.example.test"], "cookies": [cookie()]}
 
     broker.ask = ask
+    # Push the durable receipt beyond the old first-1,000-events scan window.
+    for index in range(1_005):
+        repository.add_event(task_id, "task.activity", {"stage": "observing", "step": index})
     counts = await broker.sync_task_cookies(task_id, "default", ["https://app.example.test"])
     assert counts == {"total": 1, "applied": 1, "failed": 0}
     assert requested == [("source", "task_cookie_export", {"origins": ["https://app.example.test"]})]
     assert importer.calls == [(task_id, f"taskcookie-{task_id}", 1)]
-    events = repository.events(task_id)
+    events = repository.events(task_id, after_event_id=1_000, limit=1_000)
     sync_events = [event["event_type"] for event in events if event["event_type"].startswith("cookie.sync_")]
     assert sync_events == ["cookie.sync_started", "cookie.sync_completed"]
+    assert next(event["event_id"] for event in events if event["event_type"] == "cookie.sync_completed") > 1_000
     assert "synthetic-cookie-secret" not in str(events)
     assert "https://app.example.test" not in str(events)
 
     # A repeated callback uses the durable completion event and does not export/import again.
     assert await broker.sync_task_cookies(task_id, "default", ["https://app.example.test"]) == counts
     assert len(requested) == 1 and len(importer.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_task_cookie_sync_uses_generation_scoped_idempotency_key(tmp_path):
+    broker, importer, repository, task_id = setup(tmp_path)
+    requested = []
+    async def ask(source_id, kind, payload):
+        requested.append((source_id, kind, payload))
+        return {"allowed_origins": payload["origins"], "cookies": [cookie()]}
+    broker.ask = ask
+    scope = {"browser_instance_id": "runtime-instance-123", "recovery_generation": 4}
+    job_id = f"taskcookie-{task_id}-r4-opaquehash"
+    counts = await broker.sync_task_cookies(task_id, "default", ["https://app.example.test"],
+        job_id=job_id, **scope)
+    assert counts == {"total": 1, "applied": 1, "failed": 0}
+    assert importer.calls == [(task_id, job_id, 1)]
+    completed = next(event for event in repository.events(task_id)
+                     if event["event_type"] == "cookie.sync_completed")
+    assert completed["payload"]["job_id"] == job_id
+    assert completed["payload"]["recovery_generation"] == 4
+    assert len(completed["payload"]["browser_instance_id_hash"]) == 16
+    assert scope["browser_instance_id"] not in str(completed)
+    # A retry in this same browser incarnation reuses the receipt, while a
+    # new recovery generation is allowed to import into its fresh context.
+    assert await broker.sync_task_cookies(task_id, "default", ["https://app.example.test"],
+        job_id=job_id, **scope) == counts
+    next_scope = {"browser_instance_id": "runtime-instance-123", "recovery_generation": 5}
+    next_job_id = f"taskcookie-{task_id}-r5-nextopaque"
+    assert await broker.sync_task_cookies(task_id, "default", ["https://app.example.test"],
+        job_id=next_job_id, **next_scope) == counts
+    assert len(importer.calls) == 2
+    assert len(requested) == 2
+    assert "synthetic-cookie-secret" not in str(repository.events(task_id))
 
 
 @pytest.mark.asyncio

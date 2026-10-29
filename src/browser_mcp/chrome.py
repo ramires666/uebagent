@@ -49,6 +49,17 @@ class ChromeBroker:
             for item in json.loads(self.path.read_text(encoding="utf-8")):
                 self.sources[item["source_id"]] = {**item, "socket": None, "last_seen": 0, "inventory": None}
 
+    def _task_events(self, task_id: str):
+        cursor = 0
+        while True:
+            page = self.repository.events(task_id, after_event_id=cursor, limit=500)
+            if not page:
+                return
+            yield from page
+            if len(page) < 500:
+                return
+            cursor = page[-1]["event_id"]
+
     def spawn(self, coro: Any) -> None:
         try:
             self._require_background_capacity()
@@ -234,7 +245,9 @@ class ChromeBroker:
             raise DomainError("COOKIE_SOURCE_AMBIGUOUS", "Chrome returned cookies from more than one profile store")
         return validated
 
-    async def sync_task_cookies(self, task_id: str, profile_id: str, origins: list[str]) -> dict[str, int]:
+    async def sync_task_cookies(self, task_id: str, profile_id: str, origins: list[str], *,
+                                job_id: str | None = None, browser_instance_id: str | None = None,
+                                recovery_generation: int | None = None) -> dict[str, int]:
         """Export all applicable cookies once, import them through the task-scoped worker gate, and retain only counts."""
         if profile_id != "default":
             raise DomainError("PROFILE_NOT_FOUND", "Cookie sync is supported only for the default profile")
@@ -251,21 +264,32 @@ class ChromeBroker:
         if self.repository is None:
             raise DomainError("COOKIE_SYNC_UNAVAILABLE", "Task cookie sync storage is unavailable")
 
-        job_id = f"taskcookie-{task_id}"
-        events = self.repository.events(task_id, 0, 1000)
-        for event in reversed(events):
+        if job_id is None:
+            job_id = f"taskcookie-{task_id}"
+        if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,192}", job_id):
+            raise DomainError("COOKIE_SYNC_FAILED", "The task cookie job identifier is invalid")
+        scope_fields: dict[str, Any] = {}
+        if browser_instance_id is not None or recovery_generation is not None:
+            if (not isinstance(browser_instance_id, str) or not 1 <= len(browser_instance_id) <= 128
+                    or type(recovery_generation) is not int or recovery_generation < 0):
+                raise DomainError("COOKIE_SYNC_FAILED", "The browser cookie scope is invalid")
+            scope_fields = {
+                "browser_instance_id_hash": hashlib.sha256(browser_instance_id.encode("utf-8")).hexdigest()[:16],
+                "recovery_generation": recovery_generation,
+            }
+        started = False
+        for event in self._task_events(task_id):
             payload = event.get("payload", {})
+            if event.get("event_type") == "cookie.sync_started" and payload.get("job_id") == job_id:
+                started = True
             if event.get("event_type") == "cookie.sync_completed" and payload.get("job_id") == job_id:
                 counts = payload.get("counts")
                 if isinstance(counts, dict) and all(isinstance(counts.get(key), int) for key in ("total", "applied", "failed")):
                     return {key: counts[key] for key in ("total", "applied", "failed")}
                 raise DomainError("ACTION_OUTCOME_UNKNOWN", "The prior cookie sync receipt is incomplete")
-
-        started = any(event.get("event_type") == "cookie.sync_started" and
-                      event.get("payload", {}).get("job_id") == job_id for event in events)
         if not started:
             self.repository.add_event(task_id, "cookie.sync_started", {
-                "job_id": job_id, "origins_count": len(canonical_origins),
+                "job_id": job_id, "origins_count": len(canonical_origins), **scope_fields,
             })
         exported = None
         cookies: list[dict] = []
@@ -332,7 +356,7 @@ class ChromeBroker:
                 if failed or applied != total:
                     raise DomainError("COOKIE_SYNC_FAILED", "One or more task cookies could not be applied")
             self.repository.add_event(task_id, "cookie.sync_completed", {
-                "job_id": job_id, "origins_count": len(canonical_origins), "counts": counts,
+                "job_id": job_id, "origins_count": len(canonical_origins), "counts": counts, **scope_fields,
             })
             return counts
         except Exception as exc:
@@ -340,7 +364,9 @@ class ChromeBroker:
                               "COOKIE_SYNC_UNSUPPORTED", "COOKIE_SYNC_FAILED", "COOKIE_SYNC_UNAVAILABLE",
                               "ACTION_OUTCOME_UNKNOWN", "IMPORT_CONTROL_BUSY", "PROFILE_NOT_FOUND"}
             safe_code = exc.code if isinstance(exc, DomainError) and exc.code in approved_codes else "COOKIE_SYNC_FAILED"
-            self.repository.add_event(task_id, "cookie.sync_failed", {"job_id": job_id, "code": safe_code})
+            self.repository.add_event(task_id, "cookie.sync_failed", {
+                "job_id": job_id, "code": safe_code, **scope_fields,
+            })
             if isinstance(exc, DomainError):
                 raise
             raise DomainError("COOKIE_SYNC_FAILED", "Automatic cookie sync failed") from exc

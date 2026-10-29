@@ -1,0 +1,7 @@
+# Disposable validation image: overlay current source on an already-built browser
+# image to exercise recovery without reinstalling or downloading browser binaries.
+ARG BASE_BROWSER_IMAGE=browser-mcp-local-browser:latest
+FROM ${BASE_BROWSER_IMAGE}
+
+COPY worker/ /app/worker/
+COPY src/ /app/src/

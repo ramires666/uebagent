@@ -96,7 +96,7 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
                                  verbatim_text: Annotated[str | None, Field(min_length=1, max_length=100_000)] = None,
                                  limits: dict | None = None,
                                  sync_cookies: StrictBool = True,
-                                 execution_mode: Literal['supervised', 'autonomous'] = 'supervised',
+                                 execution_mode: Literal['supervised', 'autonomous'] = 'autonomous',
                                  site_capabilities: list[Literal['gemini_prompt_submit']] | None = None,
                                  workflow: Literal['agent', 'gemini_prompt_submit'] = 'agent') -> dict:
         """Start a bounded task; optionally lock one typed payload to exact verbatim_text."""

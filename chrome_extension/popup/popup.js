@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
 let pendingOrigins = [];
+const PUBLIC_SERVICE_ORIGIN = "http://localhost:8090";
 
 function send(message) {
   return new Promise((resolve) => chrome.runtime.sendMessage(message, resolve));
@@ -18,6 +19,7 @@ async function refresh() {
   const { connection, status } = response;
   $("api-origin").value = connection.api_origin;
   $("source-label").value = connection.label;
+  $("switch-service-button").hidden = !connection.source_id || connection.api_origin === PUBLIC_SERVICE_ORIGIN;
   $("status").textContent = connection.source_id
     ? `${status.status || "offline"}${status.status_message ? ` — ${status.status_message}` : ""}`
     : "Not paired";
@@ -63,6 +65,14 @@ $("grant-button").addEventListener("click", async () => {
 $("connect-button").addEventListener("click", async () => {
   const response = await send({ type: "connect_now" });
   showMessage(response?.ok ? "Reconnect requested." : "Reconnect failed.", !response?.ok);
+  await refresh();
+});
+
+$("switch-service-button").addEventListener("click", async () => {
+  const response = await send({ type: "switch_to_public_service" });
+  showMessage(response?.ok
+    ? "Подключение перенесено. Сохранённую пару можно использовать дальше."
+    : (response?.error || "Не удалось перенести подключение."), !response?.ok);
   await refresh();
 });
 

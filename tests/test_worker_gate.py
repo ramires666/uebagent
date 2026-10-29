@@ -82,6 +82,11 @@ class FakePage:
         self.back_count += 1
 
 
+class FakeContext:
+    def __init__(self, pages):
+        self.pages = list(pages)
+
+
 class FakeAdapter:
     def __init__(self):
         self.current_url = "about:blank"
@@ -107,7 +112,7 @@ class FakeAdapter:
 def make_runtime(tmp_path, *, egress_ready=True):
     adapter, page = FakeAdapter(), FakePage()
     runtime = BrowserRuntime(tmp_path, egress_ready=egress_ready, route_generation=1 if egress_ready else 0,
-                             adapter=adapter, page=page, test_mode=True)
+                             adapter=adapter, page=page, context=FakeContext([page]), test_mode=True)
     return runtime, adapter, page
 
 

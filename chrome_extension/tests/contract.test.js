@@ -64,7 +64,8 @@ const {
   enumerateOpenSites,
   jobCookieCatalog,
   jobCookieExport,
-  jobTaskCookieExport
+  jobTaskCookieExport,
+  switchApiOrigin
 } = await import("../service_worker.js");
 
 const serviceOrigin = "http://localhost:8080";
@@ -80,6 +81,33 @@ function reset() {
   state.failedDomains = new Set();
   state.storage = {};
 }
+
+test("explicit service move changes only the fixed loopback origin and retains pair credentials", async () => {
+  reset();
+  state.storage = {
+    api_origin: "http://localhost:8080",
+    source_id: "paired-source-fixture",
+    token: "paired-token-fixture-123456",
+    label: "Fixture Chrome",
+    pending_origins: ["https://example.test"]
+  };
+  const result = await switchApiOrigin();
+  assert.deepEqual(result, { ok: true });
+  assert.equal(state.storage.api_origin, "http://localhost:8090");
+  assert.equal(state.storage.source_id, "paired-source-fixture");
+  assert.equal(state.storage.token, "paired-token-fixture-123456");
+  assert.equal(state.storage.label, "Fixture Chrome");
+  assert.deepEqual(state.storage.pending_origins, ["https://example.test"]);
+});
+
+test("service move requires an existing pairing and does not change storage otherwise", async () => {
+  reset();
+  state.storage = { api_origin: "http://localhost:8080" };
+  const before = { ...state.storage };
+  const result = await switchApiOrigin();
+  assert.equal(result.ok, false);
+  assert.deepEqual(state.storage, before);
+});
 
 function tab(id, url, options = {}) {
   return { id, url, incognito: false, ...options };

@@ -25,13 +25,33 @@
     .status { display: flex; align-items: center; gap: 8px; padding: 8px 11px; color: #b4c2bc; background: #171f23; border: 1px solid #2d383e; border-radius: 999px; font-size: 12px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #88918f; }
     .status.good .dot { background: #a6d47e; box-shadow: 0 0 10px #a6d47e55; }
+    .status.warning .dot { background: #e2c67d; }
     .status.bad .dot { background: #e18f83; }
     .notice { min-height: 39px; margin-bottom: 12px; padding: 10px 13px; border: 1px solid #39434a; border-radius: 9px; color: #b5c1c0; background: #161d22; font-size: 12px; }
     .notice.error { color: #f0aaa1; border-color: #62413e; background: #251b1c; }
     .notice.warning { color: #e2c67d; border-color: #5a4e32; background: #242117; }
-    .task-progress { margin-bottom: 12px; padding: 10px 13px; border: 1px solid #344147; border-radius: 9px; background: #161e23; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-    .task-progress h2 { display: inline; margin: 0 8px 0 0; color: #acbbb5; font-size: 12px; }
-    .task-progress p { margin: 4px 0 0; }
+    .task-progress { margin-bottom: 12px; padding: 12px 14px; border: 1px solid #344147; border-radius: 9px; background: #161e23; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    html, body { min-height: 100%; }
+    html.desktop-embed, html.desktop-embed body { width: 100%; height: 100%; min-height: 0; margin: 0; overflow: hidden; background: #080b0e; }
+    html.desktop-embed .shell { width: 100%; max-width: none; height: 100%; margin: 0; padding: 0; }
+    html.desktop-embed header, html.desktop-embed #notice, html.desktop-embed .progress-panels, html.desktop-embed .screen-head, html.desktop-embed .controls, html.desktop-embed footer { display: none !important; }
+    html.desktop-embed .screen-card { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; display: flex; }
+    html.desktop-embed .viewport { width: 100%; height: 100%; min-height: 0; max-height: none; flex: 1; overflow: hidden; }
+    html.desktop-embed #browser-image { max-width: 100%; max-height: 100%; }
+    .progress-panels { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(250px, 1fr); gap: 10px; }
+    .task-progress h2 { display: inline; margin: 0 8px 0 0; color: #d2ddd8; font-size: 13px; }
+    .task-progress p { margin: 5px 0 0; }
+    .progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    #task-phase, #task-progress-count, #task-detail { color: #a8b5b1; }
+    #task-stop-reason { padding: 8px 10px; border-left: 3px solid #e2c67d; border-radius: 4px; color: #f0d799; background: #242117; font-weight: 600; }
+    #service-status { color: #b9c5c0; }
+    #service-status[data-state="bad"] { color: #f0aaa1; }
+    #service-status[data-state="warning"] { color: #e2c67d; }
+    #service-status[data-state="good"] { color: #b4e987; }
+    .task-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .task-action { border: 1px solid #3c4b45; border-radius: 6px; background: #1b2525; color: #dce7df; padding: 5px 8px; font-size: 10px; cursor: pointer; }
+    .task-action:hover { border-color: #a6d47e; background: #253126; }
+    .task-action.danger { color: #f0aaa1; }
     .screen-card { overflow: hidden; border: 1px solid #344147; border-radius: 12px; background: #090d10; box-shadow: 0 16px 50px #0005; }
     .screen-head { min-height: 41px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 13px; border-bottom: 1px solid #29353b; background: #172026; color: #97a5a4; font-size: 11px; }
     #site-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -50,9 +70,34 @@
     .text-form input, .navigate-form input { flex: 1; }
     .help { margin: 8px 1px 0; color: #80908f; font-size: 10px; line-height: 1.5; }
     footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 14px 2px 0; color: #71817f; font-size: 10px; }
-    @media (max-width: 900px) { .controls { grid-template-columns: 1fr 1fr; } .control-card:last-child { grid-column: 1 / -1; } }
-    @media (max-width: 600px) { .shell { padding-top: 12px; } header { align-items: flex-start; flex-direction: column; } .top-actions { width: 100%; justify-content: space-between; } .viewport { min-height: 40vh; max-height: 62vh; } #browser-image { max-height: 60vh; } .controls { grid-template-columns: 1fr; } .control-card:last-child { grid-column: auto; } }
+    @media (min-width: 801px) {
+      .shell { padding-top: 10px; padding-bottom: 12px; }
+      header { margin-bottom: 8px; }
+      .mark { width: 30px; height: 30px; }
+      .subtitle { margin-top: 2px; }
+      .top-actions { gap: 6px; }
+      .top-actions button, .top-actions .link { padding: 6px 9px; font-size: 11px; }
+      .notice { min-height: 0; margin-bottom: 7px; padding: 6px 10px; }
+      .progress-panels { gap: 7px; margin-bottom: 7px; }
+      .task-progress { margin: 0; padding: 7px 10px; line-height: 1.35; }
+      .task-progress p { margin-top: 3px; }
+      .task-progress p:empty { display: none; }
+      .task-actions { margin-top: 4px; }
+      .task-action { padding: 4px 7px; }
+      .screen-head { min-height: 30px; padding: 5px 10px; }
+      .viewport { min-height: 54vh; max-height: 78vh; }
+      .controls { gap: 7px; margin-top: 7px; }
+      .control-card { padding: 9px; }
+      .control-card h2 { margin-bottom: 6px; }
+      .button-row { gap: 5px; }
+      .button-row button { min-height: 30px; padding: 5px 8px; }
+      .text-form input, .navigate-form input { padding: 7px 9px; }
+      .help { margin-top: 5px; line-height: 1.3; }
+      footer { margin-top: 7px; }
+    }
+    @media (max-width: 800px) { .shell { padding-top: 12px; } header { align-items: flex-start; flex-direction: column; } .top-actions { width: 100%; justify-content: space-between; flex-wrap: wrap; } .progress-panels { grid-template-columns: 1fr; gap: 6px; } .viewport { min-height: 40vh; max-height: 62vh; } #browser-image { max-height: 60vh; } .controls { grid-template-columns: 1fr; } .control-card:last-child { grid-column: auto; } }
   </style>
+  <script src="/task-status.js" defer></script>
   <script src="/desktop.js" defer></script>
 </head>
 <body>
@@ -73,13 +118,25 @@
 
     <div id="notice" class="notice" role="status">Подключение к локальному браузеру…</div>
 
+    <div class="progress-panels">
     <section class="task-progress" aria-label="Ход задачи" aria-live="polite">
-      <h2>Задача</h2><span id="task-status">Загрузка…</span>
-      <p id="task-goal"></p><p id="task-detail"></p>
+      <div class="progress-head"><h2>Текущая задача</h2><span id="task-status">Загрузка…</span></div>
+      <p id="task-phase"></p>
+      <p id="task-progress-count"></p>
+      <p id="task-stop-reason" hidden><strong>Причина остановки:</strong> <span></span></p>
+      <p id="task-goal"></p>
+      <p id="task-detail"></p>
+      <div id="task-actions" class="task-actions" aria-label="Управление текущей задачей"></div>
     </section>
 
+    <section class="task-progress" aria-label="Состояние сервисов" aria-live="polite">
+      <div class="progress-head"><h2>Состояние сервисов</h2></div>
+      <p id="service-status" data-state="pending">Проверяется состояние модели и браузера…</p>
+    </section>
+    </div>
+
     <section class="screen-card" aria-label="Содержимое браузера">
-      <div class="screen-head"><span id="site-label">Браузер недоступен</span><span id="browser-runtime"></span><span id="image-size"></span></div>
+      <div class="screen-head"><span id="site-label">Браузер недоступен</span><span id="control-owner-label"></span><span id="browser-runtime"></span><span id="image-size"></span></div>
       <div class="viewport">
         <div id="empty-state" class="empty"><strong>Ожидание снимка экрана</strong>Здесь появится содержимое браузера, когда он станет доступен.</div>
         <img id="browser-image" alt="Текущий снимок содержимого браузера" hidden draggable="false">

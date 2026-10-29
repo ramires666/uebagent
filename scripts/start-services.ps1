@@ -13,7 +13,7 @@ $DirectCompose = Join-Path $Root 'deploy/compose.direct.yaml'
 $ModelCompose = Join-Path $Root 'deploy/compose.model-auth.yaml'
 $Bootstrap = Join-Path $Root 'scripts/bootstrap_secrets.py'
 $AccessDirectory = Join-Path $Root 'runtime/access'
-$ServiceUrl = 'http://localhost:8080'
+$ServiceUrl = 'http://localhost:8090'
 
 function Invoke-NativeCaptured {
     param([string]$FilePath, [string[]]$Arguments)

@@ -6,6 +6,7 @@ import json
 import httpx
 import pytest
 
+from browser_mcp.config import Settings
 from browser_mcp.model_client import ModelClient, ModelError, ModelSettings, _history_fara_arguments
 
 
@@ -19,7 +20,8 @@ def xml_call(action: dict[str, object]) -> dict[str, object]:
 
 def client(handler, *, prompt: str = "Pinned Fara prompt", api_key: str = "test-secret") -> ModelClient:
     transport = httpx.MockTransport(handler)
-    return ModelClient(ModelSettings("http://127.0.0.1:8080/v1", api_key=api_key, system_prompt=prompt), transport=transport)
+    return ModelClient(ModelSettings("http://127.0.0.1:8080/v1", alias="fara-browser", api_key=api_key,
+                                     system_prompt=prompt, protocol="fara"), transport=transport)
 
 
 @pytest.mark.asyncio
@@ -27,6 +29,8 @@ async def test_request_sends_image_sensitive_message_and_bearer_auth() -> None:
     seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
         seen["url"] = str(request.url)
         seen["auth"] = request.headers.get("Authorization")
         seen["body"] = json.loads(request.content)
@@ -54,6 +58,8 @@ async def test_reconstructs_only_applied_fara_tool_turns_and_preserves_model_coo
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=xml_call({"action": "history_back"}))
 
@@ -133,8 +139,12 @@ async def test_normalizes_supported_fara_actions_and_aliases() -> None:
         ({"action": "pause_and_memorize_fact", "fact": "Blue is preferred"}, {"kind": "remember_fact", "text": "Blue is preferred"}),
     ]
     for action, expected in actions:
-        transport = httpx.MockTransport(lambda _: httpx.Response(200, json=xml_call(action)))
-        result = await ModelClient(ModelSettings("http://local/v1", system_prompt="prompt"), transport).next_action("Goal", PNG)
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/models"):
+                return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
+            return httpx.Response(200, json=xml_call(action))
+        transport = httpx.MockTransport(handler)
+        result = await ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="prompt", protocol="fara"), transport).next_action("Goal", PNG)
         assert result == expected
 
 
@@ -144,15 +154,19 @@ async def test_health_checks_llama_server_and_prompt_is_required_for_action() ->
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(str(request.url))
-        return httpx.Response(200, json={"status": "ok"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
+        return httpx.Response(404, json={"error": {"message": "missing"}})
 
     model = client(handler, prompt="")
-    assert await model.health() == {"configured": True, "ready": True, "detail": "llama-server is ready"}
-    assert seen == ["http://127.0.0.1:8080/health"]
+    health = await model.health()
+    assert health["configured"] is True and health["ready"] is True
+    assert health["model_id"] == "fara-browser" and health["protocol"] == "fara"
+    assert seen == ["http://127.0.0.1:8080/v1/models"]
     with pytest.raises(ModelError) as exc:
         await model.next_action("Goal", PNG)
     assert exc.value.code == "PROMPT_NOT_CONFIGURED"
-    absent = ModelClient(ModelSettings(""), httpx.MockTransport(handler))
+    absent = ModelClient(ModelSettings("", protocol="fara"), httpx.MockTransport(handler))
     assert (await absent.health())["configured"] is False
 
 
@@ -176,7 +190,7 @@ async def test_health_checks_llama_server_and_prompt_is_required_for_action() ->
 async def test_rejects_malformed_ambiguous_or_unsupported_model_outputs(message) -> None:
     response = {"choices": [{"message": message}]}
     transport = httpx.MockTransport(lambda _: httpx.Response(200, json=response))
-    model = ModelClient(ModelSettings("http://local/v1", system_prompt="prompt"), transport)
+    model = ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="prompt", protocol="fara"), transport)
     with pytest.raises(ModelError):
         await model.next_action("Goal", PNG)
 
@@ -184,10 +198,15 @@ async def test_rejects_malformed_ambiguous_or_unsupported_model_outputs(message)
 @pytest.mark.asyncio
 async def test_native_tool_call_is_supported_once_and_multiple_calls_rejected() -> None:
     native = {"choices": [{"message": {"content": None, "tool_calls": [{"type": "function", "function": {"name": "computer_use", "arguments": {"action": "double_click", "coordinate": [10, 20]}}}]}}]}
-    model = ModelClient(ModelSettings("http://local/v1", system_prompt="prompt"), httpx.MockTransport(lambda _: httpx.Response(200, json=native)))
+    def handler(_: httpx.Request) -> httpx.Response:
+        request = _
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
+        return httpx.Response(200, json=native)
+    model = ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="prompt", protocol="fara"), httpx.MockTransport(handler))
     assert await model.next_action("Goal", PNG) == {"kind": "click", "x": 10.0, "y": 20.0, "button": "left", "count": 2}
     native["choices"][0]["message"]["tool_calls"].append(native["choices"][0]["message"]["tool_calls"][0])
-    model = ModelClient(ModelSettings("http://local/v1", system_prompt="prompt"), httpx.MockTransport(lambda _: httpx.Response(200, json=native)))
+    model = ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="prompt", protocol="fara"), httpx.MockTransport(handler))
     with pytest.raises(ModelError) as exc:
         await model.next_action("Goal", PNG)
     assert exc.value.code == "MODEL_OUTPUT_INVALID"
@@ -197,9 +216,153 @@ async def test_native_tool_call_is_supported_once_and_multiple_calls_rejected() 
 async def test_response_size_is_bounded_before_parsing() -> None:
     oversized = b"{" + b" " * (1024 * 1024) + b"}"
     model = ModelClient(
-        ModelSettings("http://local/v1", system_prompt="prompt"),
+        ModelSettings("http://local/v1", alias="fara-browser", system_prompt="prompt", protocol="fara"),
         httpx.MockTransport(lambda _: httpx.Response(200, content=oversized)),
     )
     with pytest.raises(ModelError) as exc:
         await model.next_action("Goal", PNG)
     assert exc.value.code == "MODEL_RESPONSE_TOO_LARGE"
+
+
+def _generic_client(handler, *, alias="auto") -> ModelClient:
+    return ModelClient(ModelSettings("http://model/v1", alias=alias, protocol="generic"),
+                       httpx.MockTransport(handler))
+
+
+def test_settings_reject_unknown_model_protocol_before_creating_state(tmp_path) -> None:
+    settings = Settings(data_dir=tmp_path / "data", model_protocol="guess", operator_auth_mode="local")
+    with pytest.raises(ValueError, match="MODEL_PROTOCOL"):
+        settings.prepare()
+    assert not settings.data_dir.exists()
+
+
+def _models(*ids: str) -> httpx.Response:
+    return httpx.Response(200, json={"data": [{"id": item} for item in ids]})
+
+
+@pytest.mark.asyncio
+async def test_generic_auto_discovers_exact_model_id_each_turn_and_sends_image_and_one_tool() -> None:
+    seen: list[dict] = []
+    ids = ["Bonsai-27B.gguf", "Bonsai-vision-v2.gguf"]
+    selected_ids = [ids[0], ids[1]]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return _models(ids[0])
+        body = json.loads(request.content)
+        seen.append(body)
+        return httpx.Response(200, json={"choices": [{"message": {"tool_calls": [
+            {"type": "function", "function": {"name": "browser_action", "arguments": {"kind": "click", "x": 45, "y": 90}}}
+        ]}}]})
+
+    model = _generic_client(handler)
+    assert await model.next_action("Inspect the page", PNG) == {
+        "kind": "click", "x": 45.0, "y": 90.0, "button": "left", "count": 1,
+    }
+    ids[0] = ids[1]
+    assert await model.next_action("Inspect again", PNG) == {
+        "kind": "click", "x": 45.0, "y": 90.0, "button": "left", "count": 1,
+    }
+    assert [item["model"] for item in seen] == selected_ids
+    for body in seen:
+        assert len(body["tools"]) == 1 and body["tool_choice"]["function"]["name"] == "browser_action"
+        schema = body["tools"][0]["function"]["parameters"]
+        assert "oneOf" not in schema and schema["required"] == ["kind"]
+        assert schema["properties"]["kind"]["enum"]
+        assert schema["additionalProperties"] is False
+        user = body["messages"][-1]["content"]
+        image = next(part["image_url"]["url"] for part in user if part["type"] == "image_url")
+        assert base64.b64decode(image.split(",", 1)[1]) == PNG
+        prompt = body["messages"][0]["content"]
+        assert "Never append those operational instructions" in prompt
+
+
+@pytest.mark.asyncio
+async def test_model_discovery_selection_is_explicit_and_exact() -> None:
+    ambiguous = _generic_client(lambda request: _models("one", "two") if request.url.path.endswith("/models") else None)
+    health = await ambiguous.health()
+    assert health["error_code"] == "MODEL_SELECTION_REQUIRED"
+    assert health["available_models"] == ["one", "two"]
+
+    unavailable = _generic_client(lambda request: _models("one") if request.url.path.endswith("/models") else None,
+                                  alias="two")
+    health = await unavailable.health()
+    assert health["error_code"] == "MODEL_NOT_SERVED"
+    assert health["available_models"] == ["one"]
+
+    selected = _generic_client(lambda request: _models("one", "two") if request.url.path.endswith("/models") else None,
+                               alias="two")
+    health = await selected.health()
+    assert health["ready"] and health["model_id"] == "two"
+
+
+@pytest.mark.asyncio
+async def test_generic_fallback_only_on_format_rejection_and_never_drops_image() -> None:
+    requests: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return _models("vision-model")
+        body = json.loads(request.content)
+        requests.append(body)
+        if "tools" in body:
+            return httpx.Response(400, json={"error": {"message": "tools are not supported"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "```json\n{\"kind\":\"wait\",\"seconds\":1}\n```"}}]})
+
+    model = _generic_client(handler)
+    assert await model.next_action("Wait", PNG) == {"kind": "wait", "seconds": 1.0}
+    assert len(requests) == 2
+    assert "tools" in requests[0] and requests[1]["response_format"] == {"type": "json_object"}
+    assert all(any(part.get("type") == "image_url" for part in message.get("content", []) if isinstance(part, dict))
+               for request in requests for message in request["messages"] if isinstance(message.get("content"), list))
+
+
+@pytest.mark.asyncio
+async def test_generic_explicit_image_rejection_is_safe_and_health_reports_exact_model() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return _models("text-only")
+        return httpx.Response(400, json={"error": {"message": "image_url input is unsupported"}})
+
+    model = _generic_client(handler)
+    with pytest.raises(ModelError) as exc:
+        await model.next_action("Inspect", PNG)
+    assert exc.value.code == "MODEL_VISION_UNSUPPORTED"
+    health = await model.health()
+    assert health["error_code"] == "MODEL_VISION_UNSUPPORTED"
+    assert health["model_id"] == "text-only" and health["vision_status"] == "unsupported"
+
+
+@pytest.mark.parametrize("message", [
+    {"content": "The answer is {\"kind\":\"wait\",\"seconds\":1}"},
+    {"content": "{\"kind\":\"execute_javascript\",\"code\":\"bad\"}"},
+    {"content": "{\"kind\":\"click\",\"x\":1000,\"y\":1}"},
+    {"content": None, "tool_calls": [
+        {"function": {"name": "browser_action", "arguments": "{\"kind\":\"wait\",\"seconds\":1}"}},
+        {"function": {"name": "browser_action", "arguments": "{\"kind\":\"wait\",\"seconds\":1}"}},
+    ]},
+])
+@pytest.mark.asyncio
+async def test_generic_parser_rejects_prose_extra_tools_unknown_actions_and_bad_coordinates(message) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return _models("vision")
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    with pytest.raises(ModelError) as exc:
+        await _generic_client(handler).next_action("Inspect", PNG)
+    assert exc.value.code == "MODEL_OUTPUT_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_generic_parser_rejects_empty_arguments_even_with_flat_tool_schema() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return _models("vision")
+        return httpx.Response(200, json={"choices": [{"message": {"tool_calls": [
+            {"type": "function", "function": {"name": "browser_action", "arguments": {}}}
+        ]}}]})
+
+    with pytest.raises(ModelError) as exc:
+        await _generic_client(handler).next_action("Inspect", PNG)
+    assert exc.value.code == "MODEL_OUTPUT_INVALID"

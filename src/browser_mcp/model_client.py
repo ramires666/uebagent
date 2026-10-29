@@ -1,4 +1,4 @@
-"""Async llama-server transport and strict Fara action parser.
+"""Async OpenAI-compatible vision-model transport and strict action parser.
 
 This client only proposes normalized actions; it never executes them.
 """
@@ -20,20 +20,23 @@ import httpx
 class ModelError(Exception):
     """Expected model transport/configuration/output failure."""
 
-    def __init__(self, code: str, message: str, *, category: str | None = None) -> None:
+    def __init__(self, code: str, message: str, *, category: str | None = None,
+                 available_models: tuple[str, ...] = ()) -> None:
         self.code = code
         self.message = message
         self.category = category
+        self.available_models = available_models
         super().__init__(message)
 
 
 @dataclass(frozen=True, slots=True)
 class ModelSettings:
     base_url: str
-    alias: str = "fara-browser"
+    alias: str = "auto"
     api_key: str = ""
     timeout_s: float = 90
     system_prompt: str = ""
+    protocol: str = "generic"
 
 
 _MAX_RESPONSE = 1024 * 1024
@@ -65,6 +68,43 @@ _KEY_NAMES = {
     "a", "c", "v", "x", "z", "A", "C", "V", "X", "Z",
 }
 
+_GENERIC_SYSTEM_PROMPT = """You are a vision-capable browser agent. You receive a task goal and a screenshot and must return exactly one structured browser action.
+
+Separate browser-operation instructions from text content. Requests to choose a model, change a thinking/reasoning setting, or adjust another visible site setting are UI operations: perform them in the browser and verify the selected state before entering or sending any text. Never append those operational instructions to text intended for a website. If a requested setting cannot be verified, stop and ask the user rather than continuing with text entry or submission.
+
+Only enter the content the user asked to enter. Preserve any explicitly supplied verbatim payload exactly. Do not invent credentials or bypass authentication, CAPTCHA, OTP, or access challenges. Use only the browser actions in the provided schema; do not return code, shell commands, JavaScript, or arbitrary tools. Do not include private reasoning.
+
+Coordinates are normalized independently to the screenshot axes: x and y are each in [0, 1000), never pixel values. For this 1440x900 screenshot, the center (720, 450) is (500, 500); the runtime scales x by screenshot width and y by screenshot height. Return one JSON action object with a supported kind and only that action's arguments."""
+
+_GENERIC_ACTION_KINDS = {
+    "click", "type_text", "press_key", "navigate", "scroll", "wait", "finish",
+    "ask_user", "remember_fact", "search", "mouse_move", "drag", "history_back",
+}
+
+_GENERIC_ACTION_SCHEMA: dict[str, Any] = {
+    # Keep the wire schema flat: llama.cpp's constrained tool grammar may
+    # produce empty arguments for a root-level oneOf union. The runtime still
+    # validates each action against its exact per-kind shape below.
+    "type": "object",
+    "properties": {
+        "kind": {"type": "string", "enum": sorted(_GENERIC_ACTION_KINDS)},
+        "x": {"type": "number", "minimum": 0, "exclusiveMaximum": 1000},
+        "y": {"type": "number", "minimum": 0, "exclusiveMaximum": 1000},
+        "button": {"type": "string", "enum": ["left", "right"]},
+        "count": {"type": "integer", "enum": [1, 2, 3]},
+        "text": {"type": "string", "maxLength": 100000},
+        "key": {"type": "string", "maxLength": 100},
+        "url": {"type": "string", "maxLength": 4096},
+        "dx": {"type": "number", "minimum": -1000, "maximum": 1000},
+        "dy": {"type": "number", "minimum": -1000, "maximum": 1000},
+        "seconds": {"type": "number", "minimum": 0, "maximum": 10},
+        "summary": {"type": "string", "maxLength": 10000},
+        "question": {"type": "string", "minLength": 1, "maxLength": 10000},
+        "query": {"type": "string", "minLength": 1, "maxLength": 10000},
+    },
+    "required": ["kind"],
+    "additionalProperties": False,
+}
 
 def _normalize_key_sequence(value: Any) -> str:
     """Validate and canonicalize one key plus optional modifier chord."""
@@ -239,7 +279,11 @@ def _normalize_tool_call(call: Any) -> dict[str, Any]:
     raise ModelError("MODEL_OUTPUT_INVALID", "unknown or unsupported Fara action")
 
 
-def _parse_message(message: Any) -> dict[str, Any]:
+def _parse_message(message: Any, protocol: str = "fara") -> dict[str, Any]:
+    if protocol == "generic":
+        return _parse_generic_message(message)
+    if protocol != "fara":
+        raise ModelError("MODEL_PROTOCOL_INVALID", "unsupported model protocol")
     if not isinstance(message, dict):
         raise ModelError("MODEL_OUTPUT_INVALID", "assistant message is malformed")
     content = message.get("content")
@@ -340,25 +384,146 @@ def _history_fara_arguments(action: Any) -> dict[str, Any] | None:
     return None
 
 
-def _history_messages(history: list[dict[str, Any]]) -> list[dict[str, str]]:
+def _history_generic_action(action: Any) -> dict[str, Any] | None:
+    if not isinstance(action, dict):
+        return None
+    kind = action.get("kind")
+    if kind not in _GENERIC_ACTION_KINDS:
+        return None
+    # Reuse the same strict validator used for model output before adding any
+    # prior action to a later prompt.
+    try:
+        return _normalize_generic_action(action)
+    except ModelError:
+        return None
+
+
+def _history_messages(history: list[dict[str, Any]], protocol: str = "fara") -> list[dict[str, str]]:
     messages: list[dict[str, str]] = []
     for item in history[-_MAX_HISTORY_ITEMS:]:
         # Only applied, typed normalized actions can be replayed as assistant
         # calls. Unconfirmed/planned actions are never upgraded into outcomes.
         if item.get("outcome") == "applied":
-            arguments = _history_fara_arguments(item.get("model_action"))
-            if arguments is not None:
-                call = {"name": "computer_use", "arguments": arguments}
-                encoded = json.dumps(call, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-                messages.append({"role": "assistant", "content": f"<tool_call>{encoded}</tool_call>"})
-                messages.append({"role": "user", "content": "Action applied."})
-                continue
+            if protocol == "generic":
+                action = _history_generic_action(item.get("model_action"))
+                if action is not None:
+                    encoded = json.dumps(action, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+                    messages.append({"role": "assistant", "content": encoded})
+                    messages.append({"role": "user", "content": "Action applied."})
+                    continue
+            else:
+                arguments = _history_fara_arguments(item.get("model_action"))
+                if arguments is not None:
+                    call = {"name": "computer_use", "arguments": arguments}
+                    encoded = json.dumps(call, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+                    messages.append({"role": "assistant", "content": f"<tool_call>{encoded}</tool_call>"})
+                    messages.append({"role": "user", "content": "Action applied."})
+                    continue
         # Explicit remembered facts are user-visible task context, not model
         # reasoning or inferred tool outcomes. Other history fields are omitted.
         fact = item.get("fact")
         if isinstance(fact, str) and fact and len(fact) <= 10_000:
             messages.append({"role": "user", "content": f"Previously remembered fact: {fact}"})
     return messages
+
+
+def _normalize_generic_action(action: Any) -> dict[str, Any]:
+    if not isinstance(action, dict) or not isinstance(action.get("kind"), str):
+        raise ModelError("MODEL_OUTPUT_INVALID", "action must be one JSON object with a supported kind")
+    kind = action["kind"]
+    if kind == "click":
+        _only(action, {"kind", "x", "y", "button", "count"}, {"kind", "x", "y"})
+        x = _numeric(action["x"], "x", 0, 1000)
+        y = _numeric(action["y"], "y", 0, 1000)
+        if x >= 1000 or y >= 1000:
+            raise ModelError("MODEL_OUTPUT_INVALID", "normalized coordinates must be less than 1000")
+        button = action.get("button", "left")
+        count = action.get("count", 1)
+        if not isinstance(button, str) or button not in {"left", "right"} or type(count) is not int or count not in {1, 2, 3}:
+            raise ModelError("MODEL_OUTPUT_INVALID", "click button or count is unsupported")
+        return {"kind": kind, "x": x, "y": y, "button": button, "count": count}
+    if kind in {"mouse_move", "drag"}:
+        _only(action, {"kind", "x", "y"}, {"kind", "x", "y"})
+        x = _numeric(action["x"], "x", 0, 1000)
+        y = _numeric(action["y"], "y", 0, 1000)
+        if x >= 1000 or y >= 1000:
+            raise ModelError("MODEL_OUTPUT_INVALID", "normalized coordinates must be less than 1000")
+        return {"kind": kind, "x": x, "y": y}
+    if kind == "type_text":
+        _only(action, {"kind", "text"}, {"kind", "text"})
+        if not isinstance(action["text"], str) or len(action["text"]) > 100_000:
+            raise ModelError("MODEL_OUTPUT_INVALID", "text must be a string of at most 100000 characters")
+        return {"kind": kind, "text": action["text"]}
+    if kind == "press_key":
+        _only(action, {"kind", "key"}, {"kind", "key"})
+        return {"kind": kind, "key": _normalize_key_sequence(action["key"])}
+    if kind == "navigate":
+        _only(action, {"kind", "url"}, {"kind", "url"})
+        value = action["url"]
+        if not isinstance(value, str) or len(value) > 4096:
+            raise ModelError("MODEL_OUTPUT_INVALID", "url must be an absolute HTTP(S) URL")
+        try:
+            parsed = urlsplit(value)
+            if (parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname
+                    or parsed.username is not None or parsed.password is not None):
+                raise ValueError
+            _ = parsed.port
+        except ValueError as exc:
+            raise ModelError("MODEL_OUTPUT_INVALID", "url must be an absolute HTTP(S) URL without credentials") from exc
+        return {"kind": kind, "url": value}
+    if kind == "scroll":
+        _only(action, {"kind", "dx", "dy"}, {"kind", "dx", "dy"})
+        dx = _numeric(action["dx"], "dx", -1000, 1000)
+        dy = _numeric(action["dy"], "dy", -1000, 1000)
+        if dx and dy:
+            raise ModelError("MODEL_OUTPUT_INVALID", "scroll must use one axis at a time")
+        return {"kind": kind, "dx": dx, "dy": dy}
+    if kind == "wait":
+        _only(action, {"kind", "seconds"}, {"kind", "seconds"})
+        return {"kind": kind, "seconds": _numeric(action["seconds"], "seconds", 0, 10)}
+    text_field = {"finish": "summary", "ask_user": "question", "remember_fact": "text", "search": "query"}.get(kind)
+    if text_field is not None:
+        _only(action, {"kind", text_field}, {"kind", text_field})
+        value = action[text_field]
+        maximum = 10000 if kind != "search" else 10000
+        if not isinstance(value, str) or len(value) > maximum or (kind in {"ask_user", "remember_fact", "search"} and not value.strip()):
+            raise ModelError("MODEL_OUTPUT_INVALID", f"{text_field} must be a non-empty bounded string")
+        return {"kind": kind, text_field: value}
+    if kind == "history_back":
+        _only(action, {"kind"}, {"kind"})
+        return {"kind": kind}
+    raise ModelError("MODEL_OUTPUT_INVALID", "unknown or unsupported action kind")
+
+
+def _parse_generic_message(message: Any) -> dict[str, Any]:
+    if not isinstance(message, dict):
+        raise ModelError("MODEL_OUTPUT_INVALID", "assistant message is malformed")
+    calls = message.get("tool_calls")
+    content = message.get("content")
+    if calls is not None:
+        if not isinstance(calls, list) or len(calls) != 1 or not isinstance(calls[0], dict):
+            raise ModelError("MODEL_OUTPUT_INVALID", "exactly one browser_action tool call is required")
+        function = calls[0].get("function")
+        if not isinstance(function, dict) or function.get("name") != "browser_action":
+            raise ModelError("MODEL_OUTPUT_INVALID", "expected one browser_action tool call")
+        arguments = function.get("arguments")
+        if isinstance(arguments, str):
+            try:
+                arguments = _strict_json(arguments)
+            except (ValueError, json.JSONDecodeError) as exc:
+                raise ModelError("MODEL_OUTPUT_INVALID", "browser_action arguments are invalid JSON") from exc
+        return _normalize_generic_action(arguments)
+    if not isinstance(content, str):
+        raise ModelError("MODEL_OUTPUT_INVALID", "model response did not contain one structured browser action")
+    text = content.strip()
+    fence = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE)
+    if fence:
+        text = fence.group(1).strip()
+    try:
+        action = _strict_json(text)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ModelError("MODEL_OUTPUT_INVALID", "model response was not one JSON action object") from exc
+    return _normalize_generic_action(action)
 
 
 class ModelClient:
@@ -370,6 +535,9 @@ class ModelClient:
         self._conversation: list[dict[str, Any]] = []
         self._conversation_pending_outcome = False
         self._conversation_feedback: str | None = None
+        self._vision_error_model_id: str | None = None
+        self._vision_supported_model_id: str | None = None
+        self._last_model_id: str | None = None
 
     def begin_task(self, task_id: str) -> None:
         """Start or resume one task's private Fara conversation."""
@@ -502,7 +670,11 @@ class ModelClient:
         return items
 
     @staticmethod
-    def _raw_assistant_content(message: dict[str, Any]) -> str:
+    def _raw_assistant_content(message: dict[str, Any], action: dict[str, Any], protocol: str) -> str:
+        if protocol == "generic":
+            # Keep only the validated action. Do not persist free-form model
+            # reasoning or an unvalidated tool payload in the transcript.
+            return json.dumps(action, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
         content = message.get("content")
         if isinstance(content, str):
             return content
@@ -524,13 +696,16 @@ class ModelClient:
                     return f"<tool_call>{encoded}</tool_call>"
         raise ModelError("MODEL_OUTPUT_INVALID", "assistant response has no reusable text or tool call")
 
+
     @property
     def _configured(self) -> bool:
-        if not self.settings.base_url or not self.settings.alias:
+        if not self.settings.base_url or not isinstance(self.settings.alias, str) or not self.settings.alias.strip():
             return False
         try:
             parsed = urlsplit(self.settings.base_url)
-            return parsed.scheme in {"http", "https"} and bool(parsed.netloc) and parsed.path.rstrip("/").endswith("/v1") and not parsed.query and not parsed.fragment
+            return (parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+                    and parsed.path.rstrip("/").endswith("/v1") and not parsed.query and not parsed.fragment
+                    and self.settings.protocol in {"generic", "fara"})
         except ValueError:
             return False
 
@@ -548,29 +723,178 @@ class ModelClient:
                 raise ModelError("MODEL_RESPONSE_TOO_LARGE", "model response exceeded 1 MiB")
         return bytes(data)
 
+    async def _served_models(self, client: httpx.AsyncClient) -> tuple[str, ...]:
+        url = self.settings.base_url.rstrip("/") + "/models"
+        try:
+            async with client.stream("GET", url, headers=self._auth()) as response:
+                raw = await self._read_bounded(response)
+                if not response.is_success:
+                    raise ModelError("MODEL_DISCOVERY_FAILED", f"model discovery returned HTTP {response.status_code}")
+        except ModelError:
+            raise
+        except httpx.HTTPError as exc:
+            raise ModelError("MODEL_DISCOVERY_FAILED", "model discovery endpoint is unreachable") from exc
+        try:
+            body = _strict_json(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+            raise ModelError("MODEL_DISCOVERY_FAILED", "model discovery returned invalid JSON") from exc
+        data = body.get("data") if isinstance(body, dict) else None
+        if not isinstance(data, list) or len(data) > 128:
+            raise ModelError("MODEL_DISCOVERY_FAILED", "model discovery response has an invalid data list")
+        ids: list[str] = []
+        for item in data:
+            model_id = item.get("id") if isinstance(item, dict) else None
+            if (not isinstance(model_id, str) or not model_id or len(model_id) > 256
+                    or any(ord(char) < 32 or ord(char) == 127 for char in model_id)):
+                raise ModelError("MODEL_DISCOVERY_FAILED", "model discovery response contains an invalid model ID")
+            if model_id not in ids:
+                ids.append(model_id)
+        if not ids:
+            raise ModelError("MODEL_DISCOVERY_FAILED", "model discovery returned no served model IDs")
+        return tuple(ids)
+
+    def _select_model(self, served: tuple[str, ...]) -> str:
+        alias = self.settings.alias.strip()
+        if alias == "auto":
+            if len(served) != 1:
+                raise ModelError("MODEL_SELECTION_REQUIRED",
+                    "multiple model IDs are served; configure MODEL_ALIAS to select one",
+                    available_models=served)
+            selected = served[0]
+        else:
+            if alias not in served:
+                raise ModelError("MODEL_NOT_SERVED", "configured MODEL_ALIAS is not present in the served model list",
+                    available_models=served)
+            selected = alias
+        if self._last_model_id is not None and self._last_model_id != selected:
+            self._vision_error_model_id = None
+            self._vision_supported_model_id = None
+        self._last_model_id = selected
+        return selected
+
+    async def _resolve_model(self, client: httpx.AsyncClient) -> tuple[str, tuple[str, ...]]:
+        served = await self._served_models(client)
+        return self._select_model(served), served
+
+    @staticmethod
+    def _safe_health_error(exc: ModelError) -> dict[str, Any]:
+        result: dict[str, Any] = {"configured": True, "ready": False,
+            "detail": exc.message, "error_code": exc.code, "model_id": None,
+            "available_models": list(exc.available_models)}
+        return result
+
+    @staticmethod
+    def _error_text(raw: bytes) -> str:
+        try:
+            body = _strict_json(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+            return ""
+        error = body.get("error") if isinstance(body, dict) else None
+        if isinstance(error, dict):
+            return " ".join(str(error.get(key, "")) for key in ("code", "type", "message")).casefold()
+        return ""
+
+    @staticmethod
+    def _unsupported_request_format(raw: bytes, feature: str) -> bool:
+        text = ModelClient._error_text(raw)
+        names = {"tools", "tool_choice", "function", "functions"} if feature == "tools" else {"response_format", "json_object"}
+        unsupported = ("not supported", "unsupported", "unknown field", "unrecognized", "not allowed", "invalid parameter")
+        return any(name in text for name in names) and any(marker in text for marker in unsupported)
+
+    @staticmethod
+    def _unsupported_image(raw: bytes) -> bool:
+        text = ModelClient._error_text(raw)
+        image_terms = ("image_url", "image input", "image content", "vision", "multimodal")
+        unsupported = ("not supported", "unsupported", "does not support", "cannot process", "invalid modality")
+        return any(term in text for term in image_terms) and any(marker in text for marker in unsupported)
+
+    @staticmethod
+    def _generic_request_fields() -> dict[str, Any]:
+        return {
+            "tools": [{"type": "function", "function": {
+                "name": "browser_action",
+                "description": "Return exactly one supported browser action from the supplied screenshot and task.",
+                "parameters": _GENERIC_ACTION_SCHEMA,
+            }}],
+            "tool_choice": {"type": "function", "function": {"name": "browser_action"}},
+        }
+
+    async def _chat_completion(self, client: httpx.AsyncClient, payload: dict[str, Any], model_id: str) -> dict[str, Any]:
+        url = self.settings.base_url.rstrip("/") + "/chat/completions"
+        request_payload = {**payload, "model": model_id}
+        if self.settings.protocol == "generic":
+            request_payload.update(self._generic_request_fields())
+        attempts = [request_payload]
+        for request in attempts:
+            try:
+                async with client.stream("POST", url, headers=self._auth(), json=request) as response:
+                    raw = await self._read_bounded(response)
+                    if response.is_success:
+                        try:
+                            body = _strict_json(raw.decode("utf-8"))
+                        except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+                            raise ModelError("MODEL_OUTPUT_INVALID", "model response is not valid JSON") from exc
+                        if not isinstance(body, dict):
+                            raise ModelError("MODEL_OUTPUT_INVALID", "model response must be a JSON object")
+                        self._vision_supported_model_id = model_id
+                        self._vision_error_model_id = None
+                        return body
+                    if self._unsupported_image(raw):
+                        self._vision_error_model_id = model_id
+                        self._vision_supported_model_id = None
+                        raise ModelError("MODEL_VISION_UNSUPPORTED",
+                            "selected model rejected image input; choose a vision-capable served model")
+                    if (self.settings.protocol == "generic" and "tools" in request
+                            and response.status_code in {400, 422}
+                            and self._unsupported_request_format(raw, "tools")):
+                        fallback = {key: value for key, value in request.items() if key not in {"tools", "tool_choice"}}
+                        fallback["response_format"] = {"type": "json_object"}
+                        attempts.append(fallback)
+                        continue
+                    if (self.settings.protocol == "generic" and response.status_code in {400, 422}
+                            and "response_format" in request
+                            and self._unsupported_request_format(raw, "response_format")):
+                        fallback = {key: value for key, value in request.items() if key != "response_format"}
+                        attempts.append(fallback)
+                        continue
+                    raise ModelError("MODEL_UNAVAILABLE", f"model endpoint returned HTTP {response.status_code}")
+            except ModelError:
+                raise
+            except httpx.HTTPError as exc:
+                raise ModelError("MODEL_UNAVAILABLE", "model endpoint request failed") from exc
+        raise ModelError("MODEL_UNAVAILABLE", "model endpoint rejected supported response formats")
+
     async def health(self) -> dict[str, Any]:
         if not self._configured:
-            return {"configured": False, "ready": False, "detail": "model base_url must be an HTTP(S) /v1 endpoint and alias must be set"}
-        health_url = self.settings.base_url.rstrip("/")[:-3] + "/health"
+            return {"configured": False, "ready": False, "detail": "model base_url must be an HTTP(S) /v1 endpoint, protocol must be supported, and alias must be set", "error_code": "MODEL_NOT_CONFIGURED", "protocol": self.settings.protocol, "model_id": None, "available_models": [], "vision_status": "unknown"}
         try:
             async with self._client() as client:
-                async with client.stream("GET", health_url, headers=self._auth(), timeout=5.0) as response:
-                    body = await self._read_bounded(response)
-                    ready = response.is_success
-                    detail = "llama-server is ready" if ready else f"llama-server health returned HTTP {response.status_code}"
-                    if not ready and body:
-                        detail = f"llama-server health returned HTTP {response.status_code}"
-                    return {"configured": True, "ready": ready, "detail": detail}
+                model_id, served = await self._resolve_model(client)
+                common = {"configured": True, "model_id": model_id,
+                          "available_models": list(served), "protocol": self.settings.protocol}
+                if self._vision_error_model_id == model_id:
+                    return {**common, "ready": False,
+                            "detail": "selected model rejected image input; choose a vision-capable served model",
+                            "error_code": "MODEL_VISION_UNSUPPORTED", "vision_status": "unsupported"}
+                # A successful HTTP response only proves the endpoint accepted
+                # the image-bearing request, not that the model interpreted it.
+                vision = ("accepted" if self._vision_supported_model_id == model_id else "unknown")
+                return {**common, "ready": True, "detail": "OpenAI-compatible model is ready",
+                        "error_code": None, "vision_status": vision}
         except ModelError as exc:
-            return {"configured": True, "ready": False, "detail": exc.code}
-        except httpx.HTTPError:
-            return {"configured": True, "ready": False, "detail": "llama-server is unreachable"}
+            result = self._safe_health_error(exc)
+            result["protocol"] = self.settings.protocol
+            result["vision_status"] = "unknown"
+            if exc.code == "MODEL_VISION_UNSUPPORTED" and self._last_model_id:
+                result["model_id"] = self._last_model_id
+                result["vision_status"] = "unsupported"
+            return result
 
     async def next_action(self, goal: str, screenshot_png: bytes, history: list[dict[str, Any]] | None = None,
                          *, current_url: str | None = None) -> dict[str, Any]:
         if not self._configured:
-            raise ModelError("MODEL_NOT_CONFIGURED", "model base_url and alias are required")
-        if not self.settings.system_prompt.strip():
+            raise ModelError("MODEL_NOT_CONFIGURED", "model base_url, protocol, and alias are required")
+        if self.settings.protocol == "fara" and not self.settings.system_prompt.strip():
             raise ModelError("PROMPT_NOT_CONFIGURED", "the pinned Fara system prompt is required")
         if not isinstance(goal, str) or not goal.strip() or len(goal) > 20_000:
             raise ModelError("MODEL_INPUT_INVALID", "goal must be a non-empty string of at most 20000 characters")
@@ -590,6 +914,7 @@ class ModelClient:
         if history_size > _MAX_HISTORY_BYTES:
             raise ModelError("MODEL_INPUT_TOO_LARGE", "history exceeds 48 KiB")
         image_url = "data:image/png;base64," + base64.b64encode(screenshot_png).decode("ascii")
+        system_prompt = self.settings.system_prompt.strip() or _GENERIC_SYSTEM_PROMPT
         managed = self._conversation_task_id is not None
         candidate_conversation: list[dict[str, Any]] | None = None
         if managed:
@@ -610,52 +935,44 @@ class ModelClient:
             candidate_conversation.append(current)
             candidate_conversation = self._trim_conversation(candidate_conversation)
             messages: list[dict[str, Any]] = [
-                {"role": "system", "content": self.settings.system_prompt},
+                {"role": "system", "content": system_prompt},
                 *self._conversation_api_messages(candidate_conversation),
             ]
         else:
             # Backwards-compatible stateless mode for direct callers.
             messages = [
-                {"role": "system", "content": self.settings.system_prompt},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Goal:\n{goal}"},
             ]
-            messages.extend(_history_messages(bounded_history))
+            messages.extend(_history_messages(bounded_history, protocol=self.settings.protocol))
             messages.append({"role": "user", "content": [
                 {"type": "text", "text": f"Goal and current page context:\n{goal}"},
                 {"type": "image_url", "image_url": {"url": image_url}},
             ]})
         payload = {
-            "model": self.settings.alias,
             "messages": messages,
             "temperature": 0,
             "max_tokens": 2048,
             "stream": False,
         }
-        url = self.settings.base_url.rstrip("/") + "/chat/completions"
         try:
             async with self._client() as client:
-                async with client.stream("POST", url, headers=self._auth(), json=payload) as response:
-                    raw = await self._read_bounded(response)
-                    if not response.is_success:
-                        raise ModelError("MODEL_UNAVAILABLE", f"model endpoint returned HTTP {response.status_code}")
+                model_id, _served = await self._resolve_model(client)
+                body = await self._chat_completion(client, payload, model_id)
         except ModelError:
             raise
         except httpx.HTTPError as exc:
             raise ModelError("MODEL_UNAVAILABLE", "model endpoint request failed") from exc
-        try:
-            body = _strict_json(raw.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
-            raise ModelError("MODEL_OUTPUT_INVALID", "model response is not valid JSON") from exc
         if not isinstance(body, dict) or not isinstance(body.get("choices"), list) or len(body["choices"]) != 1:
             raise ModelError("MODEL_OUTPUT_INVALID", "model response must contain exactly one choice")
         choice = body["choices"][0]
         if not isinstance(choice, dict) or not isinstance(choice.get("message"), dict):
             raise ModelError("MODEL_OUTPUT_INVALID", "model response choice is malformed")
         message = choice["message"]
-        action = _parse_message(message)
+        action = _parse_message(message, self.settings.protocol)
         if managed:
             assert candidate_conversation is not None
-            raw_assistant = self._raw_assistant_content(message)
+            raw_assistant = self._raw_assistant_content(message, action, self.settings.protocol)
             if len(raw_assistant.encode("utf-8")) > _MAX_CONVERSATION_ASSISTANT_TEXT:
                 raise ModelError("MODEL_CONTEXT_LIMIT", "assistant turn exceeds the managed conversation text budget")
             candidate_conversation.append({"role": "assistant", "content": raw_assistant})

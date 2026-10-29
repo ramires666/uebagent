@@ -115,6 +115,9 @@ class FakeManager:
     def __init__(self, context):
         self.context = context
         self.launches = 0
+        self.launch_args = None
+        self.launch_kwargs = None
+        self.stop_calls = 0
 
     async def start(self):
         return self
@@ -123,13 +126,15 @@ class FakeManager:
     def chromium(self):
         return self
 
-    async def launch_persistent_context(self, *_args, **_kwargs):
+    async def launch_persistent_context(self, *args, **kwargs):
         self.launches += 1
+        self.launch_args = args
+        self.launch_kwargs = kwargs
         await asyncio.sleep(0.01)
         return self.context
 
     async def stop(self):
-        pass
+        self.stop_calls += 1
 
 
 @pytest.mark.asyncio
@@ -172,7 +177,7 @@ async def test_popup_is_closed_and_main_page_close_invalidates_control(tmp_path)
     page.emit("close")
     health = await runtime.health()
     assert health["ready"] is False
-    assert health["detail"] == "canonical browser page closed; restart required"
+    assert health["detail"] == "canonical browser page closed; recovery required"
     assert runtime.control_owner == "none"
     assert runtime._last_observation_id is None
     with pytest.raises(WorkerError) as unavailable:
@@ -359,3 +364,401 @@ async def test_headless_chromium_resolves_nested_link_and_label_hits(tmp_path):
         elif browser is not None:
             await browser.close()
         await playwright.stop()
+
+
+def _install_fake_playwright(monkeypatch, contexts):
+    managers = []
+
+    def make_manager():
+        manager = FakeManager(contexts[len(managers)])
+        managers.append(manager)
+        return manager
+
+    playwright_module = ModuleType("playwright.async_api")
+    playwright_module.async_playwright = make_manager
+    package_module = ModuleType("playwright")
+    package_module.async_api = playwright_module
+    monkeypatch.setitem(sys.modules, "playwright", package_module)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", playwright_module)
+    monkeypatch.setattr(worker_app, "_adapter_class", lambda: lambda page: FakeAdapter(page))
+    return managers
+
+
+def _expire_recovery_backoff(runtime):
+    runtime._recovery_retry_after = 0.0
+
+
+@pytest.mark.asyncio
+async def test_crashed_canonical_page_recovers_same_profile_and_keeps_ledger(tmp_path, monkeypatch):
+    first_page, second_page = FakePage(), FakePage()
+    first_context, second_context = FakeContext([first_page]), FakeContext([second_page])
+    managers = _install_fake_playwright(monkeypatch, [first_context, second_context])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    runtime.gate("agent")
+    epoch = runtime.control_epoch
+    runtime._db.execute(
+        "INSERT INTO capability_uses(grant_id,action_id,state,created_at) VALUES('grant','action','started','now')")
+
+    first_page.emit("crash")
+    assert runtime.control_owner == "none"
+    assert runtime.control_epoch > epoch
+    assert (await runtime.health())["recovery_needed"] is True
+    _expire_recovery_backoff(runtime)
+
+    recovered = await runtime.recover()
+    assert recovered["outcome"] == "recovered"
+    assert recovered["recovery_generation"] == 1
+    assert recovered["context_count"] == recovered["page_count"] == 1
+    assert runtime.control_owner == "none"
+    assert runtime.control_epoch > epoch
+    assert managers[0].launch_args[0] == managers[1].launch_args[0] == str(tmp_path / "profiles" / "default")
+    assert runtime._db.execute("SELECT COUNT(*) FROM capability_uses").fetchone()[0] == 1
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_recovery_defers_while_action_is_inflight_then_restores(tmp_path, monkeypatch):
+    first_page, second_page = FakePage(), FakePage()
+    managers = _install_fake_playwright(monkeypatch, [FakeContext([first_page]), FakeContext([second_page])])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    first_page.closed = True
+    first_page.emit("close")
+    runtime._action_in_progress = True
+    deferred = await runtime.recover()
+    assert deferred["outcome"] == "deferred"
+    assert deferred["recovery_reason"] == "operation_in_progress"
+    assert len(managers) == 1
+    runtime._action_in_progress = False
+    _expire_recovery_backoff(runtime)
+
+    recovered = await runtime.recover()
+    assert recovered["outcome"] == "recovered"
+    assert len(managers) == 2
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_recovery_fails_closed_for_resource_violation_or_unverified_egress(tmp_path, monkeypatch):
+    page = FakePage()
+    managers = _install_fake_playwright(monkeypatch, [FakeContext([page])])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    runtime._trip_resource_violation("test resource violation")
+    blocked = await runtime.recover()
+    assert blocked["outcome"] == "blocked"
+    assert blocked["recovery_reason"] == "resource_violation"
+    assert len(managers) == 1
+    await runtime.close()
+
+    page2 = FakePage()
+    managers2 = _install_fake_playwright(monkeypatch, [FakeContext([page2])])
+    runtime2 = BrowserRuntime(tmp_path / "egress", backend="chromium", test_mode=True,
+                              egress_ready=False, route_generation=0)
+    await runtime2.start()
+    page2.emit("close")
+    blocked_egress = await runtime2.recover()
+    assert blocked_egress["outcome"] == "blocked"
+    assert blocked_egress["recovery_reason"] == "egress_unavailable"
+    assert len(managers2) == 1
+    await runtime2.close()
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_old_context_teardown_blocks_second_profile_launch(tmp_path, monkeypatch):
+    class UnclosableContext(FakeContext):
+        async def close(self):
+            self.close_calls += 1
+            raise RuntimeError("close failed")
+
+    first_page = FakePage()
+    first_context = UnclosableContext([first_page])
+    managers = _install_fake_playwright(monkeypatch, [first_context, FakeContext([FakePage()])])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    first_page.emit("close")
+    _expire_recovery_backoff(runtime)
+
+    failed = await runtime.recover()
+    assert failed["outcome"] == "failed"
+    assert failed["recovery_state"] == "blocked"
+    assert failed["recovery_reason"] == "context_close_failed"
+    assert len(managers) == 1
+    assert first_context.close_calls == 1
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_watchdog_recovers_closed_page_without_health_request(tmp_path, monkeypatch):
+    first_page, second_page = FakePage(), FakePage()
+    managers = _install_fake_playwright(monkeypatch, [FakeContext([first_page]), FakeContext([second_page])])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    monkeypatch.setattr(worker_app, "RECOVERY_BACKOFF_SECONDS", (0.0, 0.0, 0.0))
+    monkeypatch.setattr(worker_app, "RECOVERY_WATCHDOG_INTERVAL_SECONDS", 0.01)
+    watchdog = asyncio.create_task(runtime.recovery_watchdog())
+    try:
+        first_page.emit("close")
+        for _ in range(100):
+            if runtime._recovery_generation == 1:
+                break
+            await asyncio.sleep(0.01)
+        assert runtime._recovery_generation == 1
+        assert len(managers) == 2
+        assert (await runtime.health())["ready"] is True
+    finally:
+        watchdog.cancel()
+        await asyncio.gather(watchdog, return_exceptions=True)
+        await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_watchdog_probes_disconnected_browser_when_close_event_is_missing(tmp_path, monkeypatch):
+    class DisconnectedPage(FakePage):
+        def __init__(self):
+            super().__init__()
+            self.disconnected = False
+
+        async def evaluate(self, _script):
+            return 1
+
+        def is_closed(self):
+            return self.disconnected
+
+    first_page, second_page = DisconnectedPage(), FakePage()
+    managers = _install_fake_playwright(monkeypatch, [FakeContext([first_page]), FakeContext([second_page])])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    monkeypatch.setattr(worker_app, "RECOVERY_BACKOFF_SECONDS", (0.0, 0.0, 0.0))
+    monkeypatch.setattr(worker_app, "RECOVERY_WATCHDOG_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(worker_app, "LIVENESS_PROBE_TIMEOUT_SECONDS", 0.05)
+    watchdog = asyncio.create_task(runtime.recovery_watchdog())
+    try:
+        first_page.disconnected = True
+        for _ in range(100):
+            if runtime._recovery_generation == 1:
+                break
+            await asyncio.sleep(0.01)
+        assert runtime._recovery_generation == 1
+        assert len(managers) == 2
+        assert runtime._recovery_reason == "healthy"
+        assert (await runtime.health())["ready"] is True
+    finally:
+        watchdog.cancel()
+        await asyncio.gather(watchdog, return_exceptions=True)
+        await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_watchdog_ignores_probe_timeout_and_transient_error(tmp_path, monkeypatch):
+    class TransientPage(FakePage):
+        async def evaluate(self, _script):
+            if self.probe_mode == "timeout":
+                await asyncio.sleep(0.05)
+            if self.probe_mode:
+                raise RuntimeError("transient probe failure")
+            return 1
+
+        def __init__(self):
+            super().__init__()
+            self.probe_mode = None
+
+    first_page = TransientPage()
+    managers = _install_fake_playwright(monkeypatch, [FakeContext([first_page])])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    runtime.gate("agent")
+    epoch = runtime.control_epoch
+    monkeypatch.setattr(worker_app, "RECOVERY_WATCHDOG_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(worker_app, "LIVENESS_PROBE_TIMEOUT_SECONDS", 0.005)
+    watchdog = asyncio.create_task(runtime.recovery_watchdog())
+    try:
+        for mode in ("transient", "timeout"):
+            first_page.probe_mode = mode
+            await asyncio.sleep(0.08)
+            assert runtime.control_epoch == epoch
+            assert runtime.control_owner == "agent"
+            assert len(managers) == 1
+            assert (await runtime.health())["ready"] is True
+    finally:
+        watchdog.cancel()
+        await asyncio.gather(watchdog, return_exceptions=True)
+        await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_recovery_cancellation_waits_for_teardown_then_propagates(tmp_path, monkeypatch):
+    close_started, close_release = asyncio.Event(), asyncio.Event()
+
+    class SlowCloseContext(FakeContext):
+        async def close(self):
+            self.close_calls += 1
+            close_started.set()
+            await close_release.wait()
+            for page in tuple(self.pages):
+                if not page.closed:
+                    page.closed = True
+                    page.emit("close")
+
+    first_page = FakePage()
+    managers = _install_fake_playwright(
+        monkeypatch, [SlowCloseContext([first_page]), FakeContext([FakePage()])])
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    first_page.closed = True
+    first_page.emit("close")
+    _expire_recovery_backoff(runtime)
+    recovery = asyncio.create_task(runtime.recover())
+    await close_started.wait()
+    recovery.cancel()
+    close_release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await recovery
+    assert first_page.closed
+    assert managers[0].stop_calls == 1
+    assert len(managers) == 1
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_recovery_cancellation_during_launch_stops_manager_before_return(tmp_path, monkeypatch):
+    launch_started = asyncio.Event()
+
+    class SlowLaunchManager(FakeManager):
+        async def launch_persistent_context(self, *args, **kwargs):
+            self.launch_args, self.launch_kwargs = args, kwargs
+            self.launches += 1
+            launch_started.set()
+            await asyncio.Event().wait()
+
+    first_context = FakeContext([FakePage()])
+    second_context = FakeContext([FakePage()])
+    managers = []
+
+    def make_manager():
+        manager = FakeManager(first_context) if not managers else SlowLaunchManager(second_context)
+        managers.append(manager)
+        return manager
+
+    playwright_module = ModuleType("playwright.async_api")
+    playwright_module.async_playwright = make_manager
+    package_module = ModuleType("playwright")
+    package_module.async_api = playwright_module
+    monkeypatch.setitem(sys.modules, "playwright", package_module)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", playwright_module)
+    monkeypatch.setattr(worker_app, "_adapter_class", lambda: lambda page: FakeAdapter(page))
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    first_context.pages[0].emit("close")
+    _expire_recovery_backoff(runtime)
+    recovery = asyncio.create_task(runtime.recover())
+    await launch_started.wait()
+    recovery.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await recovery
+    assert managers[1].stop_calls == 1
+    assert runtime._context is None
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_recovery_attempts_are_bounded_and_open_circuit(tmp_path, monkeypatch):
+    class FailingManager(FakeManager):
+        async def launch_persistent_context(self, *args, **kwargs):
+            self.launch_args, self.launch_kwargs = args, kwargs
+            self.launches += 1
+            raise RuntimeError("synthetic launch failure")
+
+    first_page = FakePage()
+    first_context = FakeContext([first_page])
+    managers = []
+
+    def make_manager():
+        manager = FakeManager(first_context) if not managers else FailingManager(FakeContext())
+        managers.append(manager)
+        return manager
+
+    playwright_module = ModuleType("playwright.async_api")
+    playwright_module.async_playwright = make_manager
+    package_module = ModuleType("playwright")
+    package_module.async_api = playwright_module
+    monkeypatch.setitem(sys.modules, "playwright", package_module)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", playwright_module)
+    monkeypatch.setattr(worker_app, "_adapter_class", lambda: lambda page: FakeAdapter(page))
+    monkeypatch.setattr(worker_app, "RECOVERY_BACKOFF_SECONDS", (0.0, 0.0, 0.0))
+    runtime = BrowserRuntime(tmp_path, backend="chromium", test_mode=True,
+                             egress_ready=True, route_generation=1)
+    await runtime.start()
+    first_page.closed = True
+    first_page.emit("close")
+    _expire_recovery_backoff(runtime)
+
+    for _ in range(worker_app.RECOVERY_MAX_ATTEMPTS):
+        result = await runtime.recover()
+        assert result["outcome"] == "failed"
+        runtime._recovery_retry_after = 0.0
+    assert result["recovery_state"] == "exhausted"
+    assert result["recovery_attempts"] == worker_app.RECOVERY_MAX_ATTEMPTS
+    attempt_count = len(managers)
+    blocked = await runtime.recover()
+    assert blocked["recovery_reason"] == "attempts_exhausted"
+    assert blocked["recovery_state"] == "exhausted"
+    assert len(managers) == attempt_count
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_camoufox_target_closed_still_stops_base_playwright_manager(tmp_path, monkeypatch):
+    from playwright._impl._errors import TargetClosedError
+
+    class FakeConnection:
+        def __init__(self):
+            self.stop_calls = 0
+
+        async def stop_async(self):
+            self.stop_calls += 1
+
+    class FakePlaywrightContextManager:
+        async def __aexit__(self, *_args):
+            await self._connection.stop_async()
+
+    class ClosedCamoufoxManager:
+        def __init__(self):
+            self._exit_was_called = False
+            self._connection = FakeConnection()
+
+        async def __aexit__(self, *_args):
+            raise TargetClosedError("synthetic already-closed target")
+
+    page = FakePage()
+    context = FakeContext([page])
+    runtime = BrowserRuntime(tmp_path, adapter=FakeAdapter(page), page=page, context=context,
+                             egress_ready=True, proxy_assignment_id="direct-development", route_generation=1)
+    manager = ClosedCamoufoxManager()
+    runtime._camoufox_cm = manager
+    runtime._main_page_closed = True
+    runtime._recovery_needed = True
+    camoufox_module = ModuleType("camoufox.async_api")
+    camoufox_module.PlaywrightContextManager = FakePlaywrightContextManager
+    package_module = ModuleType("camoufox")
+    package_module.async_api = camoufox_module
+    monkeypatch.setitem(sys.modules, "camoufox", package_module)
+    monkeypatch.setitem(sys.modules, "camoufox.async_api", camoufox_module)
+
+    closed = await runtime._close_browser_for_recovery()
+    assert closed is True, (runtime._recovery_teardown_reason, runtime._recovery_teardown_error_type,
+                            manager._connection.stop_calls)
+    assert manager._connection.stop_calls == 1
+    assert runtime._camoufox_cm is None
+    assert runtime._context is None and runtime._page is None
+    await runtime.close()

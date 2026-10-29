@@ -20,13 +20,15 @@ async def test_managed_turns_preserve_raw_assistant_content_goal_once_and_latest
     seen: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
         seen.append(json.loads(request.content))
         step = len(seen)
         call = {"name": "computer_use", "arguments": {"action": "left_click", "coordinate": [step, step]}}
         raw = f"private thought {step}\n<tool_call>{json.dumps(call)}</tool_call>"
         return httpx.Response(200, json=response(raw))
 
-    model = ModelClient(ModelSettings("http://local/v1", system_prompt="PINNED PROMPT"), httpx.MockTransport(handler))
+    model = ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="PINNED PROMPT", protocol="fara"), httpx.MockTransport(handler))
     model.begin_task("one")
     goal = "Fill the form\nTask allowed origins: [shop.example]\nUser data: {name: Ada}"
     await model.next_action(goal, PNG, current_url="https://shop.example/start")
@@ -58,10 +60,12 @@ async def test_managed_conversation_task_isolation_failure_feedback_and_cleanup(
     raw = f"reasoning retained\n<tool_call>{json.dumps(call)}</tool_call>"
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
         seen.append(json.loads(request.content))
         return httpx.Response(200, json=response(raw))
 
-    model = ModelClient(ModelSettings("http://local/v1", system_prompt="PINNED"), httpx.MockTransport(handler))
+    model = ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="PINNED", protocol="fara"), httpx.MockTransport(handler))
     model.begin_task("first")
     await model.next_action("first task goal", PNG, current_url="https://one.example")
     model.record_outcome("failed", "WORKER_PREFLIGHT_REJECTED")
@@ -87,9 +91,13 @@ async def test_managed_conversation_task_isolation_failure_feedback_and_cleanup(
 async def test_managed_assistant_turn_hard_limit_rejects_without_corrupting_tool_call() -> None:
     call = {"name": "computer_use", "arguments": {"action": "wait", "time": 1}}
     raw = "x" * (24 * 1024) + f"\n<tool_call>{json.dumps(call)}</tool_call>"
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
+        return httpx.Response(200, json=response(raw))
     model = ModelClient(
-        ModelSettings("http://local/v1", system_prompt="PINNED"),
-        httpx.MockTransport(lambda _: httpx.Response(200, json=response(raw))),
+        ModelSettings("http://local/v1", alias="fara-browser", system_prompt="PINNED", protocol="fara"),
+        httpx.MockTransport(handler),
     )
     model.begin_task("bounded")
     with pytest.raises(ModelError) as exc:
@@ -105,13 +113,15 @@ async def test_assistant_context_budget_drops_whole_old_turns_but_keeps_goal_and
     counter = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
         nonlocal counter
         counter += 1
         seen.append(json.loads(request.content))
         raw = f"thought-{counter}:" + ("x" * 19_000) + f"\n<tool_call>{json.dumps(call)}</tool_call>"
         return httpx.Response(200, json=response(raw))
 
-    model = ModelClient(ModelSettings("http://local/v1", system_prompt="PINNED"), httpx.MockTransport(handler))
+    model = ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="PINNED", protocol="fara"), httpx.MockTransport(handler))
     model.begin_task("large-turns")
     await model.next_action("THE ORIGINAL GOAL", PNG)
     model.record_outcome("applied")
@@ -128,10 +138,12 @@ async def test_managed_message_count_stays_bounded() -> None:
     call = {"name": "computer_use", "arguments": {"action": "wait", "time": 1}}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
         seen["messages"] = json.loads(request.content)["messages"]
         return httpx.Response(200, json=response(f"<tool_call>{json.dumps(call)}</tool_call>"))
 
-    model = ModelClient(ModelSettings("http://local/v1", system_prompt="PINNED"), httpx.MockTransport(handler))
+    model = ModelClient(ModelSettings("http://local/v1", alias="fara-browser", system_prompt="PINNED", protocol="fara"), httpx.MockTransport(handler))
     model.begin_task("many")
     for _ in range(30):
         await model.next_action("repeat", PNG)

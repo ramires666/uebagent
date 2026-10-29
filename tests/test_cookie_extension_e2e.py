@@ -133,21 +133,21 @@ def test_unpacked_extension_with_isolated_chromium(tmp_path):
             worker = context.service_workers[0] if context.service_workers else context.wait_for_event("serviceworker", timeout=15000)
             extension_page = context.new_page()
             extension_page.goto(worker.url.rsplit("/", 1)[0] + "/popup/popup.html")
-            assert extension_page.locator("#extension-version").inner_text() == "Extension 0.1.2"
+            assert extension_page.locator("#extension-version").inner_text() == "Extension 0.1.3"
             result = extension_page.evaluate("""async () => {
               const m = await import(chrome.runtime.getURL('service_worker.js'));
-              const {sites} = await m.jobOpenSites({}, 'http://localhost:8080');
+              const {sites} = await m.jobOpenSites({}, 'http://localhost:8090');
               const selectedSites = sites.filter(s => s.origin === 'https://app.example.test');
-              const cat = await m.jobCookieCatalog({sites: selectedSites}, 'http://localhost:8080');
+              const cat = await m.jobCookieCatalog({sites: selectedSites}, 'http://localhost:8090');
               const row = cat.cookies.find(c => c.name === 'selected');
               const parent = cat.cookies.find(c => c.name === 'parent');
               const sid = cat.cookies.find(c => c.name === 'SID');
               if (!row) return {failure: 'selected host cookie absent', names: cat.cookies.map(c => c.name)};
               await chrome.cookies.set({url:'https://app.example.test/',name:'selected',value:'synthetic-after',secure:true,httpOnly:true,sameSite:'strict'});
-              const out = await m.jobCookieExport({sites: selectedSites, selections:[row]}, 'http://localhost:8080');
+              const out = await m.jobCookieExport({sites: selectedSites, selections:[row]}, 'http://localhost:8090');
               await chrome.cookies.remove({url:'https://app.example.test/',name:'selected'});
               let deleted = false;
-              try { await m.jobCookieExport({sites:selectedSites,selections:[row]}, 'http://localhost:8080'); }
+              try { await m.jobCookieExport({sites:selectedSites,selections:[row]}, 'http://localhost:8090'); }
               catch (e) { deleted = e.code === 'COOKIE_SELECTION_STALE'; }
               return {parent: !!parent, parentPath: parent?.path, parentHttpOnly: parent?.http_only,
                 sid: !!sid, sidSecure: sid?.secure, sidHttpOnly: sid?.http_only,
@@ -166,8 +166,8 @@ def test_unpacked_extension_with_isolated_chromium(tmp_path):
             google_page.goto("https://gemini.google.com/", wait_until="domcontentloaded")
             missing = extension_page.evaluate("""async () => {
               const m = await import(chrome.runtime.getURL('service_worker.js'));
-              const {sites} = await m.jobOpenSites({}, 'http://localhost:8080');
-              try { await m.jobCookieCatalog({sites: sites.filter(s => s.origin === 'https://gemini.google.com')}, 'http://localhost:8080'); }
+              const {sites} = await m.jobOpenSites({}, 'http://localhost:8090');
+              try { await m.jobCookieCatalog({sites: sites.filter(s => s.origin === 'https://gemini.google.com')}, 'http://localhost:8090'); }
               catch (e) { return {code: e.code, origins: e.details?.origins}; }
             }""")
             assert missing == {"code": "CHROME_PERMISSION_REQUIRED", "origins": [

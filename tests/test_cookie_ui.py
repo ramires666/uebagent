@@ -119,7 +119,7 @@ def test_hanging_response_body_is_bounded_without_blocking_tabs():
         browser.close()
 
 
-def test_task_mode_is_explicit_and_defaults_to_supervised():
+def test_task_mode_is_explicit_and_defaults_to_autonomous():
     ui = Path(__file__).resolve().parents[1] / 'ui'
     posted = []
     with sync_playwright() as p:
@@ -140,13 +140,13 @@ def test_task_mode_is_explicit_and_defaults_to_supervised():
                 if file.is_file(): route.fulfill(body=file.read_bytes(), content_type={'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}.get(file.suffix[1:], 'text/plain'))
                 else: route.fulfill(status=404)
         page.route('http://test.local/**', respond); page.goto('http://test.local/'); page.locator('#tab-tasks').click()
-        for mode in ('supervised', 'autonomous'):
+        for mode in ('autonomous', 'supervised'):
             page.locator('#new-task-button').click()
-            assert page.locator('#task-execution-mode').input_value() == 'supervised'
+            assert page.locator('#task-execution-mode').input_value() == 'autonomous'
             page.locator('#task-goal').fill('fixture')
             page.locator('#task-origins').fill('https://demoqa.com')
             page.locator('#task-execution-mode').select_option(mode)
             page.locator('#task-form button[type=submit]').click()
             expect(page.locator('#task-create-card')).to_be_hidden()
-        assert [x['execution_mode'] for x in posted] == ['supervised', 'autonomous']
+        assert [x['execution_mode'] for x in posted] == ['autonomous', 'supervised']
         browser.close()

@@ -107,7 +107,7 @@ class TaskSpec(BaseModel):
     secret_refs: list[str] = Field(default_factory=list)
     success_conditions: list[dict[str, Any]] = Field(default_factory=list)
     policy_grant_id: str | None = None
-    execution_mode: Literal['supervised', 'autonomous'] = 'supervised'
+    execution_mode: Literal['supervised', 'autonomous'] = 'autonomous'
     workflow: Literal['agent', 'gemini_prompt_submit'] = 'agent'
     site_capabilities: list[Literal['gemini_prompt_submit']] = Field(default_factory=list, max_length=1)
     limits: TaskLimits = Field(default_factory=TaskLimits)

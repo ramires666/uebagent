@@ -215,9 +215,11 @@ async def test_feedback_reaches_fresh_managed_conversation():
 
     captured = []
     def respond(request):
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "model"}]})
         captured.append(json.loads(request.content))
         return httpx.Response(200, json={"choices": [{"message": {"content": '<tool_call>{"name":"computer_use","arguments":{"action":"terminate","answer":"done"}}</tool_call>'}}]})
-    model = ModelClient(ModelSettings("http://model/v1", system_prompt="prompt"), httpx.MockTransport(respond))
+    model = ModelClient(ModelSettings("http://model/v1", alias="model", system_prompt="prompt", protocol="fara"), httpx.MockTransport(respond))
     model.begin_task("restarted")
     model.record_verification_failure([{"kind": "field_equals", "selector": "#field", "value": "42"}])
     await model.next_action("Original goal", b"\x89PNG\r\n\x1a\nfixture", current_url="https://example.org/")

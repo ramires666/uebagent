@@ -10,6 +10,7 @@ def test_task_spec_is_visible_and_repeat_requires_explicit_submit():
     ui = Path(__file__).resolve().parents[1] / 'ui'
     original = {
         'task_id': 'old-task', 'status': 'failed', 'version': 4,
+        'error': {'code': 'NEW_SAFE_CODE', 'message': 'Refresh cannot continue <img src=x onerror=alert(1)> token=secret'},
         'spec': {
             'profile_id': 'research',
             'goal': 'Сделай точно для Алексей Ильин\n«Кавычки и ё»',
@@ -25,6 +26,11 @@ def test_task_spec_is_visible_and_repeat_requires_explicit_submit():
             'limits': {'timeout_s': 321, 'max_steps': 17},
             'idempotency_key': 'old-idempotency-key',
         },
+    }
+    refresh_failure = {
+        'task_id': 'refresh-task', 'status': 'waiting_human', 'version': 1,
+        'error': {'code': 'CAPABILITY_UNAVAILABLE', 'message': 'Gemini page is not in a safe state to refresh'},
+        'spec': {'profile_id': 'default', 'goal': 'Refresh the session', 'execution_mode': 'autonomous'},
     }
     posted = []
     attempts = []
@@ -47,7 +53,7 @@ def test_task_spec_is_visible_and_repeat_requires_explicit_submit():
                         route.fulfill(status=503, json={'error': {'message': 'temporary'}})
                         return
                     posted.append(body); data = {'task_id': 'new-task'}
-                elif path == '/api/v1/tasks': data = {'tasks': [original]}
+                elif path == '/api/v1/tasks': data = {'tasks': [original, refresh_failure]}
                 elif path == '/api/v1/desktop/info': data = {}
                 else: data = {}
                 route.fulfill(json=data)
@@ -61,6 +67,16 @@ def test_task_spec_is_visible_and_repeat_requires_explicit_submit():
         page.goto('http://test.local/')
         page.locator('#tab-tasks').click()
         card = page.locator('.task-row').filter(has_text='old-task')
+        expect(card.locator('.task-stop-reason')).to_be_visible()
+        expect(card.locator('.task-stop-reason')).to_contain_text('Причина остановки')
+        expect(card.locator('.task-stop-reason')).to_contain_text('Refresh cannot continue')
+        expect(card.locator('.task-stop-reason')).to_contain_text('NEW_SAFE_CODE')
+        assert card.locator('.task-stop-reason img').count() == 0
+        expect(card.locator('.task-stop-reason')).not_to_contain_text('token=secret')
+        refresh_card = page.locator('.task-row').filter(has_text='refresh-task')
+        expect(refresh_card.locator('.task-stop-reason')).to_be_visible()
+        expect(refresh_card.locator('.task-stop-reason')).to_contain_text('Проверка безопасности страницы Gemini')
+        expect(refresh_card.locator('.task-stop-reason')).to_contain_text('Gemini page is not in a safe state to refresh')
         expect(card).to_contain_text(original['spec']['goal'])
         for value in ['timeout_s', '321', 'max_steps', '17', 'policy_grant_id', 'grant-demo', 'vault://demo/customer-token', 'first_name', 'Алексей', 'Дословный ввод', 'Да']:
             expect(card.locator('.task-spec')).to_contain_text(value)
@@ -190,6 +206,57 @@ def test_expired_task_only_restarts_after_explicit_repeat_submission():
         assert posted[0]['verbatim_text'] == expired['spec']['verbatim_text']
         assert posted[0]['limits'] == expired['spec']['limits']
         assert posted[0]['idempotency_key'] != expired['spec']['idempotency_key']
+        browser.close()
+
+
+def test_compact_browser_operator_reuses_frame_and_controls_current_task():
+    ui = Path(__file__).resolve().parents[1] / 'ui'
+    task = {'task_id': 'live-task', 'version': 3, 'status': 'running', 'phase': 'checking_dependencies', 'step_count': 2, 'spec': {'goal': 'Inspect the current page safely', 'execution_mode': 'autonomous'}}
+    calls = []
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except Exception as exc:
+            pytest.skip(f'Playwright Chromium unavailable: {exc}')
+        page = browser.new_page(viewport={'width': 1440, 'height': 900})
+
+        def respond(route):
+            req = route.request
+            path = req.url.split('test.local', 1)[-1].split('?', 1)[0]
+            calls.append((req.method, path, json.loads(req.post_data) if req.post_data else None))
+            if path.startswith('/api/v1/'):
+                if path == '/api/v1/operator/session': data = {'authenticated': True, 'local_ui': True, 'csrf_token': 'fixture'}
+                elif path == '/api/v1/status': data = {'profiles': [{'profile_id': 'default', 'label': 'Default'}]}
+                elif path == '/api/v1/tasks': data = {'tasks': [task]}
+                elif path == '/api/v1/tasks/live-task': data = {'task': task}
+                elif path == '/api/v1/desktop/info': data = {'available': True, 'browser_started': True, 'url': '/desktop'}
+                elif path == '/api/v1/desktop/state': data = {'available': True, 'control_owner': 'agent'}
+                elif path == '/api/v1/tasks/live-task/pause': data = {'status': 'pause_requested'}
+                else: data = {}
+                route.fulfill(json=data); return
+            if path == '/desktop': route.fulfill(body=(ui / 'desktop.html').read_bytes(), content_type='text/html; charset=utf-8'); return
+            file = ui / ('index.html' if path == '/' else path.lstrip('/'))
+            if file.is_file(): route.fulfill(body=file.read_bytes(), content_type={'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}.get(file.suffix[1:], 'text/plain'))
+            else: route.fulfill(status=404)
+
+        page.route('http://test.local/**', respond)
+        page.goto('http://test.local/')
+        page.locator('#toolbar-open-browser').click()
+        frame = page.locator('#desktop-frame-wrap iframe')
+        expect(frame).to_have_count(1)
+        expect(page.locator('#desktop-task-status')).to_contain_text('Выполняется')
+        expect(page.locator('#desktop-task-goal')).to_have_text(task['spec']['goal'])
+        expect(page.locator('#desktop-task-phase')).to_contain_text('Шагов: 2')
+        expect(page.locator('#desktop-task-phase')).not_to_contain_text('checking_dependencies')
+        page.evaluate("window.originalBrowserFrame = document.querySelector('#desktop-frame-wrap iframe')")
+        page.locator('#toolbar-open-browser').click()
+        expect(page.locator('#desktop-frame-wrap iframe')).to_have_count(1)
+        assert page.evaluate("window.originalBrowserFrame === document.querySelector('#desktop-frame-wrap iframe')")
+        page.locator('#desktop-task-controls').get_by_role('button', name='Пауза').click()
+        expect(page.locator('#toast')).to_contain_text('отправлена')
+        pause = [call for call in calls if call[0] == 'POST' and call[1] == '/api/v1/tasks/live-task/pause']
+        assert len(pause) == 1 and pause[0][2] == {'expected_version': 3}
+        assert not [call for call in calls if call[0] == 'POST' and call[1] == '/api/v1/tasks']
         browser.close()
 
 
@@ -468,7 +535,7 @@ def test_repeating_generic_task_can_switch_workflow_without_losing_original_opti
 ])
 @pytest.mark.parametrize(('error_code', 'error_text'), [
     ('AUTH_REQUIRED', 'Нужно войти в Gemini в окне браузера'),
-    ('AUTH_STATE_UNKNOWN', 'Вход в Gemini не подтверждён'),
+    ('AUTH_STATE_UNKNOWN', '\u0412\u0445\u043e\u0434 \u0432 Gemini \u043d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c'),
 ])
 def test_gemini_auth_status_is_independent_of_worker_health_and_auth_errors_are_actionable(auth_status, pill_text, detail_text, error_code, error_text):
     ui = Path(__file__).resolve().parents[1] / 'ui'
@@ -519,11 +586,11 @@ def test_gemini_auth_status_is_independent_of_worker_health_and_auth_errors_are_
 
 
 @pytest.mark.parametrize(('error_code', 'error_text'), [
-    ('CHROME_PERMISSION_REQUIRED', 'Разрешите доступ к cookies сайта через значок расширения Chrome'),
-    ('COOKIE_SOURCE_UNAVAILABLE', 'Подключите расширение Chrome'),
-    ('COOKIE_SOURCE_AMBIGUOUS', 'Не удалось определить обычный профиль cookies Chrome'),
-    ('COOKIE_SYNC_FAILED', 'Cookies не перенесены; задача не запущена'),
-    ('COOKIE_SYNC_UNSUPPORTED', 'Часть cookies этого сайта пока не поддерживается'),
+    ('CHROME_PERMISSION_REQUIRED', '\u041f\u0435\u0440\u0435\u0434 \u043f\u0435\u0440\u0435\u043d\u043e\u0441\u043e\u043c cookies \u0434\u0430\u0439\u0442\u0435 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435 Chrome'),
+    ('COOKIE_SOURCE_UNAVAILABLE', '\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a cookies Chrome \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d'),
+    ('COOKIE_SOURCE_AMBIGUOUS', '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0434\u043d\u043e\u0437\u043d\u0430\u0447\u043d\u043e \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u044c \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a cookies Chrome'),
+    ('COOKIE_SYNC_FAILED', 'Cookies \u043d\u0435 \u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0435\u043d\u044b; \u0437\u0430\u0434\u0430\u0447\u0430 \u043d\u0435 \u0437\u0430\u043f\u0443\u0449\u0435\u043d\u0430'),
+    ('COOKIE_SYNC_UNSUPPORTED', '\u0427\u0430\u0441\u0442\u044c cookies \u044d\u0442\u043e\u0433\u043e \u0441\u0430\u0439\u0442\u0430 \u043f\u043e\u043a\u0430 \u043d\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f'),
 ])
 def test_cookie_sync_task_errors_explain_how_to_resolve(error_code, error_text):
     ui = Path(__file__).resolve().parents[1] / 'ui'
@@ -554,6 +621,55 @@ def test_cookie_sync_task_errors_explain_how_to_resolve(error_code, error_text):
         page.locator('#tab-tasks').click()
         card = page.locator('.task-row').filter(has_text='cookie-sync-task')
         expect(card).to_contain_text(error_text)
-        expect(card).not_to_contain_text(error_code)
+        expect(card).to_contain_text(error_code)
         expect(card.get_by_role('button', name='Открыть браузер для входа')).to_have_count(0)
+        browser.close()
+
+@pytest.mark.parametrize(('model', 'expected'), [
+    ({'configured': True, 'ready': False, 'protocol': 'generic', 'model_id': 'vision-model-7b', 'error_code': 'MODEL_VISION_UNSUPPORTED'},
+     ['vision-model-7b', 'не поддерживает анализ изображений']),
+    ({'configured': True, 'ready': False, 'protocol': 'generic', 'model_id': None, 'available_models': ['chat-a', 'vision-b'], 'error_code': 'MODEL_SELECTION_REQUIRED'},
+     ['chat-a, vision-b', 'Требуется выбрать одну модель']),
+    ({'configured': False, 'ready': False, 'protocol': 'generic', 'model_id': None, 'error_code': 'MODEL_DISCOVERY_FAILED'},
+     ['/v1/models', 'Проверьте доступность сервера модели']),
+    ({'configured': True, 'ready': False, 'protocol': 'generic', 'model_id': 'served-model', 'error_code': 'MODEL_UNAVAILABLE'},
+     ['served-model', 'не готов принимать запросы']),
+    ({'configured': True, 'ready': False, 'protocol': 'generic', 'model_id': None, 'error_code': 'MODEL_NOT_SERVED'},
+     ['отсутствует в списке моделей']),
+    ({'configured': False, 'ready': False, 'protocol': 'generic', 'model_id': None, 'error_code': 'MODEL_NOT_CONFIGURED'},
+     ['Не задан endpoint или модель']),
+    ({'configured': True, 'ready': True, 'protocol': 'generic', 'model_id': 'served-model', 'vision_status': 'accepted'},
+     ['Сервер принял запрос с изображением']),
+])
+def test_model_status_shows_served_id_and_actionable_generic_errors(model, expected):
+    ui = Path(__file__).resolve().parents[1] / 'ui'
+    status = {'model': model, 'worker': {'configured': True, 'ready': True}, 'profiles': []}
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except Exception as exc:
+            pytest.skip(f'Playwright Chromium unavailable: {exc}')
+        page = browser.new_page(viewport={'width': 1440, 'height': 900})
+
+        def respond(route):
+            req = route.request
+            path = req.url.split('test.local', 1)[-1].split('?', 1)[0]
+            if path == '/api/v1/operator/session': data = {'authenticated': True, 'local_ui': True, 'csrf_token': 'fixture'}
+            elif path == '/api/v1/status': data = status
+            else: data = {}
+            if path.startswith('/api/v1/'):
+                route.fulfill(json=data)
+                return
+            file = ui / ('index.html' if path == '/' else path.lstrip('/'))
+            if file.is_file():
+                route.fulfill(body=file.read_bytes(), content_type={'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}.get(file.suffix[1:], 'text/plain'))
+            else: route.fulfill(status=404)
+
+        page.route('http://test.local/**', respond)
+        page.goto('http://test.local/')
+        detail = page.locator('#model-detail')
+        for text in expected:
+            expect(detail).to_contain_text(text)
+        expect(page.locator('#model-protocol')).to_contain_text('OpenAI API')
+        expect(page.locator('#model-config')).to_contain_text(model.get('model_id') or ('Настроена' if model.get('configured') else 'Не настроена'))
         browser.close()

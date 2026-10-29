@@ -46,6 +46,13 @@ PAGE_CLOSE_TIMEOUT_SECONDS = 2.0
 CAPTURE_TIMEOUT_SECONDS = 10.0
 CONTEXT_SHUTDOWN_TIMEOUT_SECONDS = 3.0
 MAX_PENDING_PAGE_CLOSES = 8
+RECOVERY_WATCHDOG_INTERVAL_SECONDS = 1.0
+LIVENESS_PROBE_TIMEOUT_SECONDS = 0.5
+RECOVERY_START_TIMEOUT_SECONDS = 30.0
+RECOVERY_PROCESS_EXIT_TIMEOUT_SECONDS = 3.0
+RECOVERY_WINDOW_SECONDS = 300.0
+RECOVERY_MAX_ATTEMPTS = 3
+RECOVERY_BACKOFF_SECONDS = (2.0, 10.0, 30.0)
 OBSERVATION_PRIORITY_WAIT_SECONDS = 1.0
 GEMINI_AUTH_API_ORIGINS = frozenset({
     "https://geminiweb-pa.clients6.google.com",
@@ -398,6 +405,10 @@ class CookieImportBody(BaseModel):
     cookies: list[dict[str, Any]] = Field(min_length=1, max_length=500)
 
 
+class RecoverBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 @dataclass(frozen=True)
 class Receipt:
     outcome: str
@@ -424,6 +435,7 @@ class BrowserRuntime:
         self.egress_ready = bool(egress_ready)
         self.test_mode = test_mode
         self.worker_instance_id = f"worker-{uuid.uuid4()}"
+        self.browser_instance_id = f"browser-instance-{uuid.uuid4()}"
         self.session_id = str(uuid.uuid4())
         self.browser_id = "browser-001"
         self.proxy_assignment_id = proxy_assignment_id
@@ -453,11 +465,27 @@ class BrowserRuntime:
         self._observation_pending = False
         self._page_event_handler: Any = None
         self._context_page_handler: Any = None
+        self._context_close_handler: Any = None
+        self._page_crash_handler: Any = None
+        self._browser: Any = None
+        self._browser_disconnect_handler: Any = None
+        self._browser_process_pid: int | None = None
+        self._browser_process_tree_pids: set[int] = set()
         self._extra_page_close_tasks: dict[int, asyncio.Task[Any]] = {}
         self._quarantine_task: asyncio.Task[Any] | None = None
+        self._recovery_cleanup_task: asyncio.Task[Any] | None = None
         self._closed_extra_pages = 0
         self._main_page_closed = False
+        self._main_page_failure_reason = "canonical_page_closed"
         self._resource_violation = False
+        self._recovery_needed = False
+        self._recovery_state: Literal["idle", "recovering", "backoff", "exhausted", "blocked"] = "idle"
+        self._recovery_reason = "healthy"
+        self._recovery_teardown_reason = "teardown_unconfirmed"
+        self._recovery_teardown_error_type: str | None = None
+        self._recovery_generation = 0
+        self._recovery_attempt_times: list[float] = []
+        self._recovery_retry_after = 0.0
         self._camoufox_cm: Any = None
         self._playwright_manager: Any = None
         self._db_path = self.data_dir / "worker.sqlite3"
@@ -521,57 +549,78 @@ class BrowserRuntime:
 
     async def start(self) -> None:
         async with self._start_lock:
-            if self._started:
-                return
-            if self._main_page_closed or self._resource_violation:
-                raise RuntimeError("canonical browser page closed; worker restart requires a new runtime")
-            self.data_dir.mkdir(parents=True, exist_ok=True)
-            profile = self.data_dir / "profiles" / "default"
-            profile.mkdir(parents=True, exist_ok=True)
-            try:
-                if self.backend == "camoufox":
-                    from camoufox.async_api import AsyncCamoufox
+            await self._start_locked()
 
-                    from worker.fingerprint import profile_launch_options
+    async def _start_locked(self, *, recovery: bool = False) -> None:
+        if self._started:
+            return
+        if self._resource_violation or (self._main_page_closed and not recovery):
+            raise RuntimeError("browser recovery is required")
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        profile = self.data_dir / "profiles" / "default"
+        profile.mkdir(parents=True, exist_ok=True)
+        try:
+            if self.backend == "camoufox":
+                from camoufox.async_api import AsyncCamoufox
 
-                    options = await asyncio.to_thread(
-                        profile_launch_options, profile, headless=self.headless,
-                        viewport=VIEWPORT, env=self._clean_browser_env(),
-                    )
-                    self._camoufox_cm = AsyncCamoufox(persistent_context=True, from_options=options)
-                    context = await self._camoufox_cm.__aenter__()
-                else:
-                    from playwright.async_api import async_playwright
+                from worker.fingerprint import profile_launch_options
 
-                    self._playwright_manager = await async_playwright().start()
-                    context = await self._playwright_manager.chromium.launch_persistent_context(
-                        str(profile), headless=self.headless, viewport=VIEWPORT,
-                        env=self._clean_browser_env(),
-                    )
-                pages = list(context.pages)
-                page = pages[0] if pages else await context.new_page()
-                self._context, self._page = context, page
-                self._main_page_closed = False
-                self._install_page_guards()
-                for extra in pages[1:]:
-                    self._schedule_extra_page_close(extra)
-                # Await restored-page cleanup before considering startup complete.
-                if self._extra_page_close_tasks:
-                    await asyncio.gather(*tuple(self._extra_page_close_tasks.values()), return_exceptions=True)
-                if self._resource_violation:
-                    raise RuntimeError("browser startup exceeded page cleanup limits")
-                page.set_default_timeout(5000)
-                self._adapter = _adapter_class()(page)
-                if hasattr(context, "route"):
-                    await context.route("**/*", self._route_guard)
+                options = await asyncio.to_thread(
+                    profile_launch_options, profile, headless=self.headless,
+                    viewport=VIEWPORT, env=self._clean_browser_env(),
+                )
+                self._camoufox_cm = AsyncCamoufox(persistent_context=True, from_options=options)
+                context = await self._camoufox_cm.__aenter__()
+            else:
+                from playwright.async_api import async_playwright
+
+                self._playwright_manager = await async_playwright().start()
+                context = await self._playwright_manager.chromium.launch_persistent_context(
+                    str(profile), headless=self.headless, viewport=VIEWPORT,
+                    env=self._clean_browser_env(),
+                )
+            pages = list(context.pages)
+            page = pages[0] if pages else await context.new_page()
+            self._context, self._page = context, page
+            self._main_page_closed = False
+            self._main_page_failure_reason = "canonical_page_closed"
+            self._install_page_guards()
+            for extra in pages[1:]:
+                self._schedule_extra_page_close(extra)
+            # Await restored-page cleanup before considering startup complete.
+            if self._extra_page_close_tasks:
+                await asyncio.gather(*tuple(self._extra_page_close_tasks.values()), return_exceptions=True)
+            if self._resource_violation:
+                raise RuntimeError("browser startup exceeded page cleanup limits")
+            if self._resource_status()["context_count"] != 1 or self._resource_status()["page_count"] != 1:
+                raise RuntimeError("browser startup did not produce exactly one context and page")
+            page.set_default_timeout(5000)
+            self._adapter = _adapter_class()(page)
+            if hasattr(context, "route"):
+                await context.route("**/*", self._route_guard)
+            if self.backend == "camoufox":
+                self._browser_process_pid = self._find_camoufox_profile_pid(profile)
+                self._browser_process_tree_pids = self._process_tree(self._browser_process_pid) if self._browser_process_pid else set()
+            if self._db is None:
                 self._open_ledger()
-                self._started = True
-                self._start_detail = None
-            except Exception as exc:
-                self._started = False
-                self._start_detail = f"browser startup failed ({type(exc).__name__})"
+            self._started = True
+            self._start_detail = None
+        except BaseException as exc:
+            self._started = False
+            self._start_detail = f"browser startup failed ({type(exc).__name__})"
+            if recovery:
+                self._recovery_needed = True
+                self._main_page_closed = True
+                self._recovery_reason = "launch_failed"
+            if recovery:
+                # Recovery callers must confirm teardown before another profile launch.
+                if not await self._close_browser_for_recovery_cancellation_safe():
+                    self._recovery_state = "blocked"
+                    self._recovery_reason = "teardown_unconfirmed"
+                    self._recovery_needed = True
+            else:
                 await self._close_browser()
-                raise
+            raise
 
     @staticmethod
     def _listen(obj: Any, event: str, callback: Any) -> bool:
@@ -586,20 +635,83 @@ class BrowserRuntime:
         if context is None or page is None:
             return
         self._context_page_handler = self._on_new_page
+        self._context_close_handler = self._on_context_closed
         self._page_event_handler = self._on_main_page_closed
+        self._page_crash_handler = self._on_main_page_crashed
         self._listen(context, "page", self._context_page_handler)
+        self._listen(context, "close", self._context_close_handler)
         self._listen(page, "close", self._page_event_handler)
+        self._listen(page, "crash", self._page_crash_handler)
+        browser = getattr(context, "browser", None)
+        if browser is not None:
+            self._browser = browser
+            self._browser_disconnect_handler = self._on_browser_disconnected
+            self._listen(browser, "disconnected", self._browser_disconnect_handler)
 
-    def _on_main_page_closed(self, *_: Any) -> None:
+    def _mark_main_page_unavailable(self, reason: str) -> None:
         if self._main_page_closed:
             return
         self._main_page_closed = True
+        self._main_page_failure_reason = reason
+        self._recovery_needed = True
+        self._recovery_reason = reason
+        if not self._resource_violation:
+            self._recovery_state = "backoff"
+            delay_index = min(len(self._recovery_attempt_times), len(RECOVERY_BACKOFF_SECONDS) - 1)
+            self._recovery_retry_after = time.monotonic() + RECOVERY_BACKOFF_SECONDS[delay_index]
         self._started = False
         self.control_epoch += 1
         self.control_owner = "none"
         self._lease_deadline = 0
         self._last_observation_id = None
-        self._start_detail = "canonical browser page closed; restart required"
+        self._start_detail = ("canonical browser page crashed; recovery required" if reason == "browser_disconnected"
+                              else "canonical browser page closed; recovery required")
+
+    def _on_main_page_closed(self, *_: Any) -> None:
+        self._mark_main_page_unavailable("canonical_page_closed")
+
+    def _on_main_page_crashed(self, *_: Any) -> None:
+        self._mark_main_page_unavailable("browser_disconnected")
+
+    def _on_context_closed(self, *_: Any) -> None:
+        self._mark_main_page_unavailable("browser_disconnected")
+
+    def _on_browser_disconnected(self, *_: Any) -> None:
+        self._mark_main_page_unavailable("browser_disconnected")
+
+    def _page_is_unavailable(self) -> bool:
+        if self._main_page_closed:
+            return True
+        page = self._page
+        if page is None:
+            return False
+        is_closed = getattr(page, "is_closed", None)
+        try:
+            if callable(is_closed) and is_closed():
+                return True
+            if getattr(page, "closed", False) is True:
+                return True
+        except Exception:
+            return True
+        context = self._context
+        if context is not None:
+            try:
+                pages = list(context.pages)
+                if page not in pages:
+                    return True
+            except Exception:
+                return True
+        try:
+            browser = self._browser or (getattr(context, "browser", None) if context is not None else None)
+        except Exception:
+            return True
+        connected = getattr(browser, "is_connected", None)
+        try:
+            if callable(connected) and not connected():
+                return True
+        except Exception:
+            return True
+        return False
 
     def _on_new_page(self, page: Any) -> None:
         if page is self._page:
@@ -634,6 +746,9 @@ class BrowserRuntime:
         if self._resource_violation:
             return
         self._resource_violation = True
+        self._recovery_needed = False
+        self._recovery_state = "blocked"
+        self._recovery_reason = "resource_violation"
         self._started = False
         self.control_epoch += 1
         self.control_owner = "none"
@@ -680,6 +795,72 @@ class BrowserRuntime:
         allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR"}
         return {key: value for key, value in os.environ.items() if key.upper() in allowed}
 
+    @staticmethod
+    def _find_camoufox_profile_pid(profile: Path) -> int | None:
+        proc = Path("/proc")
+        if not proc.is_dir():
+            return None
+        profile_bytes = str(profile).encode("utf-8")
+        for entry in proc.iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                if (entry / "comm").read_text(encoding="utf-8").strip() != "camoufox-bin":
+                    continue
+                argv = (entry / "cmdline").read_bytes().split(b"\0")
+                if b"-contentproc" in argv or b"-profile" not in argv:
+                    continue
+                profile_index = argv.index(b"-profile") + 1
+                if profile_index < len(argv) and argv[profile_index] == profile_bytes:
+                    return int(entry.name)
+            except (FileNotFoundError, PermissionError, ValueError):
+                continue
+        return None
+
+    @staticmethod
+    def _process_tree(root_pid: int) -> set[int]:
+        proc = Path("/proc")
+        if not proc.is_dir():
+            return set()
+        parent_by_pid: dict[int, int] = {}
+        for entry in proc.iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                stat = (entry / "stat").read_text(encoding="utf-8")
+                rest = stat[stat.rfind(")") + 2:].split()
+                parent_by_pid[int(entry.name)] = int(rest[1])
+            except (FileNotFoundError, PermissionError, ValueError):
+                continue
+        tree = {root_pid}
+        while True:
+            expanded = tree | {pid for pid, parent in parent_by_pid.items() if parent in tree}
+            if expanded == tree:
+                return tree
+            tree = expanded
+
+    @staticmethod
+    def _process_is_live(pid: int) -> bool:
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+            return stat[stat.rfind(")") + 2:].split()[0] != "Z"
+        except (FileNotFoundError, PermissionError, ValueError):
+            return False
+
+    async def _wait_for_browser_process_tree_exit(self, pids: set[int]) -> bool:
+        if not pids:
+            return True
+        deadline = time.monotonic() + RECOVERY_PROCESS_EXIT_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if not any(self._process_is_live(pid) for pid in pids):
+                return True
+            await asyncio.sleep(0.05)
+        return not any(self._process_is_live(pid) for pid in pids)
+
+    def _refresh_browser_process_tree(self) -> None:
+        if self._browser_process_pid is not None and self._process_is_live(self._browser_process_pid):
+            self._browser_process_tree_pids.update(self._process_tree(self._browser_process_pid))
+
     async def _close_browser(self) -> None:
         quarantine = self._quarantine_task
         if quarantine is not None and quarantine is not asyncio.current_task():
@@ -691,9 +872,17 @@ class BrowserRuntime:
         context, page = self._context, self._page
         if context is not None and self._context_page_handler is not None:
             self._remove_listener(context, "page", self._context_page_handler)
+        if context is not None and self._context_close_handler is not None:
+            self._remove_listener(context, "close", self._context_close_handler)
         if page is not None and self._page_event_handler is not None:
             self._remove_listener(page, "close", self._page_event_handler)
+        if page is not None and self._page_crash_handler is not None:
+            self._remove_listener(page, "crash", self._page_crash_handler)
+        if self._browser is not None and self._browser_disconnect_handler is not None:
+            self._remove_listener(self._browser, "disconnected", self._browser_disconnect_handler)
         self._context_page_handler = self._page_event_handler = None
+        self._context_close_handler = self._page_crash_handler = None
+        self._browser_disconnect_handler = None
         if self._extra_page_close_tasks:
             pending = tuple(self._extra_page_close_tasks.values())
             _, pending = await asyncio.wait(pending, timeout=PAGE_CLOSE_TIMEOUT_SECONDS + 0.1)
@@ -722,6 +911,127 @@ class BrowserRuntime:
                 await asyncio.wait_for(manager.stop(), timeout=CONTEXT_SHUTDOWN_TIMEOUT_SECONDS)
             except Exception:
                 pass
+        self._browser = None
+
+    async def _close_browser_for_recovery(self) -> bool:
+        """Close the old persistent context and confirm its owner exited before relaunch."""
+        self._refresh_browser_process_tree()
+        quarantine = self._quarantine_task
+        if quarantine is not None and quarantine is not asyncio.current_task():
+            done, _ = await asyncio.wait({quarantine}, timeout=CONTEXT_SHUTDOWN_TIMEOUT_SECONDS * 3 + 0.2)
+            if not done:
+                return False
+            self._quarantine_task = None
+
+        context, page = self._context, self._page
+        if context is not None and self._context_page_handler is not None:
+            self._remove_listener(context, "page", self._context_page_handler)
+        if context is not None and self._context_close_handler is not None:
+            self._remove_listener(context, "close", self._context_close_handler)
+        if page is not None and self._page_event_handler is not None:
+            self._remove_listener(page, "close", self._page_event_handler)
+        if page is not None and self._page_crash_handler is not None:
+            self._remove_listener(page, "crash", self._page_crash_handler)
+        if self._browser is not None and self._browser_disconnect_handler is not None:
+            self._remove_listener(self._browser, "disconnected", self._browser_disconnect_handler)
+        self._context_page_handler = self._context_close_handler = None
+        self._page_event_handler = self._page_crash_handler = None
+        self._browser_disconnect_handler = None
+
+        if self._extra_page_close_tasks:
+            pending = tuple(self._extra_page_close_tasks.values())
+            _, pending = await asyncio.wait(pending, timeout=PAGE_CLOSE_TIMEOUT_SECONDS + 0.1)
+            if pending:
+                self._recovery_teardown_reason = "pending_page_close"
+                return False
+            self._extra_page_close_tasks.clear()
+
+        old_process_tree = set(self._browser_process_tree_pids)
+        try:
+            if self._camoufox_cm is not None:
+                await asyncio.wait_for(self._camoufox_cm.__aexit__(None, None, None),
+                                       timeout=CONTEXT_SHUTDOWN_TIMEOUT_SECONDS)
+                self._camoufox_cm = None
+            elif self._context is not None:
+                await asyncio.wait_for(self._context.close(), timeout=CONTEXT_SHUTDOWN_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError as exc:
+            self._recovery_teardown_reason = "context_close_timeout"
+            self._recovery_teardown_error_type = type(exc).__name__
+            return False
+        except Exception as exc:
+            try:
+                from playwright._impl._errors import TargetClosedError
+            except ImportError:
+                TargetClosedError = ()
+            if not (TargetClosedError and isinstance(exc, TargetClosedError) and self._camoufox_cm is not None):
+                self._recovery_teardown_reason = "context_close_failed"
+                self._recovery_teardown_error_type = type(exc).__name__
+                return False
+            try:
+                from camoufox.async_api import PlaywrightContextManager
+
+                # AsyncCamoufox.__aexit__ skips this base cleanup when browser.close()
+                # reports TargetClosedError, leaving its Playwright driver alive.
+                await asyncio.wait_for(PlaywrightContextManager.__aexit__(self._camoufox_cm, None, None),
+                                       timeout=CONTEXT_SHUTDOWN_TIMEOUT_SECONDS)
+                self._camoufox_cm = None
+            except asyncio.TimeoutError as stop_exc:
+                self._recovery_teardown_reason = "driver_stop_timeout"
+                self._recovery_teardown_error_type = type(stop_exc).__name__
+                return False
+            except Exception as stop_exc:
+                self._recovery_teardown_reason = "driver_stop_failed"
+                self._recovery_teardown_error_type = type(stop_exc).__name__
+                return False
+
+        try:
+            # The close manager must be fully stopped before reusing the profile.
+            if self._playwright_manager is not None:
+                await asyncio.wait_for(self._playwright_manager.stop(), timeout=CONTEXT_SHUTDOWN_TIMEOUT_SECONDS)
+                self._playwright_manager = None
+        except asyncio.TimeoutError:
+            self._recovery_teardown_reason = "driver_stop_timeout"
+            return False
+        except Exception:
+            self._recovery_teardown_reason = "driver_stop_failed"
+            return False
+
+        if not await self._wait_for_browser_process_tree_exit(old_process_tree):
+            self._recovery_teardown_reason = "browser_process_alive"
+            return False
+
+        self._context = None
+        self._page = None
+        self._adapter = None
+        self._browser = None
+        self._browser_process_pid = None
+        self._browser_process_tree_pids = set()
+        return True
+
+    async def _close_browser_for_recovery_cancellation_safe(self) -> bool:
+        cleanup = asyncio.create_task(self._close_browser_for_recovery())
+        self._recovery_cleanup_task = cleanup
+        try:
+            result = await asyncio.shield(cleanup)
+            if self._recovery_cleanup_task is cleanup:
+                self._recovery_cleanup_task = None
+            return result
+        except asyncio.CancelledError:
+            confirmed = False
+            try:
+                confirmed = await asyncio.wait_for(
+                    asyncio.shield(cleanup),
+                    timeout=CONTEXT_SHUTDOWN_TIMEOUT_SECONDS * 3 + PAGE_CLOSE_TIMEOUT_SECONDS + 0.5,
+                )
+            except Exception:
+                pass
+            if cleanup.done() and self._recovery_cleanup_task is cleanup:
+                self._recovery_cleanup_task = None
+            if not confirmed:
+                self._recovery_state = "blocked"
+                self._recovery_needed = True
+                self._recovery_reason = self._recovery_teardown_reason
+            raise
 
     @staticmethod
     def _remove_listener(obj: Any, event: str, callback: Any) -> None:
@@ -746,7 +1056,10 @@ class BrowserRuntime:
     async def health(self) -> dict[str, Any]:
         configured = self._adapter is not None or self.backend in {"camoufox", "chromium"}
         route_ready = self.egress_ready and self.route_generation > 0
-        page_ready = self._started and not self._main_page_closed and not self._resource_violation and self._page is not None
+        resources = self._resource_status()
+        page_ready = (self._started and not self._page_is_unavailable() and not self._resource_violation
+                      and self._page is not None and resources["context_count"] == 1
+                      and resources["page_count"] == 1)
         ready = page_ready and route_ready
         detail = ("browser ready; explicit direct development route selected" if self.proxy_assignment_id == "direct-development"
                   else "browser and assigned egress route are ready") if ready else (
@@ -755,10 +1068,11 @@ class BrowserRuntime:
                                    if self._started else "browser is not started")
         )
         return {"configured": configured, "ready": ready, "browser_started": self._started, "detail": detail,
+                "browser_instance_id": self.browser_instance_id,
                 "runtime_environment": self.runtime_environment,
                 "backend": self.backend, "egress_ready": self.egress_ready,
                 "proxy_assignment_id": self.proxy_assignment_id, "route_generation": self.route_generation,
-                **self._resource_status(),
+                **resources, **self._recovery_status(),
                 "blocked_resources": [{"origin": origin, "resource_type": resource_type, "reason": reason,
                                         "path_family": path_family, "frame": frame, "method": method, "count": count}
                                       for (origin, resource_type, reason, path_family, frame, method), count in self._blocked_resources.items()]}
@@ -774,14 +1088,41 @@ class BrowserRuntime:
                 "pending_page_closes": len(self._extra_page_close_tasks),
                 "resource_violation": self._resource_violation}
 
+    def _recovery_status(self) -> dict[str, Any]:
+        now = time.monotonic()
+        self._recovery_attempt_times = [stamp for stamp in self._recovery_attempt_times
+                                        if now - stamp < RECOVERY_WINDOW_SECONDS]
+        needed = self._recovery_needed or self._page_is_unavailable()
+        state = self._recovery_state
+        reason = self._recovery_reason
+        if self._resource_violation:
+            state, reason = "blocked", "resource_violation"
+        elif not self.egress_ready or self.route_generation <= 0:
+            if needed:
+                state, reason = "blocked", "egress_unavailable"
+        elif not needed and self._started:
+            state, reason = "idle", "healthy"
+        elif needed and state == "idle" and reason == "healthy":
+            reason = self._main_page_failure_reason
+        if state == "exhausted" and len(self._recovery_attempt_times) < RECOVERY_MAX_ATTEMPTS:
+            state = "backoff" if now < self._recovery_retry_after else "idle"
+            reason = "backoff" if state == "backoff" else self._main_page_failure_reason
+        retry_after = max(0.0, min(30.0, self._recovery_retry_after - now)) if self._recovery_retry_after else None
+        return {"recovery_needed": bool(needed), "recovery_state": state,
+                "recovery_reason": reason, "recovery_generation": self._recovery_generation,
+                "recovery_attempts": len(self._recovery_attempt_times),
+                "recovery_retry_after_seconds": round(retry_after, 3) if retry_after is not None else None}
+
     def status_base(self) -> dict[str, Any]:
         return {"session_id": self.session_id, "worker_instance_id": self.worker_instance_id,
+                "browser_instance_id": self.browser_instance_id,
                 "backend": self.backend, "runtime_environment": self.runtime_environment,
                 "browser_id": self.browser_id, "page_id": self.page_id,
                 "browser_started": self._started, "width": self.viewport_width, "height": self.viewport_height,
                 "proxy_assignment_id": self.proxy_assignment_id, "route_generation": self.route_generation,
                 "control_epoch": self.control_epoch, "control_owner": self.control_owner,
                 **self._resource_status(),
+                **self._recovery_status(),
                 "blocked_resources": [{"origin": origin, "resource_type": resource_type, "reason": reason,
                                         "path_family": path_family, "frame": frame, "method": method, "count": count}
                                       for (origin, resource_type, reason, path_family, frame, method), count in self._blocked_resources.items()]}
@@ -795,6 +1136,155 @@ class BrowserRuntime:
                 url = None
         return {**self.status_base(), "url": url, "action_in_progress": self._action_in_progress,
                 "import_in_progress": self._import_in_progress}
+
+    def _recovery_is_busy(self) -> bool:
+        return bool(self._action_in_progress or self._import_in_progress or self._input_lock.locked()
+                    or self._observation_pending or self._capture_lock.locked()
+                    or any(not task.done() for task in self._extra_page_close_tasks.values()))
+
+    def _recovery_result(self, outcome: str, reason: str) -> dict[str, Any]:
+        self._recovery_reason = reason
+        status = self._recovery_status()
+        return {"outcome": outcome, **status, "browser_started": self._started,
+                **self._resource_status()}
+
+    async def recover(self, *, automatic: bool = False) -> dict[str, Any]:
+        async with self._start_lock:
+            if self._page_is_unavailable() and not self._main_page_closed:
+                self._mark_main_page_unavailable(self._main_page_failure_reason)
+            if self._started and not self._page_is_unavailable() and not self._resource_violation:
+                return self._recovery_result("already_ready", "healthy")
+            if self._resource_violation:
+                self._recovery_state = "blocked"
+                return self._recovery_result("blocked", "resource_violation")
+            if not self.egress_ready or self.route_generation <= 0:
+                self._recovery_state = "blocked"
+                return self._recovery_result("blocked", "egress_unavailable")
+            if self._recovery_state == "blocked":
+                return self._recovery_result("blocked", self._recovery_reason)
+            if not self._recovery_needed:
+                self._recovery_state = "blocked"
+                return self._recovery_result("blocked", "not_recoverable")
+            if self._recovery_is_busy():
+                return self._recovery_result("deferred", "operation_in_progress")
+            if self._quarantine_task is not None and not self._quarantine_task.done():
+                return self._recovery_result("deferred", "operation_in_progress")
+            if self._recovery_cleanup_task is not None and not self._recovery_cleanup_task.done():
+                return self._recovery_result("deferred", "operation_in_progress")
+            if self._recovery_cleanup_task is not None:
+                self._recovery_cleanup_task = None
+
+            now = time.monotonic()
+            self._recovery_attempt_times = [stamp for stamp in self._recovery_attempt_times
+                                            if now - stamp < RECOVERY_WINDOW_SECONDS]
+            if len(self._recovery_attempt_times) >= RECOVERY_MAX_ATTEMPTS:
+                self._recovery_state = "exhausted"
+                return self._recovery_result("blocked", "attempts_exhausted")
+            if now < self._recovery_retry_after:
+                self._recovery_state = "backoff"
+                return self._recovery_result("blocked", "backoff")
+
+            self._recovery_attempt_times.append(now)
+            self._recovery_retry_after = 0.0
+            self._recovery_state = "recovering"
+            self._recovery_reason = self._main_page_failure_reason
+            if not self._main_page_closed:
+                self._mark_main_page_unavailable(self._main_page_failure_reason)
+                self._recovery_state = "recovering"
+            self._started = False
+            self.control_epoch += 1
+            self.control_owner = "none"
+            self._lease_deadline = 0
+            self._last_observation_id = None
+            self._route_origins = frozenset()
+            try:
+                confirmed = await self._close_browser_for_recovery_cancellation_safe()
+            except asyncio.CancelledError:
+                if self._recovery_state != "blocked":
+                    self._recovery_state = "backoff"
+                    self._recovery_reason = "launch_failed"
+                    self._recovery_retry_after = time.monotonic() + RECOVERY_BACKOFF_SECONDS[0]
+                raise
+            if not confirmed:
+                self._recovery_state = "blocked"
+                self._recovery_needed = True
+                return self._recovery_result("failed", self._recovery_teardown_reason)
+            if self._db is not None:
+                try:
+                    self._db.close()
+                except sqlite3.Error:
+                    self._recovery_state = "blocked"
+                    return self._recovery_result("failed", "teardown_unconfirmed")
+                self._db = None
+            try:
+                await asyncio.wait_for(self._start_locked(recovery=True), timeout=RECOVERY_START_TIMEOUT_SECONDS)
+                if (not self._started or self._resource_violation or
+                        self._resource_status()["context_count"] != 1 or
+                        self._resource_status()["page_count"] != 1):
+                    raise RuntimeError("recovered browser did not satisfy readiness invariants")
+            except asyncio.CancelledError:
+                self._started = False
+                self._recovery_needed = True
+                if self._recovery_state != "blocked":
+                    self._recovery_state = "backoff"
+                    self._recovery_reason = "launch_failed"
+                    self._recovery_retry_after = time.monotonic() + RECOVERY_BACKOFF_SECONDS[0]
+                raise
+            except Exception:
+                self._started = False
+                self._recovery_needed = True
+                if self._recovery_state != "blocked":
+                    if len(self._recovery_attempt_times) >= RECOVERY_MAX_ATTEMPTS:
+                        self._recovery_state = "exhausted"
+                        self._recovery_retry_after = now + RECOVERY_WINDOW_SECONDS
+                        self._recovery_reason = "attempts_exhausted"
+                    else:
+                        self._recovery_state = "backoff"
+                        delay_index = min(len(self._recovery_attempt_times), len(RECOVERY_BACKOFF_SECONDS) - 1)
+                        delay = RECOVERY_BACKOFF_SECONDS[delay_index]
+                        self._recovery_retry_after = time.monotonic() + delay
+                    self._recovery_reason = "launch_failed"
+                return self._recovery_result("failed", self._recovery_reason)
+
+            self._recovery_generation += 1
+            self._recovery_needed = False
+            self._recovery_state = "idle"
+            self._recovery_reason = "healthy"
+            self._recovery_retry_after = 0.0
+            self._main_page_closed = False
+            self._main_page_failure_reason = "canonical_page_closed"
+            self._start_detail = None
+            return self._recovery_result("recovered", "healthy")
+
+    async def recovery_watchdog(self) -> None:
+        while True:
+            await asyncio.sleep(RECOVERY_WATCHDOG_INTERVAL_SECONDS)
+            self._refresh_browser_process_tree()
+            if self._resource_violation or not self.egress_ready or self.route_generation <= 0:
+                continue
+            if self._page_is_unavailable() and not self._main_page_closed:
+                self._mark_main_page_unavailable(self._main_page_failure_reason)
+            if self._started and not self._recovery_is_busy() and self._page is not None:
+                try:
+                    await asyncio.wait_for(self._page.evaluate("() => 1"), timeout=LIVENESS_PROBE_TIMEOUT_SECONDS)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    try:
+                        from playwright._impl._errors import TargetClosedError
+                    except ImportError:
+                        TargetClosedError = ()
+                    if TargetClosedError and isinstance(exc, TargetClosedError):
+                        self._mark_main_page_unavailable("browser_disconnected")
+            if self._recovery_needed:
+                try:
+                    await self.recover(automatic=True)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    self._recovery_state = "backoff"
+                    self._recovery_reason = "launch_failed"
+                    self._recovery_retry_after = time.monotonic() + RECOVERY_BACKOFF_SECONDS[0]
 
     async def _read_gemini_auth_status(self) -> dict[str, str]:
         from worker.site_capabilities import GEMINI_ORIGIN, inspect_gemini_auth_status
@@ -2059,6 +2549,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         nonlocal auth_token
+        watchdog: asyncio.Task[Any] | None = None
         if auth_token is None:
             auth_token = _load_token()
         if not auth_token:
@@ -2070,9 +2561,16 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
                 # A failed browser launch is visible via /health; it must not
                 # turn a missing GPU/package into a falsely ready service.
                 pass
-        yield
-        if hasattr(runtime, "close"):
-            await runtime.close()
+        if hasattr(runtime, "recovery_watchdog"):
+            watchdog = asyncio.create_task(runtime.recovery_watchdog())
+        try:
+            yield
+        finally:
+            if watchdog is not None:
+                watchdog.cancel()
+                await asyncio.gather(watchdog, return_exceptions=True)
+            if hasattr(runtime, "close"):
+                await runtime.close()
 
     app = FastAPI(title="Browser worker", version="0.1.0", lifespan=lifespan)
     app.state.runtime = runtime
@@ -2098,6 +2596,13 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
     @app.get("/status", dependencies=[Depends(require_bearer)])
     async def status() -> dict[str, Any]:
         return await runtime.status()
+
+    @app.post("/recover", dependencies=[Depends(require_bearer)])
+    async def recover(_body: RecoverBody) -> dict[str, Any]:
+        try:
+            return await runtime.recover()
+        except WorkerError as exc:
+            raise as_http(exc)
 
     @app.get("/diagnostics/demoqa-inputs", dependencies=[Depends(require_bearer)])
     async def demoqa_input_diagnostics() -> dict[str, Any]:

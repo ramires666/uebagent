@@ -1,6 +1,6 @@
 # Local Browser MCP Chrome extension
 
-Load this folder as an unpacked extension from `chrome://extensions` with Developer mode enabled. Pair it with the local service from the popup using the short lived pairing code issued by the service. The default service origin is `http://localhost:8080`; custom origins must use HTTP on `localhost` or `127.0.0.1` with a valid port.
+Load this folder as an unpacked extension from `chrome://extensions` with Developer mode enabled. Pair it with the local service from the popup using the short lived pairing code issued by the service. The default service origin is `http://localhost:8090`; custom origins must use HTTP on `localhost` or `127.0.0.1` with a valid port. Existing pairings keep their saved origin. After reloading this extension, use **Перенести подключение на localhost:8090** in its popup to change only the service address while keeping the existing pair.
 
 The extension uses the Chrome Tabs, Cookies, Storage, and Alarms APIs. Its manifest grants access to the two loopback service hosts and declares `https://*/*` only as an optional permission pattern. It does not request cookie access until the web panel selects sites. The popup then lists the exact HTTPS origins and asks Chrome for those host permissions after the operator clicks **Grant selected site access**.
 

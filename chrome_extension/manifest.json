@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local Browser MCP Cookie Selector",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Pairs with a local Browser MCP service and transfers only cookies for explicitly allowed sites.",
   "permissions": ["tabs", "cookies", "storage", "alarms"],
   "host_permissions": [

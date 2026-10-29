@@ -95,7 +95,8 @@ async def test_gemini_task_capability_is_scoped_to_click_and_key(tmp_path):
         {'kind': 'click', 'x': 100, 'y': 100},
         {'kind': 'press_key', 'key': 'Enter'},
         {'kind': 'finish', 'summary': 'fixture'},
-    ], ['https://gemini.google.com'], current_url='https://gemini.google.com/app')
+    ], ['https://gemini.google.com'], current_url='https://gemini.google.com/app',
+       execution_mode='supervised')
     grant = repo.grant_capability(record.task_id, 'gemini_prompt_submit', record.version)
     await runner._run(record.task_id)
     commands = worker.executes
@@ -287,7 +288,7 @@ async def test_other_rejections_never_use_focus_recovery(tmp_path, kind, code, m
     await runner.close(); repo.close()
 
 
-def make_runner(tmp_path, actions, allowed_origins=None, *, current_url="https://shop.example/", start_running=True, user_inputs=None):
+def make_runner(tmp_path, actions, allowed_origins=None, *, current_url="https://shop.example/", start_running=True, user_inputs=None, execution_mode="autonomous"):
     repo = TaskRepository(tmp_path / "tasks.db")
     settings = Settings(data_dir=tmp_path, worker_url="http://worker")
     worker = FakeWorker(current_url)
@@ -298,6 +299,7 @@ def make_runner(tmp_path, actions, allowed_origins=None, *, current_url="https:/
         allowed_origins=allowed_origins or ["https://shop.example"],
         user_inputs=user_inputs or {},
         idempotency_key="test-key-0001",
+        execution_mode=execution_mode,
     )
     record = repo.create(spec)
     if start_running:
@@ -378,11 +380,14 @@ async def test_managed_model_key_chord_repair_sends_feedback_and_fresh_screensho
     def handle(request):
         if request.url.path == "/health":
             return httpx.Response(200, json={"ok": True})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "fara-browser"}]})
         requests.append(json.loads(request.content))
         return response(actions.pop(0))
 
     model = ModelClient(
-        ModelSettings("http://llama.example/v1", system_prompt="Pinned Fara system prompt"),
+        ModelSettings("http://llama.example/v1", alias="fara-browser",
+                      system_prompt="Pinned Fara system prompt", protocol="fara"),
         httpx.MockTransport(handle),
     )
     repo = TaskRepository(tmp_path / "tasks.db")

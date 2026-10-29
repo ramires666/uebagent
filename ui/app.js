@@ -88,15 +88,39 @@
     if (component.ready) return ['good', 'Готово'];
     return ['warning', 'Ожидание'];
   }
+  function modelStatusText(model) {
+    const id = typeof model.model_id === 'string' ? model.model_id.slice(0, 160) : '';
+    const code = typeof model.error_code === 'string' ? model.error_code : '';
+    const message = {
+      MODEL_VISION_UNSUPPORTED: `Модель ${id || '(не выбрана)'} не поддерживает анализ изображений. Выберите модель с поддержкой vision.`,
+      MODEL_SELECTION_REQUIRED: `Сервер предлагает несколько моделей${Array.isArray(model.available_models) && model.available_models.length ? `: ${model.available_models.slice(0, 8).map(value => String(value).slice(0, 80)).join(', ')}` : ''}. Требуется выбрать одну модель.`,
+      MODEL_DISCOVERY_FAILED: 'Не удалось получить список моделей с endpoint /v1/models. Проверьте доступность сервера модели.',
+      MODEL_NOT_SERVED: `Настроенная модель${id ? ` «${id}»` : ''} отсутствует в списке моделей, опубликованном сервером.`,
+      MODEL_UNAVAILABLE: `Сервер модели${id ? ` «${id}»` : ''} не готов принимать запросы.`,
+      MODEL_NOT_CONFIGURED: 'Не задан endpoint или модель для подключения.'
+    };
+    const fallback = typeof model.detail === 'string' ? model.detail.slice(0, 240) : (model.ready ? 'Модель готова к работе' : 'Ожидает готовности модели');
+    const primary = message[code] || fallback;
+    const selected = id ? `Модель: ${id}. ` : '';
+    const vision = model.vision_status === 'accepted'
+      ? ' Сервер принял запрос с изображением; это не подтверждает качество визуального анализа.'
+      : model.vision_status === 'unsupported' || code === 'MODEL_VISION_UNSUPPORTED'
+        ? ''
+        : ' Поддержка изображений проверяется при первом запросе с изображением.';
+    return { detail: `${selected}${primary}${vision}`.slice(0, 500), protocol: model.protocol === 'fara' ? 'Fara' : 'OpenAI API', code };
+  }
   function renderStatus(data) {
     state.status = data;
     const model = data.model || {}, worker = data.worker || {};
     const [mClass, mLabel] = componentState(model), [wClass, wLabel] = componentState(worker);
     pill($('#model-pill'), mClass, mLabel); pill($('#worker-pill'), wClass, wLabel);
     pill($('#settings-model'), mClass, mLabel); pill($('#settings-worker'), wClass, wLabel);
-    setText($('#model-detail'), safe(model.detail, model.ready ? 'Модель готова к работе' : 'Ожидает готовности модели'));
+    const modelStatus = modelStatusText(model);
+    setText($('#model-detail'), modelStatus.detail);
+    setText($('#settings-model-detail'), modelStatus.detail);
+    setText($('#model-protocol'), modelStatus.protocol);
     setText($('#worker-detail'), safe(worker.detail, worker.ready ? 'Браузер готов к работе' : 'Ожидает запуска исполнителя'));
-    setText($('#model-config'), model.configured ? 'Настроена' : 'Не настроена');
+    setText($('#model-config'), model.model_id ? String(model.model_id).slice(0, 80) : (model.configured ? 'Настроена' : 'Не настроена'));
     setText($('#worker-config'), worker.configured ? 'Настроен' : 'Не настроен');
     const profiles = Array.isArray(data.profiles) ? data.profiles : [];
     setText($('#profile-count'), `${profiles.length} ${plural(profiles.length, 'профиль', 'профиля', 'профилей')}`);
@@ -256,24 +280,27 @@
   function renderTasks() {
     const list = $('#tasks-list'); list.replaceChildren();
     setText($('#task-list-count'), `${state.tasks.length} ${plural(state.tasks.length, 'задача', 'задачи', 'задач')}`);
-    if (!state.tasks.length) { list.innerHTML = '<div class="empty-state"><span class="empty-mark">◷</span><b>Задач пока нет</b><span>Создайте первую задачу, чтобы начать работу.</span></div>'; renderRecent(); return; }
+    if (!state.tasks.length) { list.innerHTML = '<div class="empty-state"><span class="empty-mark">◷</span><b>Задач пока нет</b><span>Создайте первую задачу, чтобы начать работу.</span></div>'; renderRecent(); renderDesktopTaskStrip(); return; }
     state.tasks.forEach(task => {
       const card = document.createElement('article'); card.className = 'task-row';
       const main = document.createElement('div'); main.className = 'task-main';
       const top = document.createElement('div'); top.className = 'task-topline';
       const id = document.createElement('code'); id.textContent = safe(task.task_id);
+      const preflightError = taskPreflightError(task.error);
       const badge = document.createElement('span'); badge.className = `status-pill ${taskClass(task.status)}`; badge.textContent = task.spec?.workflow === 'gemini_prompt_submit' && task.phase === 'submitted' ? '\u0417\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d' : task.phase === 'completed_unverified' ? 'Завершено, без независимой проверки' : statusLabel(task.status);
       top.append(id, badge);
+      const reasonText = window.taskStatusCopy?.reason(task) || '';
+      const reason = document.createElement('p'); reason.className = 'task-stop-reason'; reason.setAttribute('role', 'status');
+      reason.textContent = reasonText ? `\u041f\u0440\u0438\u0447\u0438\u043d\u0430 \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438: ${reasonText}` : ''; reason.hidden = !reasonText;
       const goal = document.createElement('p'); goal.className = 'task-goal'; goal.textContent = safe(task.spec?.goal || task.goal, 'Цель не указана');
       const meta = document.createElement('div'); meta.className = 'task-meta';
-      const preflightError = taskPreflightError(task.error);
-      [task.spec?.execution_mode === 'autonomous' ? 'Автономно от моего имени' : 'С подтверждениями', task.spec?.workflow === 'gemini_prompt_submit' ? '\u041e\u0434\u043d\u043e\u0440\u0430\u0437\u043e\u0432\u0430\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0430; \u043e\u0442\u0432\u0435\u0442 \u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f' : '', task.phase === 'completed_unverified' ? 'Независимые критерии проверки не заданы; результат по сообщению модели.' : task.phase === 'authentication_required' ? 'Ожидает подтверждения входа в Gemini.' : task.phase && task.phase !== 'submitted' && `Этап: ${task.phase}`, task.step_count != null && `Шагов: ${task.step_count}`, preflightError?.text || (task.status === 'waiting_approval' ? 'Действие требует разрешения.' : task.error && (typeof task.error === 'object' ? (task.error.message || task.error.code || 'Ошибка') : task.error))].filter(Boolean).forEach(v => { const span = document.createElement('span'); span.textContent = String(v); meta.append(span); });
+      [task.spec?.execution_mode === 'autonomous' ? 'Автономно от моего имени' : 'С подтверждениями', task.spec?.workflow === 'gemini_prompt_submit' ? '\u041e\u0434\u043d\u043e\u0440\u0430\u0437\u043e\u0432\u0430\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0430; \u043e\u0442\u0432\u0435\u0442 \u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f' : '', task.phase === 'completed_unverified' ? 'Независимые критерии проверки не заданы; результат по сообщению модели.' : task.phase === 'authentication_required' ? 'Ожидает подтверждения входа в Gemini.' : task.phase && task.phase !== 'submitted' && `Этап: ${task.phase}`, task.step_count != null && `Шагов: ${task.step_count}`, ''].filter(Boolean).forEach(v => { const span = document.createElement('span'); span.textContent = String(v); meta.append(span); });
       if (task.status === 'expired') {
         const expiredNote = document.createElement('p'); expiredNote.className = 'task-expired-note';
         expiredNote.textContent = 'Срок задачи истёк. «Повторить…» откроет исходные параметры для редактирования; задача начнётся только после отправки формы.';
-        main.append(top, goal, meta, expiredNote, renderTaskSpec(task.spec));
+        main.append(top, reason, goal, meta, expiredNote, renderTaskSpec(task.spec));
       } else {
-        main.append(top, goal, meta, renderTaskSpec(task.spec));
+        main.append(top, reason, goal, meta, renderTaskSpec(task.spec));
       }
       card.append(main);
       if (task.spec?.execution_mode === 'autonomous') {
@@ -298,7 +325,28 @@
       card.append(controls); list.append(card);
       if (['running', 'queued', 'pause_requested'].includes(task.status) && !state.autoPolledTasks.has(task.task_id)) pollTask(task.task_id);
     });
-    renderRecent();
+    renderRecent(); renderDesktopTaskStrip();
+  }
+  function renderDesktopTaskStrip() {
+    const status = $('#desktop-task-status'), goal = $('#desktop-task-goal'), phase = $('#desktop-task-phase'), reason = $('#desktop-task-reason'), controls = $('#desktop-task-controls');
+    if (!status || !controls) return;
+    const terminal = new Set(['succeeded', 'done', 'completed', 'failed', 'cancelled', 'canceled', 'expired']);
+    const task = state.tasks.find(item => !terminal.has(item.status)) || state.tasks[0];
+    controls.replaceChildren();
+    if (!task) { setText(status, 'Текущая задача'); setText(goal, 'Задачи пока нет'); setText(phase, ''); setText(reason, ''); reason.hidden = true; return; }
+    setText(status, statusLabel(task.status)); setText(goal, safe(task.spec?.goal || task.goal, 'Цель не указана'));
+    const showPhase = task.phase && !(task.status === 'running' && Number(task.step_count) > 0);
+    setText(phase, [showPhase && `Этап: ${task.phase}`, task.step_count != null && `Шагов: ${task.step_count}`].filter(Boolean).join(' · '));
+    const why = window.taskStatusCopy?.reason(task) || '';
+    setText(reason, why ? `Причина остановки: ${why}` : ''); reason.hidden = !why;
+    const idPath = encodeURIComponent(task.task_id || '');
+    if (task.status === 'running') addTaskButton(controls, 'Пауза', 'pause', idPath, task);
+    if (task.status === 'paused' || (task.status === 'waiting_human' && task.phase !== 'answer_required')) addTaskButton(controls, 'Продолжить', 'resume', idPath, task);
+    if (task.status === 'recovering') addTaskButton(controls, 'Проверить', 'review-recovery', idPath, task);
+    if (['running', 'pause_requested', 'paused', 'waiting_human', 'waiting_approval', 'recovering'].includes(task.status)) addTaskButton(controls, 'Забрать управление', 'takeover', idPath, task);
+    if (!terminal.has(task.status) && !['recovering', 'expired'].includes(task.status)) addTaskButton(controls, 'Отменить', 'cancel', idPath, task, true);
+    const repeat = document.createElement('button'); repeat.type = 'button'; repeat.className = 'small-button'; repeat.textContent = 'Изменить и повторить…';
+    repeat.addEventListener('click', () => { activateTab('tasks'); openRepeatTask(task); }); controls.append(repeat);
   }
   function addTaskButton(container, label, action, idPath, task, danger = false) {
     const button = document.createElement('button'); button.type = 'button'; button.className = danger ? 'small-button danger-text' : 'small-button'; button.textContent = label;
@@ -400,8 +448,11 @@
       }
       const url = new URL(info.url, location.href);
       if (url.origin !== location.origin || url.pathname !== '/desktop') throw new Error('Сервис вернул недопустимый адрес окна браузера.');
-      const frame = document.createElement('iframe'); frame.title = 'Окно браузера'; frame.src = url.href;
-      const wrap = $('#desktop-frame-wrap'); wrap.replaceChildren(frame); show($('#desktop-viewer'), true);
+      url.searchParams.set('embed', '1');
+      const wrap = $('#desktop-frame-wrap');
+      let frame = wrap.querySelector('iframe');
+      if (!frame) { frame = document.createElement('iframe'); frame.title = 'Окно браузера'; frame.src = url.href; wrap.append(frame); }
+      show($('#desktop-viewer'), true); renderDesktopTaskStrip();
       $('#toolbar-open-browser').disabled = false;
     } catch (error) { toast(errorMessage(error), 'error'); await refreshBrowserControls(); }
   }
@@ -409,11 +460,19 @@
   async function changeProfileControl(operation) {
     const button = operation === 'takeover' ? $('#toolbar-takeover') : $('#toolbar-release');
     button.disabled = true;
+    const expectedOwner = operation === 'takeover' ? 'human' : 'none';
     try {
       await post(`/profiles/default/${operation === 'takeover' ? 'takeover' : 'release-control'}`, {});
-      await refreshBrowserControls(); await loadTasks();
+      await refreshBrowserControls();
+      if (state.controlOwner !== expectedOwner) {
+        throw new Error(`Сервис не подтвердил «${expectedOwner}». Проверьте состояние браузера и повторите действие.`);
+      }
+      await loadTasks();
       toast(operation === 'takeover' ? 'Управление браузером передано вам' : 'Управление браузером освобождено');
-    } catch (error) { toast(errorMessage(error), 'error'); }
+    } catch (error) {
+      const hint = location.port === '8080' ? ' Панель браузера находится по адресу http://localhost:8090.' : '';
+      toast(errorMessage(error) + hint, 'error');
+    }
     finally { button.disabled = false; }
   }
 
@@ -769,7 +828,7 @@
     checkbox.disabled = !allowed; show($('#gemini-capability-wrap'), allowed);
     updateGeminiAuthPanel();
   }
-  let savedGenericExecutionMode = 'supervised';
+  let savedGenericExecutionMode = 'autonomous';
   let workflowWasFast = false;
   function syncTaskWorkflow() {
     const fast = $('#task-workflow').value === 'gemini_prompt_submit';

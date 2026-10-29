@@ -10,10 +10,14 @@ from pathlib import Path
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.getenv("BROWSER_MCP_DATA_DIR", "runtime")))
     public_origin: str = field(default_factory=lambda: os.getenv("BROWSER_MCP_ORIGIN", "http://localhost:8080"))
-    model_base_url: str = field(default_factory=lambda: os.getenv("MODEL_BASE_URL", ""))
-    model_alias: str = field(default_factory=lambda: os.getenv("MODEL_ALIAS", "fara-browser"))
+    model_base_url: str = field(default_factory=lambda: os.getenv("MODEL_BASE_URL", "http://host.docker.internal:8080/v1"))
+    model_alias: str = field(default_factory=lambda: os.getenv("MODEL_ALIAS", "auto"))
+    model_protocol: str = field(default_factory=lambda: os.getenv("MODEL_PROTOCOL", "generic"))
     model_key_file: str = field(default_factory=lambda: os.getenv("MODEL_API_KEY_FILE", ""))
-    model_prompt_file: str = field(default_factory=lambda: os.getenv("FARA_PROMPT_FILE", "config/fara-system-prompt.txt"))
+    model_prompt_file: str = field(default_factory=lambda: (
+        os.getenv("MODEL_PROMPT_FILE", "") if os.getenv("MODEL_PROTOCOL", "generic") != "fara"
+        else os.getenv("FARA_PROMPT_FILE", "config/fara-system-prompt.txt")
+    ))
     worker_url: str = field(default_factory=lambda: os.getenv("BROWSER_WORKER_URL", ""))
     worker_key_file: str = field(default_factory=lambda: os.getenv("WORKER_API_KEY_FILE", ""))
     desktop_url: str = field(default_factory=lambda: os.getenv("BROWSER_DESKTOP_URL", ""))
@@ -29,6 +33,8 @@ class Settings:
     def prepare(self) -> None:
         if self.operator_auth_mode not in {"token", "local"}:
             raise ValueError("BROWSER_MCP_OPERATOR_AUTH must be token or local")
+        if self.model_protocol not in {"generic", "fara"}:
+            raise ValueError("MODEL_PROTOCOL must be generic or fara")
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.operator_token = self.operator_token or self._secret("operator-token.txt")
         self.mcp_token = self.mcp_token or self._secret("mcp-token.txt")

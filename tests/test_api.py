@@ -275,6 +275,7 @@ def test_mcp_browser_task_start_exposes_and_preserves_verbatim_text(tmp_path):
         assert string_schema["minLength"] == 1
         assert "verbatim_text" not in start_tool["inputSchema"].get("required", [])
         assert start_tool["inputSchema"]["properties"]["sync_cookies"]["default"] is True
+        assert start_tool["inputSchema"]["properties"]["execution_mode"]["default"] == "autonomous"
 
         called = client.post("/mcp", json={
             "jsonrpc": "2.0", "id": 2, "method": "tools/call",
@@ -296,6 +297,7 @@ def test_mcp_browser_task_start_exposes_and_preserves_verbatim_text(tmp_path):
         record = client.app.state.repository.list()[0]
         assert record.spec.verbatim_text == exact_text
         assert record.spec.sync_cookies is False
+        assert record.spec.execution_mode == "autonomous"
 
 
 def test_malformed_json_objects_are_rejected_and_logout_revokes_session(tmp_path):

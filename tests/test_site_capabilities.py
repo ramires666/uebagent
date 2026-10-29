@@ -25,7 +25,8 @@ def test_autonomy_feedback_is_bounded_and_requires_no_invented_data():
 
 
 def test_capability_schema_and_stable_legacy_idempotency(tmp_path):
-    assert spec().execution_mode == 'supervised'
+    assert spec().execution_mode == 'autonomous'
+    assert spec(execution_mode='supervised').execution_mode == 'supervised'
     with pytest.raises(ValidationError): spec(execution_mode='invalid')
     with pytest.raises(ValidationError): spec(allowed_origins=['https://example.test'], site_capabilities=['gemini_prompt_submit'])
     with pytest.raises(ValidationError): spec(site_capabilities=['gemini_prompt_submit', 'gemini_prompt_submit'])
@@ -38,7 +39,7 @@ def test_capability_schema_and_stable_legacy_idempotency(tmp_path):
     row.pop('site_capabilities')
     repo._conn.execute('UPDATE tasks SET spec_json=? WHERE task_id=?', (json.dumps(row), original.task_id))
     assert repo.create(spec()).task_id == original.task_id
-    with pytest.raises(DomainError) as exc: repo.create(spec(execution_mode='autonomous'))
+    with pytest.raises(DomainError) as exc: repo.create(spec(execution_mode='supervised'))
     assert exc.value.code == 'IDEMPOTENCY_CONFLICT'
     before = repo._conn.execute('SELECT spec_json FROM tasks WHERE task_id=?', (original.task_id,)).fetchone()[0]
     grant = repo.grant_capability(original.task_id, 'gemini_prompt_submit', original.version)

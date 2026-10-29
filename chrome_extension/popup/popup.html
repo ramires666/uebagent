@@ -12,7 +12,7 @@
     <p id="status" role="status">Checking connection…</p>
     <form id="pair-form">
       <label>Local API origin
-        <input id="api-origin" type="url" value="http://localhost:8080" required autocomplete="url">
+        <input id="api-origin" type="url" value="http://localhost:8090" required autocomplete="url">
       </label>
       <label>Pairing code
         <input id="pairing-code" type="password" required autocomplete="off" maxlength="200">
@@ -29,6 +29,7 @@
       <button id="grant-button" type="button">Grant selected site access</button>
     </section>
     <button id="connect-button" type="button">Reconnect</button>
+    <button id="switch-service-button" type="button" hidden>Перенести подключение на localhost:8090</button>
     <button id="panel-button" type="button">Open web panel</button>
     <p class="note">Cookie access is requested only for selected open HTTPS sites and exact parent domains. Values are sent only for cookies you select in the web panel.</p>
     <p id="message" aria-live="polite"></p>

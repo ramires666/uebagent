@@ -53,11 +53,18 @@ async def test_viewer_task_progress_and_explicit_control():
                 body = {"authenticated": True, "csrf_token": "fixture-csrf"}
             elif path == "/desktop/state":
                 body = {"available": True, "control_owner": owner, "control_epoch": 2, "width": 1440, "height": 900, "backend": "Camoufox", "runtime_environment": "docker"}
+            elif path == "/status":
+                body = {"model": {"ready": True}, "worker": {"ready": True, "recovery_state": "recovering", "recovery_needed": True}}
             elif path == "/desktop/screenshot":
                 await route.fulfill(status=409, json={"error": {"code": "CAPTURE_BUSY", "message": "busy"}})
                 return
             elif path == "/tasks":
-                body = {"tasks": [{"status": "running", "step_count": 3, "spec": {"goal": "<img src=x onerror=alert(1)>"}, "result": {"summary": "token=secret https://example.test/private"}}]}
+                body = {"tasks": [{"task_id": "slow-model", "version": 1, "status": "running", "phase": "checking_dependencies", "step_count": 3, "spec": {"goal": "<img src=x onerror=alert(1)>"}, "result": {"summary": "token=secret https://example.test/private"}}]}
+            elif path.startswith("/tasks/slow-model/events"):
+                after = int(request.url.split("after_event_id=", 1)[1].split("&", 1)[0])
+                events = [{"event_id": n, "event_type": "action.applied", "payload": {"kind": "navigate", "private": "never render this"}} for n in range(1, 105)]
+                events.append({"event_id": 105, "event_type": "task.activity", "payload": {"stage": "thinking", "step": 2}})
+                body = {"events": [event for event in events if event["event_id"] > after][:100]}
             elif path == "/profiles/default/takeover":
                 owner = "human"
                 body = {"ok": True}
@@ -75,7 +82,12 @@ async def test_viewer_task_progress_and_explicit_control():
         assert await page.locator("#task-goal").inner_text() == "<img src=x onerror=alert(1)>"
         assert await page.locator("#task-goal img").count() == 0
         detail = await page.locator("#task-detail").inner_text()
-        assert "Шагов: 3" in detail and "secret" not in detail and "example.test" not in detail
+        assert "выполнено: 3" in await page.locator("#task-progress-count").inner_text()
+        assert "сейчас: Обработка задачи моделью (шаг 2)" in detail
+        assert "secret" not in detail and "example.test" not in detail
+        assert "\u041e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430 \u0437\u0430\u0434\u0430\u0447\u0438 \u043c\u043e\u0434\u0435\u043b\u044c\u044e" in await page.locator("#task-phase").inner_text()
+        assert await page.locator("#service-status").get_attribute("data-state") == "warning"
+        assert await page.locator("#service-status").inner_text()
         assert "Docker / WSL2" in await page.locator("#browser-runtime").inner_text()
         assert not any(method == "POST" for method, _, _ in calls)
         assert await page.locator("#takeover").is_enabled()
@@ -91,6 +103,290 @@ async def test_viewer_task_progress_and_explicit_control():
         await asyncio.sleep(2.2)
         assert 1 <= sum(path == "/tasks" for _, path, _ in calls) <= 2
         assert "busy" not in await page.locator("#notice").inner_text()
+    finally:
+        if browser:
+            await browser.close()
+        await playwright.stop()
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_viewer_confirms_takeover_and_forwards_coalesced_pointer_and_wheel():
+    playwright_async = pytest.importorskip("playwright.async_api")
+    if not CHROME.is_file():
+        pytest.skip("local Chrome unavailable")
+    server = _viewer_server()
+    thread = Thread(target=server.serve_forever, daemon=True); thread.start()
+    playwright = await playwright_async.async_playwright().start()
+    browser = None
+    owner, epoch = "none", 1
+    events, actions = [], []
+    screenshot_calls = 0
+    first_move_started = asyncio.Event()
+    release_first_move = asyncio.Event()
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/dX8AAAAASUVORK5CYII=")
+    try:
+        browser = await playwright.chromium.launch(executable_path=str(CHROME), headless=True)
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+
+        async def api(route):
+            nonlocal owner, epoch, screenshot_calls
+            req = route.request
+            path = req.url.split("/api/v1", 1)[1]
+            if path == "/operator/session":
+                body = {"authenticated": True, "csrf_token": "fixture-csrf"}
+            elif path == "/desktop/state":
+                body = {"available": True, "control_owner": owner, "control_epoch": epoch,
+                        "width": 1440, "height": 900, "worker_instance_id": "synthetic-fixture"}
+            elif path == "/desktop/screenshot":
+                screenshot_calls += 1
+                await route.fulfill(body=png, content_type="image/png"); return
+            elif path == "/profiles/default/takeover":
+                owner = "human"; epoch += 1
+                body = {"control_epoch": epoch, "control_owner": owner}
+            elif path == "/profiles/default/release-control":
+                owner = "none"; epoch += 1
+                body = {"control_epoch": epoch, "control_owner": owner}
+            elif path == "/desktop/action":
+                action = req.post_data_json["action"]
+                actions.append(action)
+                if action["kind"] == "mouse_move" and not first_move_started.is_set():
+                    first_move_started.set()
+                    await release_first_move.wait()
+                epoch += 1
+                body = {"outcome": "applied", "control_epoch": epoch, "control_owner": owner}
+            else:
+                await route.fulfill(status=404, json={}); return
+            events.append((req.method, path, owner))
+            await route.fulfill(json=body)
+
+        await page.route("**/api/v1/**", api)
+        await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html")
+        await page.evaluate("""() => {
+          window.noticeHistory = [];
+          const notice = document.getElementById('notice');
+          new MutationObserver(() => window.noticeHistory.push(notice.textContent)).observe(notice, {childList: true, subtree: true, characterData: true});
+        }""")
+        await page.locator("#takeover").click()
+        await page.locator("#release-control").wait_for(state="visible", timeout=3000)
+        await page.wait_for_function("!document.getElementById('release-control').disabled", timeout=3000)
+        await page.wait_for_function("window.noticeHistory.some(text => text.includes('Управление передано'))", timeout=3000)
+        post_index = next(i for i, event in enumerate(events) if event[:2] == ("POST", "/profiles/default/takeover"))
+        confirmed_index = next(i for i, event in enumerate(events) if i > post_index and event == ("GET", "/desktop/state", "human"))
+        assert confirmed_index > post_index
+
+        await page.locator("#browser-image").wait_for(state="visible")
+        image = page.locator("#browser-image")
+        await image.evaluate("el => { el.style.width = '1200px'; el.style.height = '600px'; }")
+        await page.wait_for_timeout(650)
+        assert screenshot_calls >= 3
+
+        bounds = await image.bounding_box()
+        assert bounds
+        first = {"x": bounds["x"] + 100, "y": bounds["y"] + 80}
+        latest = {"x": bounds["x"] + 300, "y": bounds["y"] + 250}
+        await page.mouse.move(first["x"], first["y"])
+        await asyncio.wait_for(first_move_started.wait(), timeout=5)
+        await page.mouse.move(latest["x"], latest["y"])
+        await page.mouse.wheel(0, 400)
+        await page.mouse.wheel(0, 400)
+        release_first_move.set()
+        for _ in range(100):
+            if sum(a["kind"] == "scroll" for a in actions) >= 2 and sum(a["kind"] == "mouse_move" for a in actions) >= 2:
+                break
+            await asyncio.sleep(.05)
+
+        moves = [a for a in actions if a["kind"] == "mouse_move"]
+        scrolls = [a for a in actions if a["kind"] == "scroll"]
+        expected_x = round((latest["x"] - bounds["x"]) * 1440 / bounds["width"])
+        expected_y = round((latest["y"] - bounds["y"]) * 900 / bounds["height"])
+        assert len(moves) == 2
+        assert moves[-1]["x"] == expected_x and moves[-1]["y"] == expected_y
+        assert len(scrolls) == 2 and sum(a["dy"] for a in scrolls) == 800
+        assert all(a["x"] == expected_x and a["y"] == expected_y for a in scrolls)
+        assert all(0 < a["dy"] <= 600 for a in scrolls)
+
+        moved_geometry = await image.evaluate("(el, point) => { el.style.transform = 'translateY(12px)'; const wheel = new WheelEvent('wheel', {bubbles: true, cancelable: true, clientX: Math.round(point.x), clientY: Math.round(point.y), deltaY: 100}); const client = {x: wheel.clientX, y: wheel.clientY}; el.dispatchEvent(wheel); const rect = el.getBoundingClientRect(); return {client, rect: {left: rect.left, top: rect.top, width: rect.width, height: rect.height}}; }", latest)
+        for _ in range(100):
+            if sum(a["kind"] == "scroll" for a in actions) >= 3:
+                break
+            await asyncio.sleep(.02)
+        moved_scroll = [a for a in actions if a["kind"] == "scroll"][-1]
+        expected_moved_x = round((moved_geometry["client"]["x"] - moved_geometry["rect"]["left"]) * 1440 / moved_geometry["rect"]["width"])
+        expected_moved_y = round((moved_geometry["client"]["y"] - moved_geometry["rect"]["top"]) * 900 / moved_geometry["rect"]["height"])
+        assert moved_scroll["x"] == expected_moved_x and moved_scroll["y"] == expected_moved_y
+    finally:
+        release_first_move.set()
+        if browser: await browser.close()
+        await playwright.stop()
+        server.shutdown(); server.server_close(); thread.join()
+
+
+@pytest.mark.asyncio
+async def test_embedded_viewer_is_browser_only_and_skips_task_service_polling():
+    playwright_async = pytest.importorskip("playwright.async_api")
+    if not CHROME.is_file():
+        pytest.skip("local Chrome unavailable")
+    server = _viewer_server()
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    playwright = await playwright_async.async_playwright().start()
+    browser = None
+    calls = []
+    screenshot_calls = 0
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/dX8AAAAASUVORK5CYII=")
+    try:
+        browser = await playwright.chromium.launch(executable_path=str(CHROME), headless=True)
+        page = await browser.new_page(viewport={"width": 1200, "height": 600})
+
+        async def api(route):
+            nonlocal screenshot_calls
+            path = route.request.url.split("/api/v1", 1)[1]
+            calls.append((route.request.method, path))
+            if path == "/operator/session":
+                await route.fulfill(json={"authenticated": True, "csrf_token": "fixture"})
+            elif path == "/desktop/state":
+                await route.fulfill(json={"available": True, "control_owner": "agent", "control_epoch": 2, "width": 1440, "height": 900})
+            elif path == "/desktop/screenshot":
+                screenshot_calls += 1
+                if screenshot_calls == 1:
+                    await route.fulfill(body=png, content_type="image/png")
+                else:
+                    await route.fulfill(status=200, json={"not": "an image"})
+            else:
+                await route.fulfill(status=404, json={})
+
+        await page.route("**/api/v1/**", api)
+        await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html?embed=1")
+        await page.wait_for_function("document.documentElement.classList.contains('desktop-embed')")
+        await page.locator("#browser-image").wait_for(state="visible")
+        await page.wait_for_function("document.querySelector('#owner-status').classList.contains('good')")
+        assert await page.locator("header").evaluate("e => getComputedStyle(e).display") == "none"
+        assert await page.locator(".progress-panels").evaluate("e => getComputedStyle(e).display") == "none"
+        assert await page.locator(".controls").evaluate("e => getComputedStyle(e).display") == "none"
+        assert await page.locator(".screen-head").evaluate("e => getComputedStyle(e).display") == "none"
+        bounds = await page.locator(".viewport").bounding_box()
+        assert bounds and bounds["width"] == 1200 and bounds["height"] == 600
+        assert await page.locator("#remote-keyboard").get_attribute("type") == "password"
+        assert "good" in await page.locator("#owner-status").get_attribute("class")
+        await page.locator("#refresh").evaluate("e => e.click()")
+        await page.wait_for_function("!document.querySelector('#owner-status').classList.contains('good')")
+        assert "good" not in await page.locator("#owner-status").get_attribute("class")
+        assert await page.locator("#control-owner-label").inner_text() == "\u0417\u0430\u0434\u0430\u0447\u0430 \u0443\u043f\u0440\u0430\u0432\u043b\u044f\u0435\u0442 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u043e\u043c"
+        assert not any(path.startswith("/tasks") or path == "/status" for _, path in calls)
+        assert any(path.startswith("/desktop/screenshot") for _, path in calls)
+        assert not any(method == "POST" for method, _ in calls)
+    finally:
+        if browser:
+            await browser.close()
+        await playwright.stop()
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_standalone_task_controls_use_fresh_version_and_only_explicit_post():
+    playwright_async = pytest.importorskip("playwright.async_api")
+    if not CHROME.is_file():
+        pytest.skip("local Chrome unavailable")
+    server = _viewer_server()
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    playwright = await playwright_async.async_playwright().start()
+    browser = None
+    task = {"task_id": "standalone-task", "version": 7, "status": "running", "phase": "checking_dependencies", "step_count": 3, "spec": {"goal": "Inspect safely", "execution_mode": "autonomous"}}
+    calls = []
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/dX8AAAAASUVORK5CYII=")
+    try:
+        browser = await playwright.chromium.launch(executable_path=str(CHROME), headless=True)
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+
+        async def api(route):
+            nonlocal task
+            req = route.request
+            path = req.url.split("/api/v1", 1)[1].split("?", 1)[0]
+            calls.append((req.method, path, req.headers.get("x-csrf-token"), req.post_data_json if req.post_data else None))
+            if path == "/operator/session": body = {"authenticated": True, "csrf_token": "fixture"}
+            elif path == "/desktop/state": body = {"available": True, "control_owner": "agent", "control_epoch": 1, "width": 1440, "height": 900}
+            elif path == "/desktop/screenshot": await route.fulfill(body=png, content_type="image/png"); return
+            elif path == "/status": body = {"model": {"ready": True}, "worker": {"ready": True, "recovery_state": "idle"}}
+            elif path == "/tasks": body = {"tasks": [task]}
+            elif path == "/tasks/standalone-task": body = {"task": task}
+            elif path == "/tasks/standalone-task/events": body = {"events": []}
+            elif path == "/tasks/standalone-task/pause": task = {**task, "version": 8, "status": "pause_requested"}; body = {"task": task}
+            else: await route.fulfill(status=404, json={}); return
+            await route.fulfill(json=body)
+
+        await page.route("**/api/v1/**", api)
+        await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html")
+        await page.locator("#task-status").wait_for()
+        await page.locator("#task-actions").get_by_role("button", name="Пауза").wait_for(state="visible")
+        assert not any(method == "POST" for method, _, _, _ in calls)
+        await page.locator("#task-actions").get_by_role("button", name="Пауза").click()
+        await page.wait_for_function("document.querySelector('#task-status').textContent.includes('запрошена')")
+        pause_posts = [call for call in calls if call[0] == "POST" and call[1] == "/tasks/standalone-task/pause"]
+        assert len(pause_posts) == 1
+        assert pause_posts[0][2] == "fixture"
+        assert pause_posts[0][3] == {"expected_version": 7}
+        assert not [call for call in calls if call[0] == "POST" and call[1] == "/tasks"]
+    finally:
+        if browser:
+            await browser.close()
+        await playwright.stop()
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_viewer_surfaces_actionable_stop_reason_and_failed_step():
+    playwright_async = pytest.importorskip("playwright.async_api")
+    if not CHROME.is_file():
+        pytest.skip("local Chrome unavailable")
+    server = _viewer_server()
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    playwright = await playwright_async.async_playwright().start()
+    browser = None
+    calls = []
+    try:
+        browser = await playwright.chromium.launch(executable_path=str(CHROME), headless=True)
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+
+        async def api(route):
+            path = route.request.url.split("/api/v1", 1)[1]
+            calls.append((route.request.method, path))
+            if path == "/operator/session":
+                body = {"authenticated": True, "csrf_token": "fixture"}
+            elif path == "/desktop/state":
+                body = {"available": True, "control_owner": "agent", "control_epoch": 4, "width": 1440, "height": 900}
+            elif path == "/desktop/screenshot":
+                await route.fulfill(status=409, json={"error": {"code": "CAPTURE_BUSY", "message": "busy"}})
+                return
+            elif path == "/status":
+                body = {"model": {"ready": True}, "worker": {"ready": True, "recovery_state": "idle"}}
+            elif path == "/tasks":
+                body = {"tasks": [{"task_id": "attention-task", "version": 1, "status": "waiting_human", "phase": "capability_unavailable", "step_count": 1, "error": {"code": "CAPABILITY_UNAVAILABLE", "message": "Gemini page is not in a safe state to refresh"}, "spec": {"goal": "Inspect current page safely", "execution_mode": "autonomous"}}]}
+            elif path.startswith("/tasks/attention-task/events"):
+                body = {"events": [{"event_id": 1, "event_type": "action.failed", "payload": {"code": "CAPABILITY_UNAVAILABLE", "kind": "gemini_refresh_session"}}]}
+            else:
+                await route.fulfill(status=404, json={})
+                return
+            await route.fulfill(json=body)
+
+        await page.route("**/api/v1/**", api)
+        await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html")
+        reason = page.locator("#task-stop-reason")
+        await reason.wait_for(state="visible")
+        reason_text = await reason.inner_text()
+        assert "CAPABILITY_UNAVAILABLE" in reason_text
+        assert "Gemini page is not in a safe state to refresh" in reason_text
+        assert "Проверка безопасности страницы Gemini" in reason_text
+        assert "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0433\u043e \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u044f \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u044b" in await page.locator("#task-phase").inner_text()
+        assert not any(method == "POST" for method, _ in calls)
     finally:
         if browser:
             await browser.close()

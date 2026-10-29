@@ -16,7 +16,7 @@ if os.name != "nt":
     import fcntl
 
 ROOT = Path(__file__).resolve().parents[1]
-ORIGIN = "http://localhost:8080"
+ORIGIN = "http://localhost:8090"
 TERMINAL_STATUSES = {"succeeded", "failed", "cancelled", "expired"}
 MAX_FRAMES = 64
 MAX_FRAME_BYTES = 32 * 1024 * 1024
