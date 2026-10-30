@@ -20,7 +20,17 @@ docker info --format '{{.MemTotal}}'
 docker inspect --format '{{.HostConfig.Memory}}' <container-name>
 ```
 
-Первая команда выводит доступную VM память в байтах; вторая — лимит контейнера в байтах (`0` означает, что явный лимит не задан). Production-контейнер по-прежнему ограничен 2816 MiB. Завершившийся тест с лимитом browser-контейнера 4 GiB дал FAIL; актуальные результаты и ограничения readiness проверки — в [отчёте готовности](docs/readiness-2026-10-30/REPORT.md). Лимит VM около 8 GiB сам по себе не доказывает готовность production.
+Первая команда выводит доступную VM память в байтах; вторая — лимит контейнера в байтах (`0` означает, что явный лимит не задан). Текущий кандидат проверен в VM около 8 GiB с browser cgroup 4 GiB и maintenance: 15-минутный soak завершился за 900,07 с, 5 902 цикла, пик памяти 50,40%, OOM 0. Это ограниченный результат только для зафиксированной конфигурации. Базовый Compose по умолчанию оставляет browser limit 2816 MiB и выключенный maintenance; overlay кандидата включает 4 GiB и maintenance. При пересоздании кандидата указывайте его явно вместе с direct-egress overlay.
+
+## Запуск установленного readiness-кандидата
+
+Кандидат использует уже собранные образы browser-mcp-readiness-control:candidate и browser-mcp-readiness-browser:candidate. Для пересоздания сервисов с сохранением volumes указывайте все три Compose-файла; без readiness overlay browser limit вернётся к базовым 2816 MiB, а memory maintenance будет выключен:
+
+```powershell
+docker compose -f deploy/compose.yaml -f deploy/compose.direct.yaml -f deploy/compose.readiness-candidate.yaml up -d --no-build
+```
+
+Не добавляйте `--build`: базовые Dockerfile собирают обычные образы, а не readiness candidate tags.
 
 ## Быстрый запуск
 
@@ -122,3 +132,4 @@ docker compose -f deploy/compose.yaml -f deploy/compose.direct.yaml down
 - [Отчёт совместимости Browser Use](docs/04-framework-compatibility.md)
 - [Настройка локального Chrome extension](chrome_extension/README.md)
 - [Ограничения ресурсов во время работы](docs/05-runtime-limits.md)
+- [План проверки совместимости с антибот-системами](docs/15-antibot-compatibility-test-plan.md)
