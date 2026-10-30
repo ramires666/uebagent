@@ -66,3 +66,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-demoqa-tests.ps1
 Первый прогон указывает на ошибки наведения/focus: большинство кликов не попадали в интерактивный target; для web_table worker отклонял ввод без editable focus. Он не доказывает конкретный внутренний механизм модели, не разделяет чистую model latency и orchestration wait, и не устанавливает, что изменения prompt или интерфейса исправят задачи.
 
 Следующий эксперимент сравнит исходный путь с opt-in generic interaction hints при тех же задачах и лимитах. Это прототип, а не уже проверенное исправление; не считать его PASS без новых независимых live результатов.
+
+## Opt-in hints prototype
+
+Прототип добавляет только к generic model текущего screenshot-turn ограниченные metadata видимых интерактивных controls на HTTPS-страницах: максимум 32 элемента и 4 KiB, normalized-1000 center/bounds, tag/role и label до 80 символов. Password controls исключены; значения полей не передаются, допускается только Boolean `value_present` и безопасные состояния вроде `checked`/`expanded`. Labels являются недоверенными данными страницы. Hints сверяются с размерами PNG того же observation, не сохраняются в следующих ходах; feature по умолчанию выключен (`BROWSER_OBSERVATION_HINTS=0`).
+
+Hints лишь помогают модели выбрать target: runtime не перемещает и не snap-ит координаты, не меняет policy, число попыток, лимиты или verifier. Исходный P0-результат остаётся **FAIL**, а release gate — **NO-GO** до критериев выше; для hints пока нет новых live результатов.
+
+Повторить исходные checkbox и web_table с prototype можно в disposable P0 runner, включив `-ObservationHints`; лимиты остаются 180 секунд и 40 шагов:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-demoqa-tests.ps1 -ModelBaseUrl http://host.docker.internal:8080/v1 -ModelAlias auto -ModelProtocol generic -AllowSuspendedTasks -P0Diagnostics -ObservationHints -P0Scenarios 'checkbox,web_table' -RunLabel p0hints1
+```
+
+Проверено локально focused-набором model/runtime/P0 tests: **71 passed**. Полный стабильный unit suite: **455 passed, 6 skipped, 0 failed за 79.55 секунды** ([JUnit](../../runtime/readiness-2026-10-30/pytest-p0-hints.xml)). Этот результат не включает live A/B и не меняет исторический live **FAIL** или release **NO-GO**.

@@ -133,7 +133,8 @@ def test_powershell_p0_export_uses_base64_fallback_when_docker_cp_fails(tmp_path
     if powershell is None:
         pytest.skip("Windows PowerShell is unavailable")
     report = {"schema": "readiness-p0/v1", "status": "BLOCKED", "scenarios": [],
-              "raw_model_output_recorded": False, "typed_values_recorded": False}
+              "raw_model_output_recorded": False, "typed_values_recorded": False,
+              "hints_enabled": False}
     env = os.environ.copy()
     env["P0_REPORT_BASE64"] = base64.b64encode(json.dumps(report).encode()).decode()
     runner = str(ROOT / "scripts" / "run-demoqa-tests.ps1").replace("'", "''")
@@ -159,3 +160,15 @@ $Root='{output_root}'; $RunLabel='offline'; Export-P0Report
     assert result.returncode == 0, result.stderr
     saved = json.loads((tmp_path / "runtime" / "demoqa" / "offline" / "readiness-p0-report.json").read_text())
     assert saved == report
+
+
+@pytest.mark.parametrize("hints_enabled", [False, True])
+def test_partial_and_final_reports_record_explicit_hints_setting(tmp_path, monkeypatch, hints_enabled):
+    from readiness_p0 import _write_report
+
+    output = tmp_path / "p0-report.json"
+    monkeypatch.setenv("READINESS_P0_OUTPUT", str(output))
+    report = _write_report([], 1, final=False, hints_enabled=hints_enabled)
+    assert report["status"] == "IN_PROGRESS"
+    assert report["hints_enabled"] is hints_enabled
+    assert json.loads(output.read_text())["hints_enabled"] is hints_enabled

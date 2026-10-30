@@ -76,10 +76,36 @@ def _mcp(client: httpx.Client, headers: dict[str, str], control: str, name: str,
     return json.loads(result["content"][0]["text"])
 
 
+def _fetch_task_events(client: httpx.Client, headers: dict[str, str], control: str,
+                       task_id: str) -> tuple[list[dict[str, Any]], bool]:
+    """Read up to 1000 events through bounded, advancing MCP cursors."""
+    collected: list[dict[str, Any]] = []
+    cursor = 0
+    for _ in range(10):
+        page = _mcp(client, headers, control, "browser_task_events",
+                    {"task_id": task_id, "after_event_id": cursor, "limit": 100})
+        batch = page.get("events")
+        if not isinstance(batch, list) or len(batch) > 100:
+            raise ValueError("task event page has an invalid shape")
+        if not batch:
+            return collected, False
+        ids = [event.get("event_id") for event in batch if isinstance(event, dict)]
+        if (len(ids) != len(batch) or any(type(event_id) is not int or event_id <= cursor for event_id in ids)
+                or any(ids[index] >= ids[index + 1] for index in range(len(ids) - 1))):
+            raise ValueError("task event cursor did not advance")
+        collected.extend(batch)
+        cursor = ids[-1]
+        if len(batch) < 100:
+            return collected, False
+    return collected, len(batch) == 100
+
+
 def run_scenario(client: httpx.Client, mcp_headers: dict[str, str], worker_headers: dict[str, str],
-                 name: str, spec: dict[str, Any], *, control: str = CONTROL, worker: str = WORKER) -> dict[str, Any]:
+                 name: str, spec: dict[str, Any], *, control: str = CONTROL, worker: str = WORKER,
+                 hints_enabled: bool = False) -> dict[str, Any]:
     result: dict[str, Any] = {"scenario": name, "status": "failed", "steps": 0,
-                              "timeout_s": 180, "max_steps": 40}
+                              "timeout_s": 180, "max_steps": 40,
+                              "hints_enabled": hints_enabled, "hint_control_counts": []}
     started = time.monotonic()
     stage = "worker_preflight"
     task_id = None
@@ -140,11 +166,17 @@ def run_scenario(client: httpx.Client, mcp_headers: dict[str, str], worker_heade
                            "scenario_elapsed_ms": max(0, round((time.monotonic() - started) * 1000))})
             return result
         stage = "task_events"
-        events = _mcp(client, mcp_headers, control, "browser_task_events", {"task_id": task_id, "limit": 100}).get("events", [])
+        events, event_truncated = _fetch_task_events(client, mcp_headers, control, task_id)
         action_kinds: dict[str, int] = {}
         planned_events = []
         event_offsets = []
+        hint_control_counts = []
         for event in events:
+            if event.get("event_type") == "observation.hints_received":
+                payload = event.get("payload", {})
+                count = payload.get("control_count") if isinstance(payload, dict) else None
+                if type(count) is int and 0 <= count <= 32:
+                    hint_control_counts.append(count)
             if event.get("event_type") == "action.planned":
                 kind = event.get("payload", {}).get("kind")
                 if isinstance(kind, str) and kind in TRACEABLE_ACTION_KINDS:
@@ -179,6 +211,8 @@ def run_scenario(client: httpx.Client, mcp_headers: dict[str, str], worker_heade
                        "independent_verified": checked.get("verified") is True,
                        "verification_checks": checked.get("checks", []),
                        "planned_events": planned_events,
+                       "hint_control_counts": hint_control_counts,
+                       "task_events_truncated": event_truncated,
                        "trace": trace.get("records", []),
                        "trace_record_count": len(trace.get("records", []))})
         result["task_elapsed_ms"] = max(0, round((time.monotonic() - task_started) * 1000))
@@ -219,6 +253,10 @@ def main() -> int:
     names = requested.split(",")
     if not names or len(names) > 4 or len(set(names)) != len(names) or set(names) - SCENARIOS.keys():
         raise RuntimeError("READINESS_P0_SCENARIOS must contain up to four known scenarios")
+    hints_flag = os.environ.get("BROWSER_OBSERVATION_HINTS", "0")
+    if hints_flag not in {"0", "1"}:
+        raise RuntimeError("BROWSER_OBSERVATION_HINTS must be 0 or 1")
+    hints_enabled = hints_flag == "1"
     worker_key_path = os.environ.get("WORKER_API_KEY_FILE", "/run/demoqa-secrets/key")
     worker_key = Path(worker_key_path).read_text(encoding="utf-8").strip()
     mcp_key = (Path(os.environ.get("BROWSER_MCP_DATA_DIR", str(DATA_DIR))) / "mcp-token.txt").read_text(encoding="utf-8").strip()
@@ -229,9 +267,10 @@ def main() -> int:
     results = []
     with httpx.Client(timeout=45, trust_env=False) as client:
         for name in names:
-            results.append(run_scenario(client, mcp_headers, worker_headers, name, SCENARIOS[name]))
+            results.append(run_scenario(client, mcp_headers, worker_headers, name, SCENARIOS[name],
+                                        hints_enabled=hints_enabled))
             print(json.dumps(results[-1], ensure_ascii=False), flush=True)
-            _write_report(results, len(names), final=False)
+            _write_report(results, len(names), final=False, hints_enabled=hints_enabled)
             if results[-1].get("status") == "blocked" or results[-1].get("cleanup") == "cancel_unconfirmed":
                 break
             try:
@@ -241,9 +280,9 @@ def main() -> int:
                 idle = False
             if not idle:
                 results[-1].update({"status": "blocked", "stop_reason": "worker_not_idle_after_scenario"})
-                _write_report(results, len(names), final=False)
+                _write_report(results, len(names), final=False, hints_enabled=hints_enabled)
                 break
-    report = _write_report(results, len(names), final=True)
+    report = _write_report(results, len(names), final=True, hints_enabled=hints_enabled)
     print(json.dumps(report, ensure_ascii=False), flush=True)
     return 0 if report["status"] == "PASS" else 2
 
@@ -268,7 +307,8 @@ def _worker_idle(status: dict[str, Any]) -> bool:
             and status.get("recovery_needed") is not True and status.get("resource_violation") is not True)
 
 
-def _write_report(results: list[dict[str, Any]], requested_count: int, *, final: bool) -> dict[str, Any]:
+def _write_report(results: list[dict[str, Any]], requested_count: int, *, final: bool,
+                  hints_enabled: bool = False) -> dict[str, Any]:
     if any(item.get("status") == "blocked" for item in results):
         status = "BLOCKED"
     elif any(item.get("status") != "passed" for item in results):
@@ -278,6 +318,7 @@ def _write_report(results: list[dict[str, Any]], requested_count: int, *, final:
     else:
         status = "IN_PROGRESS"
     report = {"schema": "readiness-p0/v1", "status": status,
+              "hints_enabled": hints_enabled is True,
               "requested_scenarios": requested_count, "completed_scenarios": len(results),
               "viewport": {"width": 1440, "height": 900}, "scenarios": results,
               "raw_model_output_recorded": False, "typed_values_recorded": False}

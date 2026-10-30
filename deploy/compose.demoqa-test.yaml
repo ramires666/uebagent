@@ -30,6 +30,7 @@ services:
       APP_ENV: test
       DEMOQA_DIAGNOSTICS: "1"
       READINESS_ACTION_TRACE: ${READINESS_ACTION_TRACE:-0}
+      BROWSER_OBSERVATION_HINTS: ${BROWSER_OBSERVATION_HINTS:-0}
     entrypoint: ["sh", "-c"]
     command:
       - 'printf %s "$$DEMOQA_WORKER_KEY" > /run/demoqa-secrets/key; unset DEMOQA_WORKER_KEY; exec xvfb-run -a -s "-screen 0 1440x1000x24" python -m worker.app --host 0.0.0.0 --port 7070'

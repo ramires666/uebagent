@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import json
 import secrets
+import struct
 import time
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ from .storage import TaskRepository
 
 
 TERMINAL = {TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.EXPIRED}
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_MAX_INTERACTION_HINTS = 4096
 GOOGLE_SEARCH_ORIGIN = "https://www.google.com"
 HISTORY_ITEMS = 12
 HISTORY_ITEM_BYTES = 3 * 1024
@@ -39,6 +42,49 @@ GEMINI_AUTH_REASON_CODES = {
     "ACCOUNT_CONTROLS_PRESENT", "SIGN_IN_CONTROL_PRESENT", "PROOF_INCOMPLETE",
     "PROBE_UNAVAILABLE", "NOT_GEMINI",
 }
+
+
+def _supports_observation_hints(model: Any) -> bool:
+    """Require an explicitly generic model and a compatible call signature."""
+    model_settings = getattr(model, "settings", None)
+    if getattr(model_settings, "protocol", None) != "generic":
+        return False
+    callback = getattr(model, "next_action", None)
+    if not callable(callback):
+        return False
+    try:
+        parameters = inspect.signature(callback).parameters
+    except (TypeError, ValueError):
+        return False
+    return ("observation_hints" in parameters or
+            any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()))
+
+
+def _png_dimensions(png: bytes) -> tuple[int, int] | None:
+    if len(png) < 24 or png[:8] != _PNG_SIGNATURE or png[12:16] != b"IHDR":
+        return None
+    width, height = struct.unpack(">II", png[16:24])
+    return (width, height) if width > 0 and height > 0 else None
+
+
+def _current_observation_hints(observation: dict[str, Any], screenshot: bytes) -> dict[str, Any] | None:
+    """Keep hints tied to the dimensions and screenshot from the same observation."""
+    width, height = observation.get("width"), observation.get("height")
+    if (type(width) is not int or type(height) is not int or width <= 0 or height <= 0
+            or _png_dimensions(screenshot) != (width, height)):
+        return None
+    hints = observation.get("interaction_hints")
+    if (not isinstance(hints, dict) or type(hints.get("version")) is not int or hints.get("version") != 1
+            or hints.get("coordinate_space") != "normalized_1000"
+            or not isinstance(hints.get("elements"), list) or len(hints["elements"]) > 32):
+        return None
+    try:
+        encoded = json.dumps(hints, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return None
+    if len(encoded) > _MAX_INTERACTION_HINTS:
+        return None
+    return hints
 WORKER_RECOVERY_STATES = {"idle", "recovering", "backoff", "exhausted", "blocked"}
 WORKER_RECOVERY_OUTCOMES = {"recovered", "already_ready", "deferred", "blocked", "failed"}
 WORKER_RECOVERY_REASONS = {
@@ -1309,6 +1355,7 @@ class TaskRunner:
             history = self.histories.setdefault(task_id, [])
             begin_task = getattr(self.model, "begin_task", None)
             managed_model = callable(begin_task)
+            model_accepts_observation_hints = _supports_observation_hints(self.model)
             if managed_model:
                 begin_task(task_id)
             resume_verification = (not fresh_run and record.phase == "verification_required"
@@ -1382,6 +1429,16 @@ class TaskRunner:
                                                                "verified": False, "checks": check.get("checks", [])})
                             return
                 screenshot = base64.b64decode(observation["screenshot_png_b64"], validate=True)
+                model_kwargs: dict[str, Any] = {}
+                observation_hints = (_current_observation_hints(observation, screenshot)
+                                     if model_accepts_observation_hints else None)
+                if observation_hints is not None:
+                    model_kwargs["observation_hints"] = observation_hints
+                    self.repository.add_event(task_id, "observation.hints_received", {
+                        "control_count": len(observation_hints["elements"]),
+                        "width": observation["width"], "height": observation["height"],
+                        "coordinate_space": "normalized_1000",
+                    })
                 model_goal = (
                     record.spec.goal
                     + "\nTask allowed origins (exact): " + json.dumps(record.spec.allowed_origins, ensure_ascii=False)
@@ -1423,7 +1480,8 @@ class TaskRunner:
                 if managed_model:
                     try:
                         self._task_activity(task_id, "thinking")
-                        action = await self.model.next_action(model_goal, screenshot, history[-12:], current_url=current_url)
+                        action = await self.model.next_action(model_goal, screenshot, history[-12:],
+                                                              current_url=current_url, **model_kwargs)
                     except ModelError as exc:
                         if exc.category != "invalid_key_chord":
                             raise
@@ -1453,7 +1511,8 @@ class TaskRunner:
                     try:
                         self._task_activity(task_id, "thinking")
                         action = await self.model.next_action(
-                            model_goal + "\nCurrent page URL: " + current_url, screenshot, history[-12:])
+                            model_goal + "\nCurrent page URL: " + current_url, screenshot, history[-12:],
+                            **model_kwargs)
                     except ModelError as exc:
                         if exc.category != "invalid_key_chord":
                             raise

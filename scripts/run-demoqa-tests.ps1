@@ -17,6 +17,7 @@ param(
     [switch]$RemoveTestVolume,
     [switch]$DiagnosticGate,
     [switch]$P0Diagnostics,
+    [switch]$ObservationHints,
     [string[]]$P0Scenarios = @('checkbox', 'web_table'),
     [ValidateRange(0, 600)][int]$DiagnosticHoldSeconds = 120,
     [ValidatePattern('^[A-Za-z0-9_-]{1,32}$')][string]$ProbeFramePrefix = 'frame',
@@ -34,7 +35,7 @@ $managedDemoqaEnv = @(
     'DEMOQA_MODEL_BASE_URL', 'DEMOQA_MODEL_ALIAS', 'DEMOQA_MODEL_PROTOCOL', 'DEMOQA_BROWSER_MEMORY_LIMIT',
     'DEMOQA_WORKER_KEY', 'DEMOQA_CASES', 'DEMOQA_EXTENDED_COMPLEX', 'DEMOQA_RUN_LABEL',
     'DEMOQA_FRAME_PREFIX', 'DEMOQA_FONT_VARIANTS', 'DEMOQA_DIAGNOSTIC_HOLD_SECONDS',
-    'READINESS_ACTION_TRACE', 'READINESS_P0_SCENARIOS'
+    'READINESS_ACTION_TRACE', 'READINESS_P0_SCENARIOS', 'BROWSER_OBSERVATION_HINTS'
 )
 $priorDemoqaEnv = @{}
 $processEnv = [Environment]::GetEnvironmentVariables('Process')
@@ -289,7 +290,7 @@ function Export-P0Report {
     catch { Remove-Item -LiteralPath $target -Force; throw 'P0 report was not valid JSON.' }
     if ($report.schema -ne 'readiness-p0/v1' -or $report.status -notin @('PASS', 'FAIL', 'BLOCKED', 'IN_PROGRESS') -or
         $report.scenarios.Count -gt 4 -or $report.raw_model_output_recorded -ne $false -or
-        $report.typed_values_recorded -ne $false) {
+        $report.typed_values_recorded -ne $false -or $report.hints_enabled -isnot [bool]) {
         Remove-Item -LiteralPath $target -Force
         throw 'P0 report did not match the expected bounded schema.'
     }
@@ -313,6 +314,9 @@ try {
     }
     if ($P0Diagnostics -and ($ProbeOnly -or $DiagnosticGate -or $ReadinessChecks -or $TaskControlChecks -or $RunCasesAfterReadableCandidate)) {
         throw 'P0Diagnostics cannot be combined with probe, gate, readiness, task-control, or readability-gated modes.'
+    }
+    if ($ObservationHints -and -not $P0Diagnostics) {
+        throw 'ObservationHints is currently available only with P0Diagnostics.'
     }
     if ($P0Diagnostics -and ($P0Scenarios.Count -eq 0 -or $P0Scenarios.Count -gt 4 -or @($P0Scenarios | Select-Object -Unique).Count -ne $P0Scenarios.Count)) {
         throw 'P0Scenarios must contain one to four unique allowlisted scenarios.'
@@ -344,6 +348,8 @@ try {
         $env:READINESS_ACTION_TRACE = '1'
         $env:READINESS_P0_SCENARIOS = ($P0Scenarios -join ',')
     }
+    if ($ObservationHints) { $env:BROWSER_OBSERVATION_HINTS = '1' }
+    else { $env:BROWSER_OBSERVATION_HINTS = '0' }
     if ($ExtendedComplex) { $env:DEMOQA_EXTENDED_COMPLEX = '1' } else { Remove-Item Env:DEMOQA_EXTENDED_COMPLEX -ErrorAction SilentlyContinue }
 
     # Building the isolated image is safe while production is live and ensures it is ready
@@ -484,8 +490,10 @@ try {
     }
 
     if ($P0Diagnostics) {
+        $hintFlag = if ($ObservationHints) { '1' } else { '0' }
         $p0Args = (Get-ComposeArgs) + @('exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_ACTION_TRACE=1',
-            '-e', "READINESS_P0_SCENARIOS=$($P0Scenarios -join ',')", '-e', 'READINESS_P0_OUTPUT=/app/runtime/control-data/readiness-p0-report.json',
+            '-e', "READINESS_P0_SCENARIOS=$($P0Scenarios -join ',')", '-e', "BROWSER_OBSERVATION_HINTS=$hintFlag",
+            '-e', 'READINESS_P0_OUTPUT=/app/runtime/control-data/readiness-p0-report.json',
             'control', 'python', '/app/scripts/readiness_p0.py')
         $p0ReportAttempted = $true
         $p0Exit = Invoke-RunnerStream -RunnerArgs $p0Args
@@ -618,6 +626,7 @@ finally {
     Remove-Item Env:DEMOQA_DIAGNOSTIC_HOLD_SECONDS -ErrorAction SilentlyContinue
     Remove-Item Env:READINESS_ACTION_TRACE -ErrorAction SilentlyContinue
     Remove-Item Env:READINESS_P0_SCENARIOS -ErrorAction SilentlyContinue
+    Remove-Item Env:BROWSER_OBSERVATION_HINTS -ErrorAction SilentlyContinue
     foreach ($name in $managedDemoqaEnv) {
         if ($priorDemoqaEnv[$name].Present) {
             [Environment]::SetEnvironmentVariable($name, $priorDemoqaEnv[$name].Value, 'Process')

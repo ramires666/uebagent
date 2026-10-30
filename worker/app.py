@@ -27,6 +27,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from worker.readiness_trace import ReadinessActionTrace
+from worker.observation_hints import collect_interaction_hints, enabled as observation_hints_enabled
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1427,12 +1428,15 @@ class BrowserRuntime:
                 size = await self._page.evaluate("() => ({width: innerWidth, height: innerHeight})")
             except Exception:
                 size = VIEWPORT
+            width, height = int(size.get("width", VIEWPORT["width"])), int(size.get("height", VIEWPORT["height"]))
             observation_id = str(uuid.uuid4())
             self._last_observation_id = observation_id
-            return {**self.status_base(), "page_id": self.page_id, "observation_id": observation_id,
-                    "width": int(size.get("width", VIEWPORT["width"])),
-                    "height": int(size.get("height", VIEWPORT["height"])),
-                    "url": await self._adapter.url(), "screenshot_png_b64": base64.b64encode(screenshot).decode("ascii")}
+            observation = {**self.status_base(), "page_id": self.page_id, "observation_id": observation_id,
+                           "width": width, "height": height,
+                           "url": await self._adapter.url(), "screenshot_png_b64": base64.b64encode(screenshot).decode("ascii")}
+            if observation_hints_enabled():
+                observation["interaction_hints"] = await collect_interaction_hints(self._page, width, height)
+            return observation
         finally:
             self._observation_pending = False
             if acquired:
