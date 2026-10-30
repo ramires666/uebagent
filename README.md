@@ -133,3 +133,4 @@ docker compose -f deploy/compose.yaml -f deploy/compose.direct.yaml down
 - [Настройка локального Chrome extension](chrome_extension/README.md)
 - [Ограничения ресурсов во время работы](docs/05-runtime-limits.md)
 - [План проверки совместимости с антибот-системами](docs/15-antibot-compatibility-test-plan.md)
+- [План устранения production gaps](docs/16-production-remediation-plan.md)
