@@ -1,0 +1,63 @@
+{
+  "schema": "readiness-public-web-summary/v1",
+  "status": "DIAGNOSTIC",
+  "run_label": "public-final3",
+  "started_at_utc": "2026-10-30T19:02:30.139270+00:00",
+  "ended_at_utc": "2026-10-30T19:02:45.257122+00:00",
+  "guardrails": {
+    "accounts_or_auth": false,
+    "llm_calls": false,
+    "captcha_bypass": false,
+    "one_context_page": true,
+    "same_worker_browser_generation": true
+  },
+  "sites": [
+    {
+      "site": "demoqa",
+      "origin": "https://demoqa.com",
+      "status": "PUBLIC_PAGE_AVAILABLE",
+      "navigation_applied": true,
+      "positive_proof": true,
+      "challenge_detected": false,
+      "observed_expected_origin": true,
+      "screenshot": "public-web/demoqa.png"
+    },
+    {
+      "site": "amazon",
+      "origin": "https://www.amazon.com",
+      "status": "PUBLIC_PAGE_AVAILABLE",
+      "navigation_applied": true,
+      "positive_proof": true,
+      "challenge_detected": false,
+      "observed_expected_origin": true,
+      "screenshot": "public-web/amazon.png"
+    },
+    {
+      "site": "ebay",
+      "origin": "https://www.ebay.com",
+      "status": "PUBLIC_PAGE_AVAILABLE",
+      "navigation_applied": true,
+      "positive_proof": true,
+      "challenge_detected": false,
+      "observed_expected_origin": true,
+      "screenshot": "public-web/ebay.png"
+    },
+    {
+      "site": "sannysoft",
+      "origin": "https://bot.sannysoft.com",
+      "status": "PUBLIC_PAGE_AVAILABLE",
+      "navigation_applied": true,
+      "positive_proof": true,
+      "challenge_detected": false,
+      "observed_expected_origin": true,
+      "screenshot": "public-web/sannysoft.png"
+    }
+  ],
+  "visual_review": {
+    "demoqa": "Expected public page content visible.",
+    "amazon": "Guest home page visible; signed out; no challenge observed.",
+    "ebay": "Guest home page visible; signed out; no challenge observed.",
+    "sannysoft": "Page available; WebDriver missing passed, WebDriverAdvanced passed, Chrome (New) missing failed, Permissions prompt present, PluginsLength and Languages passed."
+  },
+  "interpretation": "All four guest pages were available with positive page proof. This is not an anti-bot pass, account-authentication test, or CAPTCHA test."
+}

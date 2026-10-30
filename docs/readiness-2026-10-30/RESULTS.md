@@ -1,54 +1,15 @@
 # Readiness evidence — 2026-10-30
 
-## Текущий статус — follow-up 30 октября 2026
+## Текущий результат — 31 октября 2026, 00:02 (Asia/Qyzylorda)
 
-**Итог остаётся NO-GO для production.** Предыдущие значения 6/8 live UI PASS и два P0 FAIL ниже — исторический снимок до opt-in observation hints; текущие результаты их заменяют для ограниченного disposable набора:
+**Production не развёрнут; общий статус NO-GO.** Ограниченные pre-deployment проверки для перечисленных сценариев завершены. Это не подтверждает общую готовность или аккаунтные сессии.
 
-- Docker Desktop VM cap 8 GiB; third bounded maintenance soak PASS: 900.07 s, 5,902 cycles, 59/59 maintenance requests, 141 host samples over 895.54 s, peak memory 50.40%, PID peak 32.23%, median growth 5.66% of the 4 GiB limit, OOM/OOM-kill 0. Shared fingerprint matched, generation stable, one context/page. The previous no-maintenance runs remain FAIL. This bounded pass does not establish general production capacity or close other release gates. Postflight: ready/idle, 30 terminal tasks, none suspended, control owner none. [Allowlisted timeline](evidence/soak-maintenance-pass.json).
+- Полный pytest на `ec922b8`: **533 passed, 8 skipped, 0 failed** из 541 теста за 94,77 с. Последующая малая правка quoting runner не вошла в этот прогон. [JUnit summary](evidence/unit-suite-manual-public-final.json).
+- Manual `public-manual2`: навигация и target click прошли; opt-out и навигация от agent получили `POLICY_DENIED`; один context/page сохранён. [Сводка](evidence/manual-browsing-summary.json).
+- Public `public-final3` (30 октября, 19:02 UTC): DemoQA, Amazon, eBay и Sannysoft имели положительные признаки ожидаемого origin на гостевых страницах без авторизации, model calls и CAPTCHA bypass. Скриншоты: [DemoQA](evidence/public-web/demoqa.png), [Amazon](evidence/public-web/amazon.png), [eBay](evidence/public-web/ebay.png), [Sannysoft](evidence/public-web/sannysoft.png). Это доступность страниц, не anti-bot PASS. На Sannysoft WebDriver missing и WebDriverAdvanced passed; Chrome (New) missing failed; permissions prompt присутствовал. [Структурированная сводка](evidence/public-web-summary.json).
+- Maintenance soak `soak-maint2`: **PASS** 900,07 с / 5 902 цикла; 59/59 maintenance requests; память 50,40%, PIDs 32,23%, median growth 5,66%, OOM delta 0. Ограничено VM 8 GiB, browser cgroup 4 GiB и фиксированной workload. Два ранних no-maintenance soak остаются FAIL. [Evidence](evidence/soak-maintenance-pass.json).
 
-- Checkbox: 3/3 свежих PASS; web_table: 3/3 свежих PASS.
-- Полный hints-enabled G3: 8/8 PASS с независимой проверкой, лимит 120 секунд / 30 шагов.
-- Latest full pytest: **518 passed, 8 skipped, 0 failed** in 94.40 s on source revision `d077f45`; [JUnit-derived file groups](evidence/unit-suite-maintenance-final.json). This host suite does not cover later manual worker status-report edits. The 900-second maintenance soak passed within its tested configuration; intrusive memory-report failed and cannot classify renderer memory. Public/manual web-flow validation and other release gates remain open. [GC contrast summary](evidence/memory-gc4gb1-summary.json).
-- Bounded runtime integration: queued cancel → CANCELLED; in-flight cancel → RECOVERING; overlay → waiting_human/verification_required. Lifecycle restart/uncertain-response rerun PASS в bounded disposable run: recover/review сохраняется, redispatch отсутствует; concurrent create отклонён как PROFILE_BUSY.
-- Hints включались только в disposable test worker; feature default-off и не развёрнута в production. Lifecycle rerun и synthetic cookie-source bridge PASS; cookie source использует synthetic extension protocol и не является реальным Chrome E2E. Оба capacity soak FAIL: soak15m1 (VM 4 GiB/browser 2,75 GiB) остановился через 359,75 с при 99,88%; soak8gvm4gb1 (VM 8 GiB/browser 4 GiB) остановился через 670,56 с при 99,998% и ошибках навигации/cleanup. Увеличение лимитов продлило прогон, но не решило проблему. Подробная сравнительная timeline: [allowlisted evidence](evidence/soak-8gvm-4gb-failed.json).
-
-Lifecycle/cookie и диагностика memory probes: [lifecycle-cookie2-summary.json](evidence/lifecycle-cookie2-summary.json), [memoryprobe1-summary.json](evidence/memoryprobe1-summary.json), [memorymixed1-summary.json](evidence/memorymixed1-summary.json).
-
-- Memory diagnostics: the five-run matched-seed attribution matrix showed Web Content RSS growth across all variants; it did not identify a subsystem or prove a leak. The separate periodic-GC diagnostic completed six successful requests over 600 cycles; RSS was about 337 MiB at cycle 600 versus about 654 MiB for baseline. Intrusive memory-report failed after about 15 seconds and lost renderer identity, so it cannot classify peak memory. The maintenance-enabled 900-second soak passed within its tested configuration: 900.07 s, 5,902 cycles, 59/59 successful maintenance requests, 50.40% memory peak, 32.23% PID peak, 5.66% growth, OOM=0. This is not a universal capacity claim. See [REPORT.md](REPORT.md), [periodic-GC summary](evidence/periodic-gc-600-summary.json), and [maintenance soak](evidence/soak-maintenance-pass.json).
-
-Эта ведомость отражает проверенные локальные артефакты и переданные оператором результаты. Секреты и модельные пути не сохраняются. Сводный PASS отдельного сценария не подменяет gate полного стека.
-
-## Актуальный статус оставшихся прогонов
-
-**Production release остаётся NO-GO до закрытия оставшихся gates.** Значения ниже разделяют подтверждённые bounded результаты и незавершённые прогоны.
-
-| Gate | Подтверждено | Ещё ожидается |
-|---|---|---|
-| P0 / G3 | checkbox 3/3; web_table 3/3; полный G3 8/8, независимый verifier, 120 с / 30 шагов | Ничего для bounded P0/G3 набора; rollout не разрешён, hints default-off. |
-| G0 | 475 PASS / 8 SKIP / 0 FAIL на коммите 7bc09cf, 88,30 с | 6 сфокусированных тестов harness PASS на a0cc278; полный suite на этой ревизии не запускался. |
-| G2 | Runtime cancel, overlay и synthetic cookie bridge integration | Реальный Chrome E2E не выполнен. Account identity остаётся guidance-based, не typed hard proof. |
-| G4 | Lifecycle bounded run PASS: uncertain reply и RUNNING restart сохраняют review/recovery, один click effect на сценарий, ноль redispatch; concurrent create → PROFILE_BUSY. | Расширение охвата за пределы disposable synthetic fixture. |
-| G5 | soak15m1: 359,75 с, 99,88% peak; soak8gvm4gb1: 670,56 с, 99,998% peak, 3 446 cycles; оба run fail. | FAIL: повторный run достиг memory cap, 106/900s coverage target not met, growth 11,22% hard limit, `MANUAL_ACTION_NOT_APPLIED:navigate` and cleanup/idle failure. PID peak 36,91%; OOM counters unchanged in saved samples. Increased budgets lengthened the run but did not fix it. [Evidence](evidence/soak-8gvm-4gb-failed.json). |
-| G6 | Candidate → baseline → candidate deploy/rollback прошёл | DB migration gate N/A для candidate: schema не менялась от базы 96; изменён storage redaction regex. |
-
-Первый неуспешный run сохранён в [soak-failed-1.json](evidence/soak-failed-1.json); повторный run с увеличенными лимитами — в [soak-8gvm-4gb-failed.json](evidence/soak-8gvm-4gb-failed.json), 106 complete samples. Успешный soak-summary.json не создан. Lifecycle/cookie bounded summary не заменяет capacity gate. Ресурсное сравнение использует только измеренные samples.
-
-**Test-configuration wiring:** MODEL_PROTOCOL передаётся control, BROWSER_OBSERVATION_HINTS — browser в disposable проверки. Это не включает feature в production.
-
-**Security/product scope:** нет доказательства at-rest encryption или vault; не заявляется готовность всех авторизованных сайтов. Cookie-source integration и проверка целевого account остаются отдельными условиями применения.
-
-## Исторический итог исходного аудита (до opt-in hints)
-
-**Readiness audit завершён: NO-GO.** Из восьми различных live UI сценариев шесть прошли независимую проверку (`text_box`, `invalid_email`, `notify_then_click`, `radio`, `double_click`, `dynamic`); два не прошли (`checkbox`, `web_table`). G6 candidate/rollback/redeploy PASS с ограничением по control DB migration marker. Unit baseline, security matrix и model smoke прошли в своих заявленных пределах. Эти результаты не дают production GO при двух live path failures и неполном capacity/in-flight evidence.
-
-### Исправления в этой ветке
-
-- **Продукт:** чувствительные пользовательские значения редактируются в API/MCP ответах; повторные секретные значения создаются заново вместо копирования из прошлой задачи.
-- **Продукт:** ограничено чтение chunked HTTP response body; при неизвестном результате отмена остаётся `RECOVERING` и требует review, без ложного терминального `CANCELLED`.
-- **Продукт:** обновлён generic prompt — доверие к источникам, допустимые action shapes, работа с деревьями и формами. Это не исправляет все ошибки модели: checkbox и web_table всё ещё не проходят live проверки.
-- **Тестовая инфраструктура:** уточнены test URLs и явное отключение cookie sync; исправлены exit/report/cleanup пути, владение старыми fixtures, quoting для Windows Docker и extension worker startup.
-- **Проверка:** шесть native runtime wrapper тестов отмечены как skipped в итоговом pytest и не исполнялись на host; `test_runtime_audit` проходил отдельно в disposable browser image. Не считать тестовую инфраструктуру product capability evidence.
-
+Реальное поведение аккаунтов/сессий, protected-site и CAPTCHA flows, а также dialogs/uploads/frames/multiple windows не проверялись. Production rollout ожидает явного разрешения пользователя.
 ## Evidence
 
 | Gate | Команда / сценарий | Статус | Измеренный результат | Evidence |

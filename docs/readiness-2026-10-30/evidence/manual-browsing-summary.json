@@ -1,0 +1,12 @@
+{
+  "schema": "readiness-manual-browsing-summary/v1",
+  "status": "DIAGNOSTIC",
+  "run_label": "public-manual2",
+  "scenario": "cross_origin",
+  "default_navigation_enabled": true,
+  "default_click_reached_target": true,
+  "opt_out_error_code": "POLICY_DENIED",
+  "agent_error_code": "POLICY_DENIED",
+  "single_page_preserved": true,
+  "interpretation": "Manual cross-origin navigation and target click succeeded; opt-out and agent-initiated navigation were both denied by policy. One context/page was preserved."
+}
