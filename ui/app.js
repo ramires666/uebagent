@@ -200,13 +200,36 @@
     if (code === 'COOKIE_SYNC_UNSUPPORTED') return { code, text: 'Часть cookies этого сайта пока не поддерживается; задача не запущена.' };
     return null;
   }
+  const MASKED_INPUT_VALUE = '[\u0441\u043a\u0440\u044b\u0442\u043e]';
+  function isSensitiveInputKey(key) {
+    const words = String(key).replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const sensitive = new Set(['password', 'passwd', 'secret', 'token', 'cookie', 'authorization', 'credential', 'auth', 'otp', 'totp', 'mfa', 'pin', 'passcode']);
+    return words.some(word => sensitive.has(word))
+      || ((words.includes('api') || words.includes('access') || words.includes('private')) && words.includes('key'))
+      || (words.includes('session') && words.includes('id'))
+      || (words.includes('verification') && words.some(word => ['code', 'token', 'otp'].includes(word)));
+  }
   function safeInputPreview(value) {
     if (Array.isArray(value)) return value.map(item => safeInputPreview(item));
     if (!value || typeof value !== 'object') return value;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, /password|passwd|token|secret|otp|auth|api.?key|verification/i.test(key) ? '[скрыто]' : safeInputPreview(item)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, isSensitiveInputKey(key) ? MASKED_INPUT_VALUE : safeInputPreview(item)]));
+  }
+  function redactedSensitiveInputPaths(value, prefix = '') {
+    if (Array.isArray(value)) return value.flatMap((item, index) => redactedSensitiveInputPaths(item, `${prefix}[${index}]`));
+    if (!value || typeof value !== 'object') return [];
+    const paths = [];
+    for (const [key, item] of Object.entries(value)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (isSensitiveInputKey(key) && item === '[REDACTED]') {
+        paths.push(path);
+      } else {
+        paths.push(...redactedSensitiveInputPaths(item, path));
+      }
+    }
+    return paths;
   }
   function restoreMaskedInputs(original, edited, key = '') {
-    if (/password|passwd|token|secret|otp|auth|api.?key|verification/i.test(key) && edited === '[скрыто]') return original;
+    if (isSensitiveInputKey(key) && edited === MASKED_INPUT_VALUE) return original;
     if (Array.isArray(edited)) return edited.map((value, index) => restoreMaskedInputs(Array.isArray(original) ? original[index] : undefined, value));
     if (!edited || typeof edited !== 'object') return edited;
     const restored = {};
@@ -251,6 +274,10 @@
     state.taskSubmitAttempt = null;
     state.repeatSpec = JSON.parse(JSON.stringify(task.spec || {}));
     const spec = state.repeatSpec;
+    const redactedInputs = redactedSensitiveInputPaths(spec.user_inputs);
+    if (redactedInputs.length) {
+      showMessage('task-notice', `\u0421\u0435\u043a\u0440\u0435\u0442\u043d\u044b\u0435 \u043f\u043e\u043b\u044f \u043d\u0435 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u044e\u0442\u0441\u044f: ${redactedInputs.slice(0, 8).join(', ')}. \u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0437\u0430\u043d\u043e\u0432\u043e \u0438\u043b\u0438 \u0443\u0434\u0430\u043b\u0438\u0442\u0435 \u0438\u0437 JSON \u043f\u0435\u0440\u0435\u0434 \u043f\u043e\u0432\u0442\u043e\u0440\u043e\u043c.`, 'warn');
+    }
     $('#task-goal').value = spec.goal ?? task.goal ?? '';
     $('#task-verbatim-text').value = spec.verbatim_text ?? '';
     $('#task-gemini-prompt').value = spec.workflow === 'gemini_prompt_submit' ? (spec.verbatim_text ?? '') : '';
@@ -899,6 +926,14 @@
       for (const key of ['task_id', 'status', 'version', 'result', 'error', 'principal_id', 'created_at', 'updated_at', 'idempotency_key']) delete base[key];
       const requestSpec = { ...base, profile_id: $('#task-profile').value || 'default', goal, workflow: fastWorkflow ? 'gemini_prompt_submit' : 'agent', verbatim_text: fastWorkflow ? fastPrompt : ($('#task-verbatim-text').value || null), allowed_origins: allowedOrigins, execution_mode: fastWorkflow ? 'autonomous' : $('#task-execution-mode').value, sync_cookies: $('#task-sync-cookies').checked };
       if (fastWorkflow) { requestSpec.user_inputs = {}; requestSpec.secret_refs = []; requestSpec.policy_grant_id = null; requestSpec.success_conditions = []; requestSpec.site_capabilities = ['gemini_prompt_submit']; }
+      const unreentered = state.repeatSpec
+        ? redactedSensitiveInputPaths(requestSpec.user_inputs)
+        : [];
+      if (unreentered.length) {
+        showMessage('task-notice', `\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0437\u0430\u043d\u043e\u0432\u043e \u0438\u043b\u0438 \u0443\u0434\u0430\u043b\u0438\u0442\u0435 \u0441\u0435\u043a\u0440\u0435\u0442\u043d\u044b\u0435 \u043f\u043e\u043b\u044f \u043f\u0435\u0440\u0435\u0434 \u043f\u043e\u0432\u0442\u043e\u0440\u043e\u043c: ${unreentered.slice(0, 8).join(', ')}.`, 'error');
+        button.disabled = false;
+        return;
+      }
       if (!state.repeatSpec && !requestSpec.site_capabilities?.length && geminiCapability) requestSpec.site_capabilities = ['gemini_prompt_submit'];
       const fingerprint = JSON.stringify(requestSpec);
       if (!state.taskSubmitAttempt || state.taskSubmitAttempt.fingerprint !== fingerprint) state.taskSubmitAttempt = { fingerprint, key: randomKey() };

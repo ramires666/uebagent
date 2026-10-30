@@ -528,6 +528,94 @@ def test_repeating_generic_task_can_switch_workflow_without_losing_original_opti
         browser.close()
 
 
+def test_repeat_does_not_replay_redacted_sensitive_inputs_and_preserves_public_values():
+    ui = Path(__file__).resolve().parents[1] / 'ui'
+    original = {
+        'task_id': 'redacted-task', 'status': 'failed', 'version': 2,
+        'spec': {
+            'profile_id': 'default', 'goal': 'Use the supplied details',
+            'verbatim_text': 'Exact public payload\nsecond line',
+            'allowed_origins': ['https://example.test'], 'execution_mode': 'supervised',
+            'sync_cookies': False, 'workflow': 'agent', 'success_conditions': [],
+            'user_inputs': {'name': 'Alice', 'password': '[REDACTED]', 'credential': '[REDACTED]',
+                            'nested': {'region': 'north', 'token': '[REDACTED]'},
+                            'entries': [{'apiKey': '[REDACTED]', 'pin': '[REDACTED]',
+                                         'session_id': '[REDACTED]', 'public': 'unchanged'},
+                                        {'label': 'second'}]},
+            'secret_refs': [], 'site_capabilities': [], 'limits': {'timeout_s': 321, 'max_steps': 17},
+            'idempotency_key': 'redacted-original-key',
+        },
+    }
+    posted = []
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except Exception as exc:
+            pytest.skip(f'Playwright Chromium unavailable: {exc}')
+        page = browser.new_page(viewport={'width': 1440, 'height': 900})
+
+        def respond(route):
+            req = route.request
+            path = req.url.split('test.local', 1)[-1].split('?', 1)[0]
+            if path.startswith('/api/v1/'):
+                if path == '/api/v1/operator/session': data = {'authenticated': True, 'local_ui': True, 'csrf_token': 'fixture'}
+                elif path == '/api/v1/status': data = {'profiles': [{'profile_id': 'default', 'label': 'Default'}]}
+                elif path == '/api/v1/tasks' and req.method == 'POST':
+                    posted.append(json.loads(req.post_data)); route.fulfill(json={'task_id': 'new-task'}); return
+                elif path == '/api/v1/tasks': data = {'tasks': [original]}
+                else: data = {}
+                route.fulfill(json=data); return
+            file = ui / ('index.html' if path == '/' else path.lstrip('/'))
+            if file.is_file():
+                route.fulfill(body=file.read_bytes(), content_type={'html': 'text/html; charset=utf-8', 'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8'}.get(file.suffix[1:], 'text/plain'))
+            else: route.fulfill(status=404)
+
+        page.route('http://test.local/**', respond)
+        page.goto('http://test.local/')
+        page.locator('#tab-tasks').click()
+        card = page.locator('.task-row').filter(has_text='redacted-task')
+        card.locator('.task-controls button').first.click()
+        options = json.loads(page.locator('#task-advanced-options').input_value())
+        assert options['user_inputs']['password'] != '[REDACTED]'
+        assert options['user_inputs']['nested']['token'] != '[REDACTED]'
+        assert options['user_inputs']['credential'] != '[REDACTED]'
+        assert options['user_inputs']['entries'][0]['apiKey'] != '[REDACTED]'
+        assert options['user_inputs']['entries'][0]['pin'] != '[REDACTED]'
+        assert options['user_inputs']['entries'][0]['session_id'] != '[REDACTED]'
+
+        page.locator('#task-form-submit').click()
+        assert posted == []
+        expect(page.locator('#task-create-card')).to_be_visible()
+        expect(page.locator('#task-notice')).to_contain_text('password')
+        expect(page.locator('#task-notice')).to_contain_text('apiKey')
+        expect(page.locator('#task-notice')).to_contain_text('session_id')
+
+        options['user_inputs']['entries'].reverse()
+        options['user_inputs']['entries'][1]['apiKey'] = '[REDACTED]'
+        page.locator('#task-advanced-options').fill(json.dumps(options, ensure_ascii=False))
+        page.locator('#task-form-submit').click()
+        assert posted == []
+        expect(page.locator('#task-create-card')).to_be_visible()
+        expect(page.locator('#task-notice')).to_contain_text('apiKey')
+
+        options['user_inputs']['password'] = 'new-password'
+        del options['user_inputs']['nested']['token']
+        del options['user_inputs']['credential']
+        options['user_inputs']['entries'][1]['apiKey'] = 'new-api-key'
+        del options['user_inputs']['entries'][1]['pin']
+        options['user_inputs']['entries'][1]['session_id'] = 'new-session'
+        page.locator('#task-advanced-options').fill(json.dumps(options, ensure_ascii=False))
+        page.locator('#task-form-submit').click()
+        expect(page.locator('#task-create-card')).to_be_hidden()
+        assert len(posted) == 1
+        assert posted[0]['user_inputs'] == {
+            'name': 'Alice', 'password': 'new-password', 'nested': {'region': 'north'},
+            'entries': [{'label': 'second'}, {'apiKey': 'new-api-key', 'session_id': 'new-session', 'public': 'unchanged'}],
+        }
+        assert posted[0]['verbatim_text'] == 'Exact public payload\nsecond line'
+        browser.close()
+
+
 @pytest.mark.parametrize(('auth_status', 'pill_text', 'detail_text'), [
     ('signed_in', 'Подтверждён', 'Сессионный вход подтверждён.'),
     ('signed_out', 'Нужно войти', 'Нужно войти в Gemini.'),
