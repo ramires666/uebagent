@@ -39,12 +39,27 @@
     actionQueue: [], queueBytes: 0, draining: false, inputError: false,
     pendingPointer: null, pendingPointerClient: null, pendingPointerGeometry: null, lastPointer: null, lastPointerClient: null, lastPointerGeometry: null, lastPointerSentAt: 0, pendingWheel: null, pointerFlushTimer: null,
     captureBackoffMs: 0, captureRetryAt: 0, controlError: false,
-    taskSubmitting: false, taskSubmitAttempt: null
+    taskSubmitting: false, taskSubmitAttempt: null,
+    allowCrossOriginNavigation: true
   };
 
   function setText(id, value) {
     const node = $(id);
     if (node) node.textContent = value == null ? '' : String(value);
+  }
+
+  const NAVIGATION_PREFERENCE_KEY = 'browser-mcp.allow-cross-origin-navigation';
+  function loadNavigationPreference() {
+    try {
+      const stored = localStorage.getItem(NAVIGATION_PREFERENCE_KEY);
+      return stored === 'false' ? false : true;
+    } catch (_) { return true; }
+  }
+
+  function saveNavigationPreference(value) {
+    ui.allowCrossOriginNavigation = value === true;
+    try { localStorage.setItem(NAVIGATION_PREFERENCE_KEY, String(ui.allowCrossOriginNavigation)); }
+    catch (_) { /* The current page setting still applies if storage is unavailable. */ }
   }
 
   function updateTaskComposer() {
@@ -316,7 +331,8 @@
       const response = await fetchBounded('/desktop/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ control_epoch: epoch, action })
+        body: JSON.stringify({ control_epoch: epoch, action,
+          allow_cross_origin_navigation: ui.allowCrossOriginNavigation })
       });
       const type = response.headers.get('content-type') || '';
       const result = type.includes('application/json') ? await response.json() : {};
@@ -915,6 +931,13 @@
     } catch (error) {
       showNotice(error.message || 'Введите корректный HTTPS-адрес.', 'error');
     }
+  });
+
+  const crossOriginNavigation = $('allow-cross-origin-navigation');
+  ui.allowCrossOriginNavigation = loadNavigationPreference();
+  crossOriginNavigation.checked = ui.allowCrossOriginNavigation;
+  crossOriginNavigation.addEventListener('change', () => {
+    saveNavigationPreference(crossOriginNavigation.checked);
   });
 
   $('task-command-form').addEventListener('submit', async (event) => {

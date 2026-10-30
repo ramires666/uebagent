@@ -46,6 +46,16 @@ document.querySelector('#target').onclick=()=>{window.__targetEffectCount++;docu
 document.querySelector('#overlay').onclick=()=>{window.__overlayEffectCount++;document.querySelector('#overlay-count').textContent=String(window.__overlayEffectCount)};
 </script></main></body></html>"""
 
+CROSS_ORIGIN_SOURCE_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><title>Readiness cross-origin source</title><style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font:16px Arial,sans-serif;background:#f4f6fa;color:#202124}
+main{width:760px;margin:90px auto;background:#fff;border:1px solid #d9dee8;padding:30px;min-height:340px}
+#cross-origin-link{display:flex;align-items:center;justify-content:center;margin:70px auto 0;width:360px;height:72px;background:#edf1f7;border:1px solid #72809a;color:#173e70;text-decoration:underline}
+</style></head><body><main><h1>Cross-origin navigation fixture</h1>
+<a id="cross-origin-link" href="https://readiness-target.test/landing">Open fixed target</a></main></body></html>"""
+
+CROSS_ORIGIN_TARGET_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><title>Readiness cross-origin target</title></head>
+<body><main><h1>TARGET_READY</h1></main></body></html>"""
+
 COOKIE_BRIDGE_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><title>Readiness cookie fixture</title></head>
 <body><main id="session-state">SESSION_MISSING</main><script>
 const expectedName=__COOKIE_NAME__;
@@ -63,6 +73,10 @@ def fixture_html(scenario: str, cookie_name: str | None = None) -> str:
         return FORM_HTML
     if scenario == "overlay":
         return OVERLAY_HTML
+    if scenario == "cross_origin":
+        return CROSS_ORIGIN_SOURCE_HTML
+    if scenario == "cross_origin_target":
+        return CROSS_ORIGIN_TARGET_HTML
     if scenario == "cookie_bridge":
         if not isinstance(cookie_name, str) or not re.fullmatch(r"readiness_bridge_[a-f0-9]{12}", cookie_name):
             raise ValueError("invalid cookie fixture name")

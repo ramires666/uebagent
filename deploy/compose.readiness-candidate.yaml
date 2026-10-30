@@ -1,0 +1,16 @@
+# Opt-in deployment overlay for the reviewed readiness candidate.
+# Keep the existing project name, external credentials volume, named state
+# volumes, ports, aliases, and direct-egress overlay from the base files.
+services:
+  control:
+    image: browser-mcp-readiness-control:candidate
+    pull_policy: never
+
+  browser:
+    image: browser-mcp-readiness-browser:candidate
+    pull_policy: never
+    mem_limit: 4096m
+    memswap_limit: 4096m
+    environment:
+      BROWSER_OBSERVATION_HINTS: "1"
+      BROWSER_MEMORY_MAINTENANCE: "1"

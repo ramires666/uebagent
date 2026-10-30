@@ -1,0 +1,9 @@
+# Candidate layer for review after the current browser-mcp-local images have
+# been captured. It inherits the verified local image and its dependency set.
+FROM browser-mcp-local-control:latest
+
+ENV PYTHONPATH=/app/src
+
+COPY src /app/src
+COPY ui /app/ui
+COPY config /app/config

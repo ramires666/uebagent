@@ -17,3 +17,5 @@ COPY scripts/readiness_soak.py /app/scripts/readiness_soak.py
 COPY scripts/readiness_cookie_bridge.py /app/scripts/readiness_cookie_bridge.py
 COPY scripts/readiness_memory_probe.py /app/scripts/readiness_memory_probe.py
 COPY scripts/readiness_memory_attribution.py /app/scripts/readiness_memory_attribution.py
+COPY scripts/readiness_manual_browsing.py /app/scripts/readiness_manual_browsing.py
+COPY scripts/readiness_public_web.py /app/scripts/readiness_public_web.py

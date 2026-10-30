@@ -81,6 +81,8 @@
     .button-row button { min-height: 36px; padding: 8px 10px; font-size: 12px; }
     .text-form, .navigate-form { display: flex; gap: 7px; }
     .text-form input, .navigate-form input { flex: 1; }
+    .navigation-option { display: inline-flex; align-items: center; gap: 6px; margin-top: 7px; color: #94a19e; font-size: 11px; cursor: pointer; }
+    .navigation-option input { width: 14px; height: 14px; margin: 0; accent-color: #8dc9bd; }
     .help { margin: 8px 1px 0; color: #80908f; font-size: 10px; line-height: 1.5; }
     footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 14px 2px 0; color: #71817f; font-size: 10px; }
     @media (min-width: 801px) {
@@ -178,7 +180,11 @@
           <input id="navigate-url" type="url" inputmode="url" placeholder="https://example.com" aria-label="HTTPS-адрес" autocomplete="off" spellcheck="false">
           <button type="submit" data-mutate>Перейти</button>
         </form>
-        <p class="help">Разрешён переход только по HTTPS-адресу без логина и пароля в URL.</p>
+        <label class="navigation-option" title="Разрешать ручные переходы с одного сайта на другой">
+          <input id="allow-cross-origin-navigation" type="checkbox" checked data-mutate>
+          <span>Переходы на другие сайты</span>
+        </label>
+        <p class="help">Используйте HTTPS-адрес без логина и пароля в URL.</p>
       </div>
       <div class="control-card">
         <h2>Клавиши</h2>

@@ -1,0 +1,9 @@
+# Candidate layer for review after the current browser-mcp-local images have
+# been captured. It inherits the verified local image and its dependency set.
+FROM browser-mcp-local-browser:latest
+
+COPY worker /app/worker
+COPY src /app/src
+COPY config/artifacts.lock.json /app/config/artifacts.lock.json
+COPY vendor/browser-use-camoufox/browser_use/browser/adapter.py /app/vendor/browser-use-camoufox/browser_use/browser/adapter.py
+COPY vendor/browser-use-camoufox/LICENSE /app/vendor/browser-use-camoufox/LICENSE

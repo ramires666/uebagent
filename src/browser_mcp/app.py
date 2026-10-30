@@ -472,7 +472,12 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
     @app.post("/api/v1/desktop/action")
     async def manual_action(request: Request):
         body = await object_body(request)
-        if set(body) != {"control_epoch", "action"} or not isinstance(body["action"], dict):
+        if (set(body) not in ({"control_epoch", "action"},
+                              {"control_epoch", "action", "allow_cross_origin_navigation"})
+                or not isinstance(body.get("action"), dict)):
+            raise DomainError("INVALID_ACTION", "Некорректное ручное действие")
+        if ("allow_cross_origin_navigation" in body
+                and type(body["allow_cross_origin_navigation"]) is not bool):
             raise DomainError("INVALID_ACTION", "Некорректное ручное действие")
         action = body["action"]
         if action.get("kind") == "navigate":

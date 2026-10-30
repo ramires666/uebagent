@@ -33,6 +33,8 @@ param(
     [switch]$MemoryAttributionMemoryReport,
     [switch]$MemoryAttributionPeriodicGc,
     [switch]$MemoryMaintenance,
+    [switch]$PublicWebChecks,
+    [switch]$ManualBrowsingChecks,
     [switch]$ObservationHints,
     [string[]]$P0Scenarios = @('checkbox', 'web_table'),
     [ValidateRange(0, 600)][int]$DiagnosticHoldSeconds = 120,
@@ -78,6 +80,11 @@ $memoryProbeReportAttempted = $false
 $memoryProbeReportError = $null
 $memoryAttributionReportAttempted = $false
 $memoryAttributionReportError = $null
+$publicWebReportAttempted = $false
+$publicWebReportError = $null
+$script:publicWebExportStage = $null
+$manualBrowsingReportAttempted = $false
+$manualBrowsingReportError = $null
 $attributionSeedDigest = $null
 $attributionSeedVersion = $null
 $attributionSeedMatched = $false
@@ -408,6 +415,172 @@ function Export-SoakReport {
     Write-Host "Saved sanitized soak report: $target"
 }
 
+function Get-DisposableControlJsonReport {
+    param([string]$SourceName, [string]$TargetPath, [ValidateRange(1, 4)][int]$MaxMiB = 2)
+    $controlQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'control'))
+    $controlIds = @($controlQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($controlQuery.ExitCode -ne 0 -or $controlIds.Count -ne 1) { throw 'Could not identify the disposable control container for report export.' }
+    $copy = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', "$($controlIds[0]):/app/runtime/control-data/$SourceName", $TargetPath)
+    if ($copy.ExitCode -ne 0) {
+        Remove-Item -LiteralPath $TargetPath -Force -ErrorAction SilentlyContinue
+        $readerCode = "import base64,pathlib; print(base64.b64encode(pathlib.Path('/app/runtime/control-data/$SourceName').read_bytes()).decode('ascii'))"
+        $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', $controlIds[0], 'python', '-c', $readerCode)
+        if ($encoded.ExitCode -ne 0) { throw 'Could not export bounded browser report before disposable stack cleanup.' }
+        $encodedText = (($encoded.Output | ForEach-Object { [string]$_ }) -join '').Trim()
+        if ($encodedText.Length -gt ($MaxMiB * 2MB)) { throw 'Browser report exceeded the export size limit.' }
+        try { [System.IO.File]::WriteAllBytes($TargetPath, [Convert]::FromBase64String($encodedText)) }
+        catch { throw 'Browser report export was not valid base64.' }
+    }
+    $raw = [System.IO.File]::ReadAllText($TargetPath)
+    if ($raw.Length -gt ($MaxMiB * 1MB)) { Remove-Item -LiteralPath $TargetPath -Force; throw 'Browser report exceeded the size limit.' }
+    try { return ($raw | ConvertFrom-Json -ErrorAction Stop) }
+    catch { Remove-Item -LiteralPath $TargetPath -Force; throw 'Browser report was not valid JSON.' }
+}
+
+function Export-ManualBrowsingReport {
+    $directory = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    $target = Join-Path $directory 'readiness-manual-browsing.json'
+    $report = Get-DisposableControlJsonReport -SourceName 'readiness-manual-browsing.json' -TargetPath $target -MaxMiB 1
+    if ($report.schema -ne 'readiness-manual-browsing/v1' -or $report.status -notin @('DIAGNOSTIC', 'FAIL', 'BLOCKED') -or
+        $report.scenario -notin @('cross_origin', $null) -or
+        ($null -ne $report.error_code -and $report.error_code -notmatch '^[A-Za-z0-9_]{1,64}$') -or
+        ($null -ne $report.opt_out_error_code -and $report.opt_out_error_code -notin @('POLICY_DENIED', 'CONTROL_NOT_AGENT', 'CONTROL_NOT_HUMAN')) -or
+        ($null -ne $report.agent_error_code -and $report.agent_error_code -notin @('POLICY_DENIED', 'CONTROL_NOT_AGENT', 'CONTROL_NOT_HUMAN'))) {
+        throw 'Manual-browsing report did not match its fixed bounded schema.'
+    }
+    $safe = [ordered]@{
+        schema=$report.schema; status=$report.status; scenario=$report.scenario
+        default_navigation_enabled=($report.default_navigation_enabled -eq $true)
+        default_click_reached_target=($report.default_click_reached_target -eq $true)
+        opt_out_error_code=$report.opt_out_error_code; agent_error_code=$report.agent_error_code
+        single_page_preserved=($report.single_page_preserved -eq $true); error_code=$report.error_code
+    }
+    [System.IO.File]::WriteAllText($target, ($safe | ConvertTo-Json -Depth 5) + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Saved sanitized manual-browsing report: $target"
+}
+
+function Export-PublicWebReport {
+    $script:publicWebExportStage = 'prepare_report'
+    $directory = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    $target = Join-Path $directory 'readiness-public-web.json'
+    $report = Get-DisposableControlJsonReport -SourceName 'readiness-public-web.json' -TargetPath $target -MaxMiB 3
+    $siteNames = @('demoqa', 'amazon', 'ebay', 'sannysoft')
+    $siteStatuses = @('PUBLIC_PAGE_AVAILABLE', 'CHALLENGE_DETECTED', 'UNREACHABLE', 'BLOCKED', 'UNVERIFIED_DUE_TO_OBSTRUCTION')
+    $script:publicWebExportStage = 'validate_report_schema'
+    if ($report.schema -ne 'readiness-public-web/v1' -or $report.status -notin @('DIAGNOSTIC', 'FAIL') -or
+        $report.sites -isnot [array] -or $report.sites.Count -ne $siteNames.Count -or
+        ($null -ne $report.error_code -and $report.error_code -notmatch '^[A-Za-z0-9_]{1,64}$')) {
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        throw 'Public-web report did not match its fixed bounded schema.'
+    }
+    $safeSites = @()
+    $screenshots = @()
+    $script:publicWebExportStage = 'validate_site_metadata'
+    for ($index = 0; $index -lt $siteNames.Count; $index++) {
+        $site = $report.sites[$index]
+        if ($site.site -ne $siteNames[$index] -or $site.status -notin $siteStatuses -or
+            $site.navigation_applied -isnot [bool] -or $site.positive_proof -isnot [bool] -or
+            $site.challenge_detected -isnot [bool] -or
+            ($null -ne $site.observed_expected_origin -and $site.observed_expected_origin -isnot [bool]) -or
+            ($null -ne $site.error_code -and $site.error_code -notmatch '^[A-Za-z0-9_]{1,64}$')) {
+            Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+            throw 'Public-web site entry did not match its fixed bounded schema.'
+        }
+        $expectedOrigin = switch ($siteNames[$index]) {
+            'demoqa' { 'https://demoqa.com' }
+            'amazon' { 'https://www.amazon.com' }
+            'ebay' { 'https://www.ebay.com' }
+            'sannysoft' { 'https://bot.sannysoft.com' }
+        }
+        if ($site.origin -ne $expectedOrigin) {
+            Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+            throw 'Public-web report contained an unexpected fixed origin.'
+        }
+        $screenshotFile = $null
+        $screenshotBytes = $null
+        if ($null -ne $site.screenshot) {
+            if ($site.screenshot -isnot [pscustomobject] -or $site.screenshot.file -ne "$($siteNames[$index]).png" -or
+                $site.screenshot.bytes -isnot [ValueType] -or $site.screenshot.bytes -lt 8 -or $site.screenshot.bytes -gt 16MB) {
+                Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+                throw 'Public-web screenshot metadata was invalid.'
+            }
+            $screenshotFile = $site.screenshot.file
+            $screenshotBytes = [int64]$site.screenshot.bytes
+            $screenshots += $screenshotFile
+        }
+        $safeSites += [pscustomobject]@{
+            site=$siteNames[$index]; origin=$expectedOrigin; status=$site.status
+            navigation_applied=$site.navigation_applied; positive_proof=$site.positive_proof
+            challenge_detected=$site.challenge_detected; observed_expected_origin=$site.observed_expected_origin
+            screenshot_file=$screenshotFile; screenshot_bytes=$screenshotBytes; error_code=$site.error_code
+        }
+    }
+    $script:publicWebExportStage = 'prepare_screenshot_directory'
+    $screensDirectory = Join-Path $directory 'public-web-screenshots'
+    New-Item -ItemType Directory -Path $screensDirectory -Force | Out-Null
+    $destinationItem = Get-Item -LiteralPath $screensDirectory -Force
+    if (($destinationItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Public-web screenshot destination cannot be a reparse point.'
+    }
+    $script:publicWebExportStage = 'identify_control_container'
+    $controlQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'control'))
+    $controlIds = @($controlQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($controlQuery.ExitCode -ne 0 -or $controlIds.Count -ne 1) { throw 'Could not identify the disposable control container for public-web screenshots.' }
+    foreach ($name in $screenshots) {
+        $script:publicWebExportStage = "copy_$($name.Replace('.png',''))"
+        if ($name -notin @('demoqa.png', 'amazon.png', 'ebay.png', 'sannysoft.png')) { throw 'Unexpected public-web screenshot name.' }
+        Write-Host "Exporting fixed public-web screenshot: $name"
+        $targetScreen = Join-Path $screensDirectory $name
+        $sourceScreen = "/app/runtime/control-data/public-web-screenshots/$name"
+        $copy = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', "$($controlIds[0]):$sourceScreen", $targetScreen)
+        if ($copy.ExitCode -ne 0) {
+            Remove-Item -LiteralPath $targetScreen -Force -ErrorAction SilentlyContinue
+            $readerCode = 'import base64,pathlib,sys; p=pathlib.Path("/app/runtime/control-data/public-web-screenshots")/sys.argv[1]; print(base64.b64encode(p.read_bytes()).decode("ascii"))'
+            $script:publicWebExportStage = "fallback_$($name.Replace('.png',''))"
+            $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', $controlIds[0], 'python', '-c', $readerCode, $name)
+            if ($encoded.ExitCode -ne 0) { throw "Could not export fixed public-web screenshot $name before cleanup." }
+            $encodedText = (($encoded.Output | ForEach-Object { [string]$_ }) -join '').Trim()
+            if ($encodedText.Length -gt 22MB) { throw 'Public-web screenshot exceeded the bounded export limit.' }
+            try { [System.IO.File]::WriteAllBytes($targetScreen, [Convert]::FromBase64String($encodedText)) }
+            catch { throw 'Public-web screenshot was not valid base64.' }
+        }
+        $script:publicWebExportStage = "validate_png_$($name.Replace('.png',''))"
+        $bytes = [System.IO.File]::ReadAllBytes($targetScreen)
+        $expectedScreenshot = $safeSites | Where-Object { $_.screenshot_file -eq $name } | Select-Object -First 1
+        if ($bytes.Length -lt 8 -or $bytes.Length -gt 16MB -or
+            ($expectedScreenshot -and $bytes.Length -ne $expectedScreenshot.screenshot_bytes) -or
+            $bytes[0] -ne 137 -or [System.Text.Encoding]::ASCII.GetString($bytes, 1, 3) -ne 'PNG') {
+            Remove-Item -LiteralPath $targetScreen -Force -ErrorAction SilentlyContinue
+            throw "Public-web screenshot $name failed PNG validation."
+        }
+    }
+    if ($report.limits -isnot [pscustomobject] -or $report.limits.site_count -ne 4 -or
+        $report.limits.max_duration_seconds -ne 180 -or $report.limits.settle_seconds_per_site -ne 2 -or
+        $report.limits.accounts_or_auth -ne $false -or $report.limits.captcha_bypass -ne $false -or
+        $report.limits.llm_calls -ne $false -or $report.invariants -isnot [pscustomobject] -or
+        $report.invariants.same_worker_browser_page_generation -isnot [bool] -or
+        $report.invariants.single_context_page -isnot [bool] -or
+        $report.invariants.control_owner_after_run -notin @('none', 'unknown') -or
+        $report.started_at_utc -isnot [string] -or $report.started_at_utc.Length -gt 40 -or
+        $report.ended_at_utc -isnot [string] -or $report.ended_at_utc.Length -gt 40) {
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        throw 'Public-web report metadata did not match the fixed diagnostic contract.'
+    }
+    $script:publicWebExportStage = 'write_sanitized_report'
+    $safe = [ordered]@{
+        schema=$report.schema; status=$report.status; started_at_utc=$report.started_at_utc; ended_at_utc=$report.ended_at_utc
+        limits=[ordered]@{site_count=4; max_duration_seconds=180; settle_seconds_per_site=2; accounts_or_auth=$false; captcha_bypass=$false; llm_calls=$false}
+        invariants=[ordered]@{same_worker_browser_page_generation=$report.invariants.same_worker_browser_page_generation
+            single_context_page=$report.invariants.single_context_page; control_owner_after_run=$report.invariants.control_owner_after_run}
+        sites=$safeSites; error_code=$report.error_code
+    }
+    [System.IO.File]::WriteAllText($target, ($safe | ConvertTo-Json -Depth 10) + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Saved sanitized public-web report: $target"
+    Write-Host "Saved fixed public-web screenshots: $screensDirectory"
+}
+
 function Export-MemoryProbeReport {
     $controlQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'control'))
     $controlIds = @($controlQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
@@ -597,7 +770,9 @@ function Assert-ObservationHintsMode {
         [bool]$SoakChecks,
         [bool]$MemoryProbeChecks = $false,
         [bool]$MemoryAttributionChecks = $false,
-        [bool]$MemoryMaintenance = $false
+        [bool]$MemoryMaintenance = $false,
+        [bool]$PublicWebChecks = $false,
+        [bool]$ManualBrowsingChecks = $false
     )
     if (-not $Enabled) { return }
     if ($Protocol -ne 'generic') { throw 'ObservationHints requires the generic model protocol.' }
@@ -605,7 +780,8 @@ function Assert-ObservationHintsMode {
     if ($MemoryProbeChecks -and -not $SkipCases) { throw 'ObservationHints memory probe requires SkipCases.' }
     if ($MemoryAttributionChecks -and -not $SkipCases) { throw 'ObservationHints memory attribution requires SkipCases.' }
     if ($MemoryMaintenance -and -not $SkipCases) { throw 'MemoryMaintenance requires SkipCases.' }
-    if ($ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or ($SkipCases -and -not ($SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks))) {
+    if (($PublicWebChecks -or $ManualBrowsingChecks) -and -not $SkipCases) { throw 'Public/manual browsing checks require SkipCases.' }
+    if ($ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or ($SkipCases -and -not ($SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks -or $PublicWebChecks -or $ManualBrowsingChecks))) {
         throw 'ObservationHints requires a supported DemoQA case execution path or an explicitly bounded soak.'
     }
 }
@@ -663,6 +839,19 @@ try {
     if ($CookieBridgeChecks -and -not $RuntimeIntegrationChecks) {
         throw 'CookieBridgeChecks requires RuntimeIntegrationChecks and SkipCases.'
     }
+    if ($PublicWebChecks -or $ManualBrowsingChecks) {
+        if (-not $SkipCases -or -not $ObservationHints -or $ModelProtocol -ne 'generic') {
+            throw 'PublicWebChecks and ManualBrowsingChecks require SkipCases, ObservationHints, and ModelProtocol generic.'
+        }
+        if ($SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks -or $MemoryMaintenance -or
+            $MemoryProbeGcContrast -or $MemoryAttributionGcContrast -or $MemoryAttributionMemoryReport -or $MemoryAttributionPeriodicGc -or
+            $RuntimeIntegrationChecks -or $LifecycleIntegrationChecks -or $CookieBridgeChecks -or
+            $P0Diagnostics -or $ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or
+            $TaskControlChecks -or $ReadinessChecks -or $MemoryAttributionVariant -ne 'baseline' -or
+            $MemoryProbePhaseSet -ne 'components' -or $MemoryProbeSeconds -ne 210) {
+            throw 'Public/manual browsing checks support only standalone generic disposable runs (both checks may be combined).'
+        }
+    }
     if ($MemoryProbeChecks) {
         if (-not $SkipCases) { throw 'MemoryProbeChecks requires SkipCases to avoid model-driven cases.' }
         if ($SoakChecks -or $RuntimeIntegrationChecks -or $LifecycleIntegrationChecks -or $CookieBridgeChecks -or
@@ -714,13 +903,14 @@ try {
             throw 'SoakChecks cannot be combined with model cases, probes, diagnostics, readiness, or integration checks.'
         }
     }
-    if ($BrowserMemoryMiB -eq 4096 -and (-not $SkipCases -or -not ($SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks))) {
+    if ($BrowserMemoryMiB -eq 4096 -and (-not $SkipCases -or -not ($SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks -or $PublicWebChecks -or $ManualBrowsingChecks))) {
         throw 'BrowserMemoryMiB 4096 requires SkipCases and a bounded soak or memory diagnostic.'
     }
     Assert-ObservationHintsMode -Enabled $ObservationHints -Protocol $ModelProtocol -ProbeOnly $ProbeOnly `
         -DiagnosticGate $DiagnosticGate -SkipCases $SkipCases -P0Diagnostics $P0Diagnostics `
         -RunCasesAfterReadableCandidate $RunCasesAfterReadableCandidate -SoakChecks $SoakChecks `
-        -MemoryProbeChecks $MemoryProbeChecks -MemoryAttributionChecks $MemoryAttributionChecks -MemoryMaintenance $MemoryMaintenance
+        -MemoryProbeChecks $MemoryProbeChecks -MemoryAttributionChecks $MemoryAttributionChecks -MemoryMaintenance $MemoryMaintenance `
+        -PublicWebChecks $PublicWebChecks -ManualBrowsingChecks $ManualBrowsingChecks
     if ($P0Diagnostics -and ($P0Scenarios.Count -eq 0 -or $P0Scenarios.Count -gt 4 -or @($P0Scenarios | Select-Object -Unique).Count -ne $P0Scenarios.Count)) {
         throw 'P0Scenarios must contain one to four unique allowlisted scenarios.'
     }
@@ -738,7 +928,7 @@ try {
     $env:DEMOQA_MODEL_ALIAS = $ModelAlias
     $env:DEMOQA_MODEL_PROTOCOL = $ModelProtocol
     $env:DEMOQA_BROWSER_MEMORY_LIMIT = ([string]$BrowserMemoryMiB + 'm')
-    if (-not $MemoryAttributionChecks) {
+    if (-not ($MemoryAttributionChecks -or $PublicWebChecks -or $ManualBrowsingChecks)) {
         $modelPreflight = Invoke-NativeCaptured -FilePath 'python' -Arguments @((Join-Path $PSScriptRoot 'demoqa_model_preflight.py'), '--base-url', $ModelBaseUrl, '--alias', $ModelAlias)
         if ($modelPreflight.ExitCode -ne 0) { throw 'Configured model endpoint is unavailable or does not serve the required alias; production was left running.' }
     }
@@ -753,7 +943,7 @@ try {
         $env:READINESS_ACTION_TRACE = '1'
         $env:READINESS_P0_SCENARIOS = ($P0Scenarios -join ',')
     }
-    if ($RuntimeIntegrationChecks -or $SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks) { $env:READINESS_ACTION_TRACE = '1' }
+    if ($RuntimeIntegrationChecks -or $SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks -or $PublicWebChecks -or $ManualBrowsingChecks) { $env:READINESS_ACTION_TRACE = '1' }
     $env:BROWSER_MEMORY_MAINTENANCE = if ($MemoryMaintenance) { '1' } else { '0' }
     if ($useAttributionSeed) {
         $env:READINESS_SKIP_ACTION_SNAPSHOTS = if ($MemoryAttributionVariant -in @('no_trace', 'neither')) { '1' } else { '0' }
@@ -1059,6 +1249,46 @@ try {
         }
     }
 
+    if ($ManualBrowsingChecks -or $PublicWebChecks) {
+        $manualBrowsingExit = 0
+        $publicWebExit = 0
+        if ($ManualBrowsingChecks) {
+            $manualBrowsingReportAttempted = $true
+            $manualBrowsingArgs = (Get-ComposeArgs) + @(
+                'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+                '-e', 'READINESS_RUNTIME_INTEGRATION=1', '-e', 'READINESS_ACTION_TRACE=1',
+                '-e', 'BROWSER_OBSERVATION_HINTS=1', '-e', 'BROWSER_WORKER_URL=http://browser:7070',
+                '-e', 'WORKER_API_KEY_FILE=/run/demoqa-secrets/key',
+                'control', 'python', '-m', 'scripts.readiness_manual_browsing',
+                '--url', 'http://browser:7070', '--control-url', 'http://localhost:8080',
+                '--key-file', '/run/demoqa-secrets/key',
+                '--output', '/app/runtime/control-data/readiness-manual-browsing.json',
+                '--i-confirm-disposable'
+            )
+            try { $manualBrowsingExit = Invoke-RunnerStream -RunnerArgs $manualBrowsingArgs }
+            catch { $manualBrowsingExit = 1; Write-Warning 'Manual-browsing CLI failed; preserving any bounded report before cleanup.' }
+        }
+        if ($PublicWebChecks) {
+            $publicWebReportAttempted = $true
+            $publicWebArgs = (Get-ComposeArgs) + @(
+                'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+                '-e', 'READINESS_RUNTIME_INTEGRATION=1', '-e', 'READINESS_ACTION_TRACE=1',
+                '-e', 'BROWSER_OBSERVATION_HINTS=1', '-e', 'BROWSER_WORKER_URL=http://browser:7070',
+                '-e', 'WORKER_API_KEY_FILE=/run/demoqa-secrets/key',
+                'control', 'python', '-m', 'scripts.readiness_public_web',
+                '--url', 'http://browser:7070', '--control-url', 'http://localhost:8080',
+                '--key-file', '/run/demoqa-secrets/key',
+                '--output', '/app/runtime/control-data/readiness-public-web.json',
+                '--i-confirm-disposable'
+            )
+            try { $publicWebExit = Invoke-RunnerStream -RunnerArgs $publicWebArgs }
+            catch { $publicWebExit = 1; Write-Warning 'Public-web CLI failed; preserving any bounded report and screenshots before cleanup.' }
+        }
+        if ($manualBrowsingExit -ne 0 -or $publicWebExit -ne 0) {
+            throw "Disposable public/manual browsing checks failed (manual $manualBrowsingExit, public $publicWebExit); report export will run before cleanup."
+        }
+    }
+
     if ($SoakChecks) {
         $soakArgs = (Get-ComposeArgs) + @(
             'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
@@ -1310,10 +1540,29 @@ finally {
             $resultLines.Add('{"scenario":"readiness_memory_attribution","status":"report_export_failed"}')
         }
     }
+    if ($manualBrowsingReportAttempted) {
+        try { Export-ManualBrowsingReport }
+        catch {
+            $manualBrowsingReportError = 'Could not export the sanitized manual-browsing report before disposable stack cleanup.'
+            $resultLines.Add('{"scenario":"readiness_manual_browsing","status":"report_export_failed"}')
+        }
+    }
+    if ($publicWebReportAttempted) {
+        try { Export-PublicWebReport }
+        catch {
+            $publicWebReportError = 'Could not export the sanitized public-web report before disposable stack cleanup.'
+            $stage = if ($script:publicWebExportStage -match '^(prepare_report|validate_report_schema|validate_site_metadata|prepare_screenshot_directory|identify_control_container|copy_(demoqa|amazon|ebay|sannysoft)|fallback_(demoqa|amazon|ebay|sannysoft)|validate_png_(demoqa|amazon|ebay|sannysoft)|write_sanitized_report)$') { $script:publicWebExportStage } else { 'unknown' }
+            $errorType = if ($_.Exception.GetType().Name -match '^[A-Za-z0-9_]{1,48}$') { $_.Exception.GetType().Name } else { 'Exception' }
+            $line = [int]$_.InvocationInfo.ScriptLineNumber
+            $safeFailure = [ordered]@{scenario='readiness_public_web_export'; status='failed'; stage=$stage; exception_type=$errorType; line=$line}
+            $resultLines.Add(($safeFailure | ConvertTo-Json -Compress -Depth 3))
+            Write-Warning "Public-web export failed at $stage ($errorType, line $line); no exception text or container details were recorded."
+        }
+    }
     if ($stackCleanupNeeded) {
         # Scope cleanup to this project's name; the stack uses no persistent volumes.
         $downArgs = (Get-ComposeArgs) + @('down')
-        if (-not $MemoryAttributionChecks) { $downArgs += '--remove-orphans' }
+        if (-not ($MemoryAttributionChecks -or $PublicWebChecks -or $ManualBrowsingChecks)) { $downArgs += '--remove-orphans' }
         $down = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
         if ($down.ExitCode -ne 0) {
             $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
@@ -1418,6 +1667,8 @@ finally {
     if ($p0ReportError) { throw $p0ReportError }
     if ($soakReportError) { throw $soakReportError }
     if ($memoryProbeReportError) { throw $memoryProbeReportError }
+    if ($manualBrowsingReportError) { throw $manualBrowsingReportError }
+    if ($publicWebReportError) { throw $publicWebReportError }
 }
 
 Write-Host "Saved sanitized test output to $ResultsPath"

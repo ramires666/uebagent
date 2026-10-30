@@ -437,6 +437,7 @@ class ManualExecuteBody(BaseModel):
     control_epoch: int = Field(ge=0)
     action: dict[str, Any]
     allowed_origins: list[str] | None = Field(default=None, max_length=64)
+    allow_cross_origin_navigation: bool = Field(default=True, strict=True)
 
 
 class CookieImportBody(BaseModel):
@@ -493,6 +494,7 @@ class BrowserRuntime:
         self.viewport_height = VIEWPORT["height"]
         self.control_epoch = 0
         self.control_owner: Literal["agent", "human", "none"] = "none"
+        self._manual_cross_origin_navigation = False
         self._lease_deadline = 0.0
         self._adapter = adapter
         self._page = page
@@ -1172,6 +1174,8 @@ class BrowserRuntime:
                 "browser_started": self._started, "width": self.viewport_width, "height": self.viewport_height,
                 "proxy_assignment_id": self.proxy_assignment_id, "route_generation": self.route_generation,
                 "control_epoch": self.control_epoch, "control_owner": self.control_owner,
+                "manual_cross_origin_navigation": bool(
+                    self.control_owner == "human" and self._manual_cross_origin_navigation),
                 **self._resource_status(),
                 **self._recovery_status(),
                 "memory_maintenance": self._memory_maintenance.status(),
@@ -1389,6 +1393,7 @@ class BrowserRuntime:
         # are fenced immediately, even if navigation is currently pending.
         self.control_epoch += 1
         self.control_owner = owner
+        self._manual_cross_origin_navigation = owner == "human"
         self._lease_deadline = time.monotonic() + LEASE_SECONDS if owner == "agent" else 0.0
         self._last_observation_id = None
         return self.status_base()
@@ -1589,7 +1594,9 @@ class BrowserRuntime:
             gemini_static_resource = self._is_gemini_static_resource(route, origin, resource_type)
             if not self.egress_ready or self.route_generation <= 0:
                 reason = "egress_unavailable"
-            elif (origin not in self._route_origins and not cdn_resource and not font_resource
+            elif (origin not in self._route_origins
+                  and not (self.control_owner == "human" and self._manual_cross_origin_navigation)
+                  and not cdn_resource and not font_resource
                   and not gemini_auth_api_resource and not gemini_auth_document_resource
                   and not gemini_auth_frame_resource and not gemini_static_resource):
                 reason = "origin_not_allowed"
@@ -2195,19 +2202,23 @@ class BrowserRuntime:
             if not self.egress_ready or self.route_generation == 0:
                 raise WorkerError("EGRESS_NOT_READY", "live browsing is disabled until the external egress route is verified", status_code=503)
             url, origin = _safe_url(action["url"])
-            if not allowed or origin not in allowed:
+            cross_origin_manual = (manual and self.control_owner == "human"
+                                   and self._manual_cross_origin_navigation)
+            if not allowed or (origin not in allowed and not cross_origin_manual):
                 raise WorkerError("POLICY_DENIED", "navigation origin is not in allowed_origins")
             self._route_origins = allowed
             self._blocked_resources.clear()
             nav = await self._adapter.goto(url, wait_until="domcontentloaded", timeout_ms=30_000)
             final_url = nav.get("url", await self._adapter.url())
             final_origin = _origin(final_url)
-            if final_origin not in allowed:
+            if final_origin not in allowed and not (
+                    manual and self.control_owner == "human" and self._manual_cross_origin_navigation):
                 raise WorkerError("POLICY_DENIED", "navigation ended outside allowed_origins")
             return {"url": final_url, "status": nav.get("status")}
         if kind == "click":
             x, y = float(action["x"]), float(action["y"])
             target = await self._classify_click(x, y)
+            link_destination_origin: str | None = None
             tag, role, input_type = target.get("tag", ""), target.get("role", ""), target.get("type", "")
             if not allow_write and (tag == "button" or role == "button" or tag == "input" and input_type in {"submit", "button", "image"}):
                 raise WorkerError("APPROVAL_REQUIRED", "button-like target may submit or change external state")
@@ -2221,8 +2232,11 @@ class BrowserRuntime:
                         dest = _origin(href)
                     except WorkerError as exc:
                         raise WorkerError("POLICY_DENIED", "link destination is not an allowed HTTPS URL") from exc
-                    if dest not in allowed:
+                    cross_origin_manual = (manual and self.control_owner == "human"
+                                           and self._manual_cross_origin_navigation)
+                    if dest not in allowed and not cross_origin_manual:
                         raise WorkerError("POLICY_DENIED", "link destination is outside allowed_origins")
+                    link_destination_origin = dest
                     # A recognized new-tab link is followed in the canonical tab.
                     # This avoids creating a usable second page while retaining normal
                     # typed click policy and navigation fencing.
@@ -2234,7 +2248,8 @@ class BrowserRuntime:
                             nav = await self._adapter.goto(href, wait_until="domcontentloaded", timeout_ms=30_000)
                             self._check_manual_or_agent(manual, expected_epoch)
                         final_url = nav.get("url", await self._adapter.url())
-                        if _origin(final_url) not in allowed:
+                        if _origin(final_url) not in allowed and not (
+                                manual and self.control_owner == "human" and self._manual_cross_origin_navigation):
                             raise WorkerError("POLICY_DENIED", "navigation ended outside allowed_origins")
                         return {"url": final_url, "status": nav.get("status"), "opened_in_current_page": True}
             async with self._input_lock:
@@ -2244,6 +2259,12 @@ class BrowserRuntime:
                 await self._page.mouse.click(x, y, button=action.get("button", "left"), click_count=action.get("count", 1))
                 self._pointer_position = (x, y)
                 self._check_manual_or_agent(manual, expected_epoch)
+                if (manual and link_destination_origin is not None
+                        and action.get("button", "left") == "left" and action.get("count", 1) == 1):
+                    final_origin = _origin(await self._adapter.url())
+                    if final_origin not in allowed and not (
+                            self.control_owner == "human" and self._manual_cross_origin_navigation):
+                        raise WorkerError("POLICY_DENIED", "navigation ended outside allowed_origins")
             return {"x": x, "y": y, "button": action.get("button", "left"), "count": action.get("count", 1)}
         if kind == "mouse_move":
             async with self._input_lock:
@@ -2475,15 +2496,18 @@ class BrowserRuntime:
                 origins = frozenset()
         else:
             origins = _parse_allowlist(body.allowed_origins)
+        self._check_epoch(body.control_epoch)
         kind, action = self._validate_action(body.action)
         if kind == "navigate" and not origins:
             _, origin = _safe_url(action["url"])
             origins = frozenset({origin})
         if kind == "navigate" and (not self.egress_ready or self.route_generation == 0):
             raise WorkerError("EGRESS_NOT_READY", "manual browsing is disabled until the external egress route is configured", status_code=503)
-        start_epoch = self.control_epoch
+        self._check_epoch(body.control_epoch)
         if self._action_in_progress:
             raise WorkerError("ACTION_IN_PROGRESS", "another input action is running")
+        self._manual_cross_origin_navigation = body.allow_cross_origin_navigation
+        start_epoch = self.control_epoch
         self._route_origins = origins
         self._action_in_progress = True
         try:
@@ -2996,7 +3020,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
         scenario = body.get("scenario")
         expected_fields = {"scenario", "cookie_name"} if scenario == "cookie_bridge" else {"scenario"}
         if (set(body) != expected_fields or not isinstance(scenario, str)
-                or scenario not in {"tree", "form", "overlay", "cookie_bridge"}
+                or scenario not in {"tree", "form", "overlay", "cookie_bridge", "cross_origin"}
                 or (scenario == "cookie_bridge" and (not isinstance(body.get("cookie_name"), str)
                     or not re.fullmatch(r"readiness_bridge_[a-f0-9]{12}", body["cookie_name"])) )):
             raise HTTPException(status_code=422, detail={"code": "INVALID_FIXTURE_SCENARIO"})
@@ -3020,13 +3044,18 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
             html = fixture_html(scenario, body.get("cookie_name"))
             if not isinstance(html, str) or len(html) > 100_000:
                 raise ValueError("invalid static fixture")
-            async def fulfill(route: Any) -> None:
-                request_url = route.request.url
-                if request_url != fixture_url:
-                    await route.abort()
-                    return
-                await route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
-            await runtime._page.route(fixture_url, fulfill)
+            def fulfill_exact(url: str, content: str):
+                async def fulfill(route: Any) -> None:
+                    if route.request.url != url:
+                        await route.abort()
+                        return
+                    await route.fulfill(status=200, content_type="text/html; charset=utf-8", body=content)
+                return fulfill
+            await runtime._page.route(fixture_url, fulfill_exact(fixture_url, html))
+            if scenario == "cross_origin":
+                target_url = "https://readiness-target.test/landing"
+                target_html = fixture_html("cross_origin_target")
+                await runtime._page.route(target_url, fulfill_exact(target_url, target_html))
             return {"installed": True, "scenario": scenario, "path": f"/{scenario}"}
         except HTTPException: raise
         except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
