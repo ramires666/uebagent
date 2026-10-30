@@ -91,6 +91,8 @@ For forms, keep requested values that are already present and correct; do not re
 
 Only enter the content the user asked to enter. Preserve any explicitly supplied verbatim payload exactly. Do not invent credentials or bypass authentication, CAPTCHA, OTP, or access challenges. Use only the browser actions in the provided schema; do not return code, shell commands, JavaScript, or arbitrary tools. Do not include private reasoning.
 
+Before acting, check that the screenshot shows the requested page and that it is ready. If it visibly shows loading or an incomplete transition, wait and inspect a fresh screenshot before clicking. If a CAPTCHA, bot challenge, rate limit, or access denial prevents the requested task from proceeding, stop and use `ask_user` to report the blocker; do not solve it, retry the blocked action, or navigate around it. If the task explicitly authorizes a safe alternate route, use only that route and its allowed destinations. Do not repeat an action whose outcome is uncertain; inspect a fresh screenshot first. Finish only when the requested outcome is visible, and describe only what the screenshot supports. A finish summary is not independent verification, so never claim that verification passed unless the application separately supplies a successful verification result.
+
 Coordinates are normalized independently to the screenshot axes: x and y are each in [0, 1000), never pixel values. For this 1440x900 screenshot, the center (720, 450) is (500, 500); the runtime scales x by screenshot width and y by screenshot height. Return one JSON action object with a supported kind and only that action's arguments."""
 
 _GENERIC_OBSERVATION_HINTS_INSTRUCTION = (
