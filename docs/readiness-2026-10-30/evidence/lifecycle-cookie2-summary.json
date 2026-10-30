@@ -1,0 +1,89 @@
+{
+  "schema": "readiness.lifecycle-cookie-summary.v1",
+  "run_label": "lifecycle-cookie2",
+  "privacy": "Allowlisted statuses, booleans, and counts only; no tokens, URLs, profile data, cookie values, IDs, or hashes.",
+  "raw_records": {
+    "runtime_cancel": {
+      "status": "PASS",
+      "queued_cancel": "CANCELLED",
+      "inflight_cancel": "RECOVERING",
+      "inflight_action_observed": true,
+      "action_kind": "wait",
+      "action_planned_count": 1,
+      "action_resolved_count": 0,
+      "scripted_model_calls": 1,
+      "worker_ready_idle_after": true,
+      "worker_context_count": 1,
+      "worker_page_count": 1,
+      "worker_identity_unchanged": true
+    },
+    "overlay": {
+      "status": "PASS",
+      "task_status": "waiting_human",
+      "task_phase": "verification_required",
+      "task_step_count": 2,
+      "target_effect_verified": false,
+      "overlay_effect_verified": true,
+      "worker_click_receipts": 1,
+      "verification_repairs": 1,
+      "worker_click_outcomes": [
+        "applied"
+      ],
+      "context_count": 1,
+      "page_count": 1
+    },
+    "lifecycle": {
+      "status": "PASS",
+      "uncertain_response": "RECOVERING",
+      "worker_execute_forward_count": 1,
+      "worker_click_effect_count": 1,
+      "task_action_planned_count": 1,
+      "task_action_applied_count": 0,
+      "model_calls": 1,
+      "restart_preserved_review": true,
+      "restart_redispatch_count": 0,
+      "running_restart_preserved_review": true,
+      "running_restart_redispatch_count": 0,
+      "running_worker_execute_forward_count": 1,
+      "concurrent_task_rejected": true,
+      "worker_context_count": 1,
+      "worker_page_count": 1
+    },
+    "cookie_bridge": {
+      "status": "PASS",
+      "source_kind": "synthetic_extension_protocol",
+      "negative_source_codes": [
+        "COOKIE_SOURCE_UNAVAILABLE",
+        "COOKIE_SOURCE_AMBIGUOUS"
+      ],
+      "exported_cookie_count": 1,
+      "imported_cookie_count": 1,
+      "unrelated_origin_excluded": true,
+      "source_returned_cookie_count": 1,
+      "source_excluded_unrelated_cookie_count": 1,
+      "fixture_session_ready": true,
+      "model_calls": 0,
+      "browser_actions": 2,
+      "cookie_values_recorded": false
+    }
+  },
+  "source_assertions": {
+    "lifecycle_script": "scripts/readiness_lifecycle_integration.py:run_integration",
+    "lifecycle_checks": [
+      "concurrent task rejected with DomainError code PROFILE_BUSY while worker action is in progress",
+      "uncertain execute reply leaves RECOVERING/action_outcome_unknown with one forwarded execute and one applied click; no redispatch after restart",
+      "RUNNING task restart moves task to RECOVERING/restart_recovery, with no queued job and no second execute; independent fixture counts one click",
+      "worker returns to one context and one page"
+    ],
+    "cookie_script": "scripts/readiness_cookie_bridge.py:_run",
+    "cookie_checks": [
+      "source unavailable and ambiguous source rejected before worker import",
+      "synthetic extension-protocol source routed through ChromeBroker, TaskCookieImporter, and WorkerClient",
+      "baseline fixture state verified before import and ready state verified after import",
+      "one matching cookie exported/imported; unrelated origin excluded",
+      "cookie value absent from persisted task events",
+      "worker idle with one context and one page after import"
+    ],
+    "cookie_e2e_scope": "synthetic_extension_protocol; not a real Chrome extension or real Chrome E2E"
+  }
+}

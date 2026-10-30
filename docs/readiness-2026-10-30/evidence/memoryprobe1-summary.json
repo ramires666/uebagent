@@ -1,0 +1,122 @@
+{
+  "schema": "readiness.memory-probe-summary.v1",
+  "run_label": "memoryprobe1",
+  "source_artifact": "runtime/demoqa/memoryprobe1/memory-probe.json",
+  "status": "DIAGNOSTIC",
+  "duration_seconds": 190.29,
+  "sample_count": 31,
+  "peak_memory_bytes": 2161483776,
+  "memory_limit_bytes": 2952790016,
+  "peak_memory_percent": 73.2,
+  "errors": 0,
+  "oom_counters_max": {
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "invariants": {
+    "context_count": 1,
+    "page_count": 1,
+    "control_owner_after_phase": "none"
+  },
+  "phases": [
+    {
+      "phase": "navigate",
+      "duration_seconds": 60.0,
+      "operations": 420,
+      "image_bytes": 0,
+      "sample_count": 10,
+      "memory_delta_bytes_first_to_last": 190230528,
+      "memory_peak_bytes": 2161483776,
+      "process_rss_within_phase": {
+        "camoufox-bin": {
+          "rss_delta_kib_first_to_last": 14772,
+          "rss_range_kib": 29908
+        },
+        "Web": {
+          "rss_delta_kib_first_to_last": 114160,
+          "rss_range_kib": 114872
+        },
+        "WebExtensions": {
+          "rss_delta_kib_first_to_last": -2532,
+          "rss_range_kib": 17144
+        },
+        "python": {
+          "rss_delta_kib_first_to_last": 8768,
+          "rss_range_kib": 8768
+        },
+        "node": {
+          "rss_delta_kib_first_to_last": 10608,
+          "rss_range_kib": 19372
+        }
+      },
+      "error_count": 0
+    },
+    {
+      "phase": "screenshot",
+      "duration_seconds": 60.0,
+      "operations": 420,
+      "image_bytes": 6474300,
+      "sample_count": 10,
+      "memory_delta_bytes_first_to_last": -51994624,
+      "memory_peak_bytes": 2116579328,
+      "process_rss_within_phase": {
+        "camoufox-bin": {
+          "rss_delta_kib_first_to_last": 60000,
+          "rss_range_kib": 102740
+        },
+        "Web": {
+          "rss_delta_kib_first_to_last": 2776,
+          "rss_range_kib": 11636
+        },
+        "WebExtensions": {
+          "rss_delta_kib_first_to_last": -34836,
+          "rss_range_kib": 34836
+        },
+        "python": {
+          "rss_delta_kib_first_to_last": 436,
+          "rss_range_kib": 584
+        },
+        "node": {
+          "rss_delta_kib_first_to_last": 264,
+          "rss_range_kib": 1276
+        }
+      },
+      "error_count": 0
+    },
+    {
+      "phase": "observe",
+      "duration_seconds": 60.0,
+      "operations": 420,
+      "image_bytes": 6474300,
+      "sample_count": 10,
+      "memory_delta_bytes_first_to_last": -8982528,
+      "memory_peak_bytes": 2136338432,
+      "process_rss_within_phase": {
+        "camoufox-bin": {
+          "rss_delta_kib_first_to_last": -32668,
+          "rss_range_kib": 96708
+        },
+        "Web": {
+          "rss_delta_kib_first_to_last": 10896,
+          "rss_range_kib": 10896
+        },
+        "WebExtensions": {
+          "rss_delta_kib_first_to_last": 0,
+          "rss_range_kib": 0
+        },
+        "python": {
+          "rss_delta_kib_first_to_last": 2364,
+          "rss_range_kib": 2364
+        },
+        "node": {
+          "rss_delta_kib_first_to_last": -452,
+          "rss_range_kib": 672
+        }
+      },
+      "error_count": 0
+    }
+  ],
+  "interpretation": "Isolated navigation, screenshot, and observation phases did not reproduce the mixed-run memory growth; this diagnostic is not a memory gate PASS or a fix. A mixed probe is being prepared.",
+  "privacy": "Allowlisted phase labels, operation/sample counts, byte aggregates, process RSS within-phase deltas/ranges, errors, and invariants only; no timestamps, container IDs, paths beyond the source artifact, URLs, profile data, or tokens."
+}

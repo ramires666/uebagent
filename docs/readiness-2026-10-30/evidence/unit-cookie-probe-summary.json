@@ -1,0 +1,19 @@
+{
+  "schema": "readiness.unit-suite-summary.v1",
+  "source_commit": "7bc09cf",
+  "command": "python -m pytest -q --basetemp=runtime/pytest-final-cookie-probe",
+  "result": {
+    "passed": 475,
+    "skipped": 8,
+    "failed": 0,
+    "duration_seconds": 88.3,
+    "exit_code": 0
+  },
+  "scope_note": "Full suite: 475 passed, 8 skipped, 0 failed at 7bc09cf. Focused harness follow-up: 6 passed, 0 failed at a0cc278. The full 475-test suite was not rerun at a0cc278.",
+  "focused_followup": {
+    "source_commit": "a0cc278",
+    "passed": 6,
+    "failed": 0,
+    "scope": "memory probe test harness"
+  }
+}

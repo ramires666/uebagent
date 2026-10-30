@@ -1,0 +1,171 @@
+{
+  "schema": "readiness.memory-mixed-summary.v1",
+  "run_label": "memorymixed1",
+  "source_artifact": "runtime/demoqa/memorymixed1/memory-probe.json",
+  "status": "DIAGNOSTIC",
+  "duration_seconds": 190.31,
+  "sample_count": 30,
+  "total_operations": 1225,
+  "peak_memory_bytes": 1939750912,
+  "memory_limit_bytes": 2952790016,
+  "peak_memory_percent": 65.69,
+  "errors": 0,
+  "oom_counters_max": {
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0
+  },
+  "invariants": {
+    "context_count": 1,
+    "page_count": 1,
+    "control_owner_after_phase": "none"
+  },
+  "phases": [
+    {
+      "phase": "navigate_observe",
+      "label_ru": "Навигация + наблюдение",
+      "duration_seconds": 60.0,
+      "operations": 418,
+      "image_bytes": 6443470,
+      "sample_count": 10,
+      "memory_delta_bytes_first_to_last": 419983360,
+      "memory_peak_bytes": 1538437120,
+      "anon_delta_bytes_first_to_last": 410025984,
+      "anon_range_bytes": [
+        571875328,
+        981901312
+      ],
+      "file_delta_bytes_first_to_last": 6594560,
+      "file_range_bytes": [
+        526888960,
+        533651456
+      ],
+      "process_rss_within_phase": {
+        "camoufox-bin": {
+          "delta_kib_first_to_last": 172132,
+          "range_kib": 191260
+        },
+        "Web Content": {
+          "delta_kib_first_to_last": 243756,
+          "range_kib": 243756
+        },
+        "WebExtensions": {
+          "delta_kib_first_to_last": 43040,
+          "range_kib": 43040
+        },
+        "python": {
+          "delta_kib_first_to_last": 9772,
+          "range_kib": 9772
+        },
+        "node": {
+          "delta_kib_first_to_last": 8576,
+          "range_kib": 17396
+        }
+      },
+      "error_count": 0
+    },
+    {
+      "phase": "navigate_click_verify",
+      "label_ru": "Навигация + клик + проверка",
+      "duration_seconds": 60.0,
+      "operations": 416,
+      "image_bytes": 0,
+      "sample_count": 9,
+      "memory_delta_bytes_first_to_last": 290516992,
+      "memory_peak_bytes": 1687244800,
+      "anon_delta_bytes_first_to_last": 288727040,
+      "anon_range_bytes": [
+        826466304,
+        1115193344
+      ],
+      "file_delta_bytes_first_to_last": 57344,
+      "file_range_bytes": [
+        540692480,
+        540831744
+      ],
+      "process_rss_within_phase": {
+        "camoufox-bin": {
+          "delta_kib_first_to_last": 10376,
+          "range_kib": 10456
+        },
+        "Web Content": {
+          "delta_kib_first_to_last": 212108,
+          "range_kib": 212108
+        },
+        "WebExtensions": {
+          "delta_kib_first_to_last": 32588,
+          "range_kib": 32588
+        },
+        "python": {
+          "delta_kib_first_to_last": 6568,
+          "range_kib": 6756
+        },
+        "node": {
+          "delta_kib_first_to_last": 17800,
+          "range_kib": 20824
+        }
+      },
+      "error_count": 0
+    },
+    {
+      "phase": "full_cycle",
+      "label_ru": "Полный цикл",
+      "duration_seconds": 60.01,
+      "operations": 391,
+      "image_bytes": 7862619,
+      "sample_count": 9,
+      "memory_delta_bytes_first_to_last": 278376448,
+      "memory_peak_bytes": 1939750912,
+      "anon_delta_bytes_first_to_last": 300232704,
+      "anon_range_bytes": [
+        1084780544,
+        1385013248
+      ],
+      "file_delta_bytes_first_to_last": -20234240,
+      "file_range_bytes": [
+        520863744,
+        541122560
+      ],
+      "process_rss_within_phase": {
+        "camoufox-bin": {
+          "delta_kib_first_to_last": 51128,
+          "range_kib": 51128
+        },
+        "Web Content": {
+          "delta_kib_first_to_last": 195648,
+          "range_kib": 212008
+        },
+        "WebExtensions": {
+          "delta_kib_first_to_last": 30472,
+          "range_kib": 30472
+        },
+        "python": {
+          "delta_kib_first_to_last": 7752,
+          "range_kib": 7752
+        },
+        "node": {
+          "delta_kib_first_to_last": 888,
+          "range_kib": 4828
+        }
+      },
+      "error_count": 0
+    }
+  ],
+  "environment_observations": {
+    "docker_info_mem_total_bytes": 4163104768,
+    "browser_memory_setting_mib": 4096,
+    "browser_cgroup_limit_bytes": 2952790016,
+    "host_mem_total_bytes": 68523839488,
+    "host_free_memory_gib_approx": 17.3,
+    "active_backend": "LinuxKit VM used by active Docker backend",
+    "wslconfig_memory_gib": "48; does not configure the active Docker backend",
+    "gui_ram_change": "FAILED: native pipe unavailable; setting unchanged",
+    "provenance": "Operator-reviewed environment observations; host free memory is approximate and dynamic."
+  },
+  "interpretation": "Anon memory and sampled content-process RSS grew during each active phase while file memory stayed near 500 MiB. The aggregates do not identify a fixed cause. Cgroup OOM counters are zero; Docker OOM or global VM pressure is not established. This is not a memory PASS or a fix.",
+  "next_actions": [
+    "Isolate anon-memory retention across phases and idle cleanup, using process RSS deltas within each phase.",
+    "Run a controlled 15-minute mixed workload comparing current 4 GiB VM / 2.75 GiB browser cgroup budget with an 8 GiB VM / 4 GiB browser budget. Treat the increase as a mitigation experiment, not a fix; keep the workload and sampling criteria constant."
+  ],
+  "privacy": "Allowlisted phase labels, operations, byte aggregates, process RSS within-phase changes/ranges, memory event counts, and high-level host budget observations. No timestamps, container identifiers, URLs, profile data, or tokens."
+}

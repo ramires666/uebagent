@@ -1,23 +1,56 @@
 # Инженерный отчёт о готовности к выпуску
 
-**Снимок состояния:** 30 октября 2026; run soak15m1 завершился FAIL через 359,75 с из запрошенных 900 с.
+**Снимок состояния:** 30 октября 2026; bounded lifecycle/cookie bridge run PASS. soak15m1 завершился FAIL через 359,75 с из запрошенных 900 с.
 
 **Решение:** **NO-GO для production release**, пока обязательные release gates не закрыты фактическими результатами.
 
 ## Краткое резюме
 
-Повторяемость P0 подтверждена: checkbox и web_table прошли по 3/3 запуска; полный bounded G3 прошёл 8/8 с независимым verifier при лимитах 120 секунд / 30 шагов. Hints остаются opt-in/default-off и не включались в production. Последний завершённый полный unit suite — 457 PASS / 8 SKIPPED / 0 FAIL; он предшествует текущим исправлениям и не считается повторной проверкой текущего HEAD. Результат нового полного suite ожидается.
+Повторяемость P0 подтверждена: checkbox и web_table прошли по 3/3 запуска; полный bounded G3 прошёл 8/8 с независимым verifier при лимитах 120 секунд / 30 шагов. Hints остаются opt-in/default-off и не включались в production. Полный suite на коммите 7bc09cf: 475 PASS / 8 SKIPPED / 0 FAIL за 88,30 с; сфокусированные тесты memory probe harness на коммите a0cc278: 6 PASS / 0 FAIL. Полный suite на a0cc278 не запускался; сводка разделяет результаты по ревизиям.
 
 | Gate | Текущий статус | Основание / следующий результат |
 |---|---|---|
-| G0 — tests | **PENDING** | Последний полный suite: 457/8/0 за 80,07 с (исторический baseline). После текущих изменений ожидается полный suite. |
+| G0 — tests | **Проверки пройдены в указанном объёме** | Полный suite 475/8/0 на 7bc09cf; 6 сфокусированных тестов harness на a0cc278. Полный suite на a0cc278 не запускался. [Сводка](evidence/unit-cookie-probe-summary.json). |
 | G1 — API/MCP security | **PASS, bounded** | Auth/CSRF: 16/16; worker bearer проверен отдельными task-control checks. |
-| G2 — worker/control integration | **PARTIAL** | Отдельные cancel/overlay проверки PASS; cookie-source bridge integration ожидает фактического завершения. |
+| G2 — worker/control integration | **PASS, bounded** | Runtime cancel/overlay и synthetic cookie bridge PASS на disposable stack. Cookie source — synthetic extension protocol; реальный Chrome E2E не выполнялся. |
 | G3 — live browser + model | **PASS, bounded** | P0: checkbox 3/3 и web_table 3/3; full G3: 8/8. Только disposable конфигурация с MODEL_PROTOCOL=generic и BROWSER_OBSERVATION_HINTS=1; production setting остаётся выключенным. |
-| G4 — cancel/restart/concurrency | **PENDING live rerun** | Cancel/overlay bounded evidence PASS; lifecycle harness исправлен после первого сбоя, live повторный прогон ещё не завершён. |
-| G5 — ресурсы/нагрузка | **FAIL: capacity blocker** | soak15m1 завершился через 359,75/900 с после 2 138 циклов. 59 samples покрывают 356,58 с; peak memory 2 949 316 608 / 2 952 790 016 B (99,88%). Функциональный отказ BROWSER_UNAVAILABLE:api и cleanup_or_idle_invariant_failed совпал с почти исчерпанной памятью; причинная связь и компонентный fix пока расследуются. |
+| G4 — cancel/restart/concurrency | **PASS, bounded** | Lifecycle PASS: uncertain response и RUNNING restart сохранили RECOVERING/review, по одному click на каждый сценарий, без redispatch; concurrent create отклонён с PROFILE_BUSY. |
+| G5 — ресурсы/нагрузка | **FAIL: capacity blocker** | soak15m1 завершился через 359,75/900 с после 2 138 циклов; 59 замеров покрыли 356,58 с, пик RAM — 99,88%. Функциональный отказ совпал с высокой памятью, но причина не установлена. memorymixed1 дал cgroup OOM=0; давление памяти всей VM не проверено. |
 | G6 — deploy/rollback | **PASS, DB migration N/A** | Candidate rollback проверен; control DB schema не менялась относительно базы 96, изменён только storage redaction regex. |
-| G7 — production release | **NO-GO** | Подтверждённый G5 resource failure; ожидаются исправление worker resource growth, bounded repro, новый полный soak, G0 full suite, cookie-source integration и G4 live rerun. |
+| G7 — production release | **NO-GO** | Подтверждённый G5 failure остаётся блокером: нужны изоляция роста anon memory и контролируемое сравнение 15-минутного soak при текущем и повышенном лимите. G2/G4 PASS ограничены указанными disposable сценариями. Полный suite прошёл на 7bc09cf; 6 сфокусированных тестов harness прошли на a0cc278. |
+
+### Последнее bounded runtime evidence: lifecycle и cookie bridge
+
+Исходный runtime/demoqa/results-lifecycle-cookie2.jsonl содержит PASS для queued/in-flight cancel, overlay, lifecycle и cookie bridge. Lifecycle проверка прошла через scripts/readiness_lifecycle_integration.py:run_integration: при потерянном ответе task остаётся RECOVERING; единственный forwarded execute дал один click effect, action остаётся unresolved, restart не делает redispatch. Отдельный RUNNING restart также переводит task в review/recovery без повторного execute; fixture-проверка наблюдает один click. Concurrent create отклонён с PROFILE_BUSY; worker завершил сценарий с одним context/page.
+
+Cookie bridge прошёл через scripts/readiness_cookie_bridge.py:_run: synthetic extension-protocol source маршрутизирован через ChromeBroker, TaskCookieImporter и WorkerClient. Отсутствующий и неоднозначный source блокируются до import. Проверены baseline MISSING → READY, импорт одного cookie для fixture и исключение unrelated origin; cookie value не записывается в task events. Это synthetic protocol integration, **не реальный Chrome extension или Chrome E2E**.
+
+Агрегат содержит только allowlisted статусы, Boolean и counts; токены, URL, profile data и cookie values исключены. Lifecycle/cookie PASS не меняет release verdict: soak15m1 остаётся FAIL при 99,88% RAM peak и 359,75/900 с, поэтому production release остаётся **NO-GO**. memoryprobe1 и memorymixed1 завершены как диагностика; mixed run выявил фазовый рост anon memory при стабильной file memory, но не определил причину и не является PASS или исправлением. Готовится контролируемое 15-минутное сравнение RAM-бюджетов. [Сводка mixed run](evidence/memorymixed1-summary.json).
+
+### Диагностика памяти: изолированные и смешанный режимы
+
+memoryprobe1 проверил отдельно навигацию, снимок экрана и подсказки наблюдения: по 420 операций за фазу, 31 замер, пик 73,20% cgroup-лимита, ошибок/OOM нет. Это диагностическая проба, не PASS по памяти и не исправление. [Агрегат с RSS-изменениями внутри фаз](evidence/memoryprobe1-summary.json).
+
+memorymixed1 выполнил три смешанные фазы за 190,31 с: навигация+наблюдение (418 операций), навигация+клик+проверка (416), полный цикл (391). Во всех фазах росла anon memory; file memory оставалась около 500 MiB. Контент-процесс браузера и WebExtensions также росли внутри каждой активной фазы, но эти агрегаты не устанавливают единственную причину. Пик cgroup памяти — 1 939 750 912 / 2 952 790 016 B (65,69%); 30 замеров, ошибок и OOM-счётчиков — 0. Worker сохранял один context/page и освобождал control owner.
+
+| Фаза | Δ anon, B | Δ file, B | Δ RSS, КиБ: Camoufox / Web Content / WebExtensions |
+|---|---:|---:|---:|
+| Навигация + наблюдение | +410 025 984 | +6 594 560 | +172 132 / +243 756 / +43 040 |
+| Навигация + клик + проверка | +288 727 040 | +57 344 | +10 376 / +212 108 / +32 588 |
+| Полный цикл | +300 232 704 | −20 234 240 | +51 128 / +195 648 / +30 472 |
+
+RAM и RSS указаны как изменение от первого к последнему замеру каждой фазы, не как абсолютное сравнение между фазами. Полная allowlist-сводка: [memorymixed1-summary.json](evidence/memorymixed1-summary.json).
+
+#### Среда и ограничения причинного вывода
+
+Docker сообщает MemTotal 4 163 104 768 B (3,88 GiB), настройки указывают 4096 MiB, а лимит browser cgroup в пробе — 2 952 790 016 B (2,75 GiB). Активный Docker backend работает в LinuxKit VM; параметр 48 GB из .wslconfig на него не распространяется. У хоста на момент замера было около 17,3 GiB свободной RAM — достаточно для контролируемой проверки VM cap 8 GiB; точный остаток после изменения не рассчитывался. GUI-изменение RAM не применилось: native pipe недоступен, настройка осталась прежней.
+
+Счётчик cgroup OOM равен нулю; Docker OOM не установлен, давление памяти всей VM не измерялось. Наблюдения не указывают на единственную причину роста.
+
+#### Следующие проверки
+
+1. Изолировать удержание anon memory по фазам и после idle/cleanup; сравнить process RSS внутри каждой фазы, чтобы проверить, сохраняется ли рост после освобождения.
+2. Выполнить одинаковый 15-минутный смешанный workload при текущем бюджете 4 GiB VM / 2,75 GiB browser cgroup и в кандидатной конфигурации 8 GiB VM / 4 GiB browser cgroup. Рост бюджета — mitigation-эксперимент, не fix; сохранить одинаковые workload, sampling и критерии.
 
 ### G5 · фактический неуспешный capacity run
 
@@ -37,14 +70,14 @@ Memory event counter max вырос на 319; он не является OOM cou
 ### Текущие bounded результаты и ограничения
 
 - P0: checkbox — 3/3 PASS; web_table — 3/3 PASS. Full G3 — 8/8 PASS с независимой проверкой, 120 с / 30 шагов на сценарий.
-- Последний завершённый полный pytest: 457 passed, 8 skipped, 0 failed, 80,07 с. Это исторический снимок до текущих правок; не выдаётся за проверку новой ревизии.
-- Runtime cancellation и overlay integration прошли. Lifecycle end-to-end и cookie-source integration ожидают live результатов.
+- Полный pytest на коммите 7bc09cf: 475 passed, 8 skipped, 0 failed, 88,30 с. Шесть сфокусированных тестов harness на a0cc278 также прошли; полный suite на a0cc278 не запускался. Сводка: [unit-cookie-probe-summary.json](evidence/unit-cookie-probe-summary.json).
+- Runtime cancellation, overlay, lifecycle и cookie bridge integration прошли в bounded disposable runs. См. lifecycle-cookie2-summary.json. Cookie bridge использовал synthetic extension protocol через ChromeBroker → TaskCookieImporter → WorkerClient; это не реальный Chrome E2E. Проверены блокировки при отсутствии/неоднозначности source, baseline MISSING → READY, исключение unrelated cookie и отсутствие cookie value в task events.
 - Hints включались только для disposable test worker через BROWSER_OBSERVATION_HINTS=1; в production feature остаётся default-off.
 - Исправления текущей ревизии включают тестовую конфигурацию: MODEL_PROTOCOL передаётся control, BROWSER_OBSERVATION_HINTS передаётся browser только для проверки; эта wiring не активирует hints в production.
 - Короткий предварительный soak-smoke2: 209 циклов / 30,14 с / 0 ошибок, память 34,93%, OOM=0. Последующая capacity попытка soak15m1 завершилась FAIL через 359,75 с: 2 138 циклов, 1 API failure и cleanup/idle failure.
 - Capacity gate для soak15m1 провален: 59/60 samples покрывают 356,58 с вместо ≥885 с; memory peak 99,88% hard limit (budget <90%), PID peak 36,13%, OOM/OOM-kill delta 0 среди сохранённых samples (не утверждение об отсутствии OOM вне sample window), median growth (последние 20 минус первые 20 samples) 48,95% лимита при бюджете ≤10%. Подробности и allowlisted timeline: [soak-failed-1.json](evidence/soak-failed-1.json).
 - Product guidance пока описывает проверку ожидаемого account, но нет жёсткого typed identity proof. Не заявляется готовность всех авторизованных сайтов. Данные не подтверждают at-rest encryption или наличие vault.
-- Отчёт о неуспешной попытке сохранён как [soak-failed-1.json](evidence/soak-failed-1.json) и построен только из измеренных samples. Успешный soak-summary.json не создан; lifecycle-summary.json появится после фактического live run.
+- Отчёт о неуспешной попытке сохранён как [soak-failed-1.json](evidence/soak-failed-1.json) и построен только из измеренных samples. Успешный soak-summary.json не создан. Bounded lifecycle/cookie агрегат сохранён отдельно в evidence/lifecycle-cookie2-summary.json; это не capacity evidence.
 
 ~~~mermaid
 stateDiagram-v2
@@ -57,7 +90,7 @@ stateDiagram-v2
     NoReplay --> [*]: independent effect and idle-worker checks
 ~~~
 
-Состояния на диаграмме — контракт lifecycle сценария. Live lifecycle rerun остаётся отдельным незакрытым gate.
+Состояния на диаграмме — контракт lifecycle сценария. Lifecycle rerun завершён с bounded PASS; см. актуальное evidence выше. Более широкий охват за пределами synthetic fixture остаётся отдельной задачей.
 
 
 ## Текущий follow-up: P0 и полный G3 (30 октября 2026)
@@ -92,9 +125,9 @@ flowchart LR
     V --> R[Результат подтверждён<br/>или задача остаётся неуспешной]
 ```
 
-Hints содержат ограниченный набор видимых элементов и геометрию относительно того же снимка; значения полей не передаются. Они не меняют policy, не выбирают цель автоматически, не корректируют координаты и не ослабляют независимую проверку. Postflight production остался ready/idle; 29 задач и историческая waiting-human задача не изменились. Последний полный unit suite: **457 passed, 8 skipped, 0 failed** за 80,07 с ([сводка по test-file группам](evidence/unit-final-summary.json); локальный [JUnit](../../runtime/readiness-2026-10-30/pytest-p0-final.xml)). Шесть skip связаны с изолированными Camoufox/X11 или disposable browser окружениями; два opt-in real-worker checks исполняются отдельными CLI и проверены отдельно.
+Hints содержат ограниченный набор видимых элементов и геометрию относительно того же снимка; значения полей не передаются. Они не меняют policy, не выбирают цель автоматически, не корректируют координаты и не ослабляют независимую проверку. Postflight production остался ready/idle; 29 задач и историческая waiting-human задача не изменились. Последний полный suite на коммите 7bc09cf: **475 passed, 8 skipped, 0 failed** за 88,30 с ([сводка](evidence/unit-cookie-probe-summary.json)). Шесть сфокусированных тестов harness на a0cc278 прошли; полный suite на a0cc278 не запускался. Шесть skip связаны с изолированными Camoufox/X11 или disposable browser окружениями; два opt-in real-worker checks исполняются отдельными CLI и проверены отдельно.
 
-**Решение остаётся NO-GO.** P0 воспроизводимость и full G3 в opt-in test конфигурации выполнены, но feature не включена в production. Runtime cancel и overlay integration PASS; lifecycle restart/concurrency uncertain-response live rerun ожидает фактического завершения, как и cookie-source bridge. 15-минутный soak выполняется; 30-секундный smoke не закрывает capacity gate. Storage redaction regex изменён, но control DB schema относительно базы 96 не менялась, поэтому migration gate для candidate N/A. Upload, browser dialog, frame targeting и multiple windows не запускались и не считаются поддержанными этим evidence. Авторизованные account scope остаются ограниченными: hard typed identity proof не реализован.
+**Решение остаётся NO-GO.** P0 воспроизводимость и full G3 в opt-in test конфигурации выполнены, но feature не включена в production. Runtime cancel, overlay, lifecycle и synthetic cookie bridge прошли bounded integration checks; это не реальный Chrome E2E. soak15m1 завершился FAIL через 359,75/900 с при memory peak 99,88%; короткий smoke не закрывает capacity gate. Storage redaction regex изменён, но control DB schema относительно базы 96 не менялась, поэтому migration gate для candidate N/A. Upload, browser dialog, frame targeting и multiple windows не запускались и не считаются поддержанными этим evidence. Авторизованные account scope остаются ограниченными: hard typed identity proof не реализован.
 
 ---
 
@@ -221,9 +254,9 @@ P0 закрывает только подтверждённые UI failures. О�
 | Работа / статус для GO | Владелец по роли | Зависимости | Критерий приёмки |
 |---|---|---|---|
 | Dialog, file upload и расширенная overlay capability остаются непроверенными/неподдержанными по заявленному contract. Один bounded overlay test подтвердил безопасное поведение при перехвате: receipt `applied`, но task завершился `waiting_human/verification_required` без подтверждения целевого эффекта. **Обязательно для GO, если заявленная поддержка включает эти действия.** | Владелец browser worker | Явная политика разрешённых действий и безопасные synthetic fixtures | Для dialog/upload есть отдельные поддержанные операции и независимая проверка; при перехваченном клике task/verifier не сообщает достижение целевого результата без фактического эффекта. Неподдерживаемый путь явно блокируется. |
-| In-flight cancellation, busy/profile ownership, uncertain dispatch и запрет повторного side effect; один controlled in-flight case завершился `RECOVERING` без replay, полный lifecycle contract ещё не проверен. **Обязательно для GO, если разрешены внешние действия с возможным повторным эффектом или concurrent tasks.** | Владелец control/TaskRunner | Трассируемый dispatch lifecycle; управляемый synthetic endpoint | Расширить проверку cancel до dispatch, во время dispatch и после неизвестного ответа; отсутствие автоматического replay; idempotent/stable status; подтверждённая сверка результата; profile/context/page инварианты при занятости и recovery. |
-| Cookie source, live identity/account policy и log redaction. **Cookie-source integration ещё ожидает фактического завершения; требуется при использовании авторизованных сессий или чувствительных данных.** | Владелец security/privacy | Завершить тест cookie-source и зафиксировать identity/session policy | Проверить ожидаемый account перед действием и перед отправкой; hard typed identity proof пока отсутствует. Не заявлять поддержку всех авторизованных сайтов; at-rest encryption/vault не подтверждены. |
-| Soak/capacity. **soak15m1 завершился FAIL через 359,75/900 с; memory достиг 99,88% hard limit, функциональный API/cleanup отказ остановил run.** | Владелец SRE/performance | Повторить bounded 15-минутный run только после исправления роста памяти; ≤90% memory/PID, OOM=0, разница медиан последних и первых третей samples ≤10% лимита, ≥60 samples за ≥885 секунд | [Фактические 59 samples и измерения](evidence/soak-failed-1.json); capacity PASS нет. |
+| In-flight cancellation, busy/profile ownership, uncertain dispatch и запрет повторного side effect; один controlled in-flight case завершился `RECOVERING` без replay, bounded lifecycle contract проверен на synthetic fixture; охват на произвольных внешних сайтах не доказан. **Обязательно для GO, если разрешены внешние действия с возможным повторным эффектом или concurrent tasks.** | Владелец control/TaskRunner | Трассируемый dispatch lifecycle; управляемый synthetic endpoint | Расширить проверку cancel до dispatch, во время dispatch и после неизвестного ответа; отсутствие автоматического replay; idempotent/stable status; подтверждённая сверка результата; profile/context/page инварианты при занятости и recovery. |
+| Cookie source, live identity/account policy и log redaction. **Synthetic cookie bridge integration прошёл; реальный Chrome E2E и live identity/account policy остаются открытыми для авторизованных сессий или чувствительных данных.** | Владелец security/privacy | Завершить тест cookie-source и зафиксировать identity/session policy | Проверить ожидаемый account перед действием и перед отправкой; hard typed identity proof пока отсутствует. Не заявлять поддержку всех авторизованных сайтов; at-rest encryption/vault не подтверждены. |
+| Soak/capacity. **soak15m1 завершился FAIL через 359,75/900 с; memory достиг 99,88% hard limit, функциональный API/cleanup отказ остановил run.** | Владелец SRE/performance | Изолировать удержание anon memory; затем сравнить 15-минутный смешанный прогон при текущем и повышенном RAM-бюджете. Условия PASS: ≤90% memory/PID, OOM=0, рост медиан ≤10% лимита, ≥60 samples за ≥885 с. | [soak-failed-1.json](evidence/soak-failed-1.json); [memorymixed1 diagnostic](evidence/memorymixed1-summary.json). capacity PASS нет. |
 | Control DB migration/rollback marker. **N/A для текущего candidate:** control DB schema не менялась относительно базы 96; изменён только storage redaction regex. | Владелец control persistence / release engineering | Пересмотреть применимость при следующем изменении schema | Нынешний candidate rollback evidence не заявляет DB migration coverage и не требует schema migration. |
 
 ### P2 — расширение уверенности, не текущие доказанные блокеры по умолчанию
