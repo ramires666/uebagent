@@ -1,12 +1,12 @@
 # Инженерный отчёт о готовности к выпуску
 
-**Снимок состояния:** 30 октября 2026; bounded lifecycle/cookie bridge run PASS. Docker Desktop VM memory cap увеличен с 4096 до 8192 MiB и postflight пройден; повторный soak при browser-container 4 GiB сейчас выполняется, результата пока нет. soak15m1 завершился FAIL через 359,75 с из запрошенных 900 с.
+**Снимок состояния:** 30 октября 2026; bounded lifecycle/cookie bridge run PASS. Docker Desktop VM cap 8 GiB применён; production postflight пройден. Soak при VM 8 GiB / browser cgroup 4 GiB завершился FAIL через 670,56/900 с. Отдельный GC-контраст `memorygc4gb1` завершился как DIAGNOSTIC: после успешного запроса сбора памяти наблюдалось снижение cgroup memory и anon memory; без matched idle-only контроля его нельзя приписать именно запросу GC. NO-GO сохраняется.
 
 **Решение:** **NO-GO для production release**, пока обязательные release gates не закрыты фактическими результатами.
 
 ## Краткое резюме
 
-Повторяемость P0 подтверждена: checkbox и web_table прошли по 3/3 запуска; полный bounded G3 прошёл 8/8 с независимым verifier при лимитах 120 секунд / 30 шагов. Hints остаются opt-in/default-off и не включались в production. Полный suite на коммите 7bc09cf: 475 PASS / 8 SKIPPED / 0 FAIL за 88,30 с; сфокусированные тесты memory probe harness на коммите a0cc278: 6 PASS / 0 FAIL. Полный suite на a0cc278 не запускался; сводка разделяет результаты по ревизиям.
+Повторяемость P0 подтверждена: checkbox и web_table прошли по 3/3 запуска; полный bounded G3 прошёл 8/8 с независимым verifier при лимитах 120 секунд / 30 шагов. Hints остаются opt-in/default-off и не включались в production. Свежий полный suite на ffa80c1: 486 PASS / 8 SKIPPED / 0 FAIL за 93,14 с; [JUnit-derived summary](evidence/unit-suite-gc-final.json). Предыдущие suite numbers остаются историческими.
 
 | Gate | Текущий статус | Основание / следующий результат |
 |---|---|---|
@@ -15,9 +15,9 @@
 | G2 — worker/control integration | **PASS, bounded** | Runtime cancel/overlay и synthetic cookie bridge PASS на disposable stack. Cookie source — synthetic extension protocol; реальный Chrome E2E не выполнялся. |
 | G3 — live browser + model | **PASS, bounded** | P0: checkbox 3/3 и web_table 3/3; full G3: 8/8. Только disposable конфигурация с MODEL_PROTOCOL=generic и BROWSER_OBSERVATION_HINTS=1; production setting остаётся выключенным. |
 | G4 — cancel/restart/concurrency | **PASS, bounded** | Lifecycle PASS: uncertain response и RUNNING restart сохранили RECOVERING/review, по одному click на каждый сценарий, без redispatch; concurrent create отклонён с PROFILE_BUSY. |
-| G5 — ресурсы/нагрузка | **FAIL: capacity blocker** | soak15m1 завершился через 359,75/900 с после 2 138 циклов; 59 замеров покрыли 356,58 с, пик RAM — 99,88%. Функциональный отказ совпал с высокой памятью, но причина не установлена. memorymixed1 дал cgroup OOM=0; давление памяти всей VM не проверено. |
+| G5 — ресурсы/нагрузка | **FAIL: capacity blocker** | При VM 8 GiB / browser cgroup 4 GiB повторный soak также завершился FAIL: 670,56/900 с, 3 446 циклов, 106 замеров за 669,34 с, memory peak 99,998% и functional failures `MANUAL_ACTION_NOT_APPLIED:navigate` и cleanup/idle. OOM deltas остались 0 в сохранённых samples; причина не установлена. [Allowlisted timeline](evidence/soak-8gvm-4gb-failed.json). |
 | G6 — deploy/rollback | **PASS, DB migration N/A** | Candidate rollback проверен; control DB schema не менялась относительно базы 96, изменён только storage redaction regex. |
-| G7 — production release | **NO-GO** | Подтверждённый G5 failure остаётся блокером: нужны изоляция роста anon memory и контролируемое сравнение 15-минутного soak при текущем и повышенном лимите. G2/G4 PASS ограничены указанными disposable сценариями. Полный suite прошёл на 7bc09cf; 6 сфокусированных тестов harness прошли на a0cc278. |
+| G7 — production release | **NO-GO** | Оба capacity soak завершились FAIL; повышенные лимиты продлили run, но второй тоже достиг почти 100% RAM hard limit и дал functional failure. Требуется устранить функциональный отказ и установить/снизить ресурсный рост, затем повторить 15-минутный soak. G2/G4 PASS ограничены указанными disposable сценариями. GC-контраст дал наблюдаемое снижение памяти, но причинность forced GC против естественного idle пока не установлена; matched idle-only контроль ожидает выполнения. |
 
 ### Последнее bounded runtime evidence: lifecycle и cookie bridge
 
@@ -25,7 +25,7 @@
 
 Cookie bridge прошёл через scripts/readiness_cookie_bridge.py:_run: synthetic extension-protocol source маршрутизирован через ChromeBroker, TaskCookieImporter и WorkerClient. Отсутствующий и неоднозначный source блокируются до import. Проверены baseline MISSING → READY, импорт одного cookie для fixture и исключение unrelated origin; cookie value не записывается в task events. Это synthetic protocol integration, **не реальный Chrome extension или Chrome E2E**.
 
-Агрегат содержит только allowlisted статусы, Boolean и counts; токены, URL, profile data и cookie values исключены. Lifecycle/cookie PASS не меняет release verdict: soak15m1 остаётся FAIL при 99,88% RAM peak и 359,75/900 с, поэтому production release остаётся **NO-GO**. memoryprobe1 и memorymixed1 завершены как диагностика; mixed run выявил фазовый рост anon memory при стабильной file memory, но не определил причину и не является PASS или исправлением. VM cap 8 GiB применён; отдельный soak при временном browser cgroup 4 GiB выполняется, его итоговых метрик пока нет. Production browser limit остаётся 2816 MiB. [Сводка mixed run](evidence/memorymixed1-summary.json) · [Docker RAM change и статус soak](evidence/docker-memory-change-summary.json).
+Агрегат содержит только allowlisted статусы, Boolean и counts; токены, URL, profile data и cookie values исключены. Lifecycle/cookie PASS не меняет release verdict. Soak15m1 при VM 4 GiB / browser cgroup 2,75 GiB завершился за 359,75/900 с, а повтор soak8gvm4gb1 при VM 8 GiB / browser cgroup 4 GiB — за 670,56/900 с. Второй запуск дольше работал, но также достиг почти 100% cgroup memory и завершился с `MANUAL_ACTION_NOT_APPLIED:navigate` и cleanup/idle failure. Это показывает, что увеличение бюджетов само по себе не устранило проблему; причина функционального сбоя и роста памяти не установлена, исправление не подтверждено. Production browser limit остаётся 2816 MiB. Текущий NO-GO сохраняется. [Сравнительная allowlisted timeline](evidence/soak-8gvm-4gb-failed.json) · [GC contrast summary](evidence/memory-gc4gb1-summary.json) · [Docker RAM change и postflight](evidence/docker-memory-change-summary.json).
 
 ### Диагностика памяти: изолированные и смешанный режимы
 
@@ -41,18 +41,53 @@ memorymixed1 выполнил три смешанные фазы за 190,31 с:
 
 RAM и RSS указаны как изменение от первого к последнему замеру каждой фазы, не как абсолютное сравнение между фазами. Полная allowlist-сводка: [memorymixed1-summary.json](evidence/memorymixed1-summary.json).
 
+
+#### Live bounded GC-контраст: memorygc4gb1
+
+В смешанном диагностическом workload (404 полных цикла) запрос GC подтвердился. Независимая проверка в 17:08:02.693898 UTC подтвердила стабильность identity и generation, один context/page и idle состояние; значения идентификаторов не сохранялись.
+
+| Метрика | Перед запросом, 17:07:54.6077964 UTC | После запроса, 17:08:00.8861808 UTC | Δ (после − до) |
+|---|---:|---:|---:|
+| cgroup memory | 3 128 995 840 B (2 984,04 MiB) | 2 569 310 208 B (2 450,29 MiB) | −559 685 632 B (−533,76 MiB) |
+| anon | 1 251 229 696 B (1 193,27 MiB) | 696 233 984 B (663,98 MiB) | −554 995 712 B (−529,29 MiB) |
+| file | 1 842 036 736 B (1 756,70 MiB) | 1 842 036 736 B (1 756,70 MiB) | 0 B |
+| Web Content RSS | 615 272 KiB (600,85 MiB) | 222 180 KiB (216,97 MiB) | −393 092 KiB (−383,88 MiB) |
+| Browser parent RSS | 643 884 KiB (628,79 MiB) | 560 972 KiB (547,82 MiB) | −82 912 KiB (−80,97 MiB) |
+| WebExtensions RSS | 251 664 KiB (245,77 MiB) | 187 688 KiB (183,29 MiB) | −63 976 KiB (−62,48 MiB) |
+| Python / Node RSS | 151 624 / 120 040 KiB | 151 624 / 120 040 KiB | 0 / 0 KiB |
+
+File memory не изменилась; снижение пришлось главным образом на anon и наблюдаемые RSS процессов браузера. Это указывает, какие группы памяти изменились в этом окне, но не устанавливает, что именно вызвало снижение. Перед запросом было около 2 с idle, после — 8 с idle; второй sample снят внутри post-request окна. Matched idle-only run ещё не выполнен. Поэтому результат — диагностический сигнал, не доказательство исправления или live mitigation; два 15-минутных capacity soak остаются FAIL, production — NO-GO. OOM и OOM-kill counters в обоих выбранных samples равны нулю. [Allowlisted GC evidence](evidence/memory-gc4gb1-summary.json).
+
+Следующая матрица: пять прогонов по 600 одинаковых циклов с одинаковым профилем и ограничением 7 циклов/с: `baseline`, `no_trace`, `no_addons`, `neither` без принудительного GC и отдельный `baseline` с GC-контрастом. Нужен matched idle control, прежде чем приписывать эффект GC; сравнение не включает производственный rollout.
+
 #### Среда и ограничения причинного вывода
 
-Docker сообщает MemTotal 8 384 647 168 B после увеличения VM cap с 4096 до 8192 MiB. Изменена только настройка MemoryMiB; Docker Desktop был остановлен/запущен штатной CLI-командой, а исходные байты файла настроек сохранены в backup. Прямое редактирование этого файла не документировано как публичный интерфейс Docker, поэтому изменение подтверждено фактическим MemTotal и postflight, а не только записью настройки. Исходные production containers восстановлены; DemoQA worker/tasks и model preflight готовы, 29 задач, из них одна suspended/waiting_human. Browser cgroup limit остался 2 952 790 016 B (2,75 GiB): 4 GiB ещё не применялись. [Санитизированная сводка изменения и postflight](evidence/docker-memory-change-summary.json).
+Docker сообщает MemTotal 8 384 647 168 B после увеличения VM cap с 4096 до 8192 MiB. Изменена только настройка MemoryMiB; после диагностического прогона production containers были восстановлены. Независимый postflight подтвердил ready production, 29 задач (одна suspended/waiting_human), неизменные profile fingerprints. Disposable soak подтвердил временный browser cgroup limit 4 294 967 296 B (4 GiB), тогда как production browser limit остался 2816 MiB. Soak достиг 4 294 901 760 B (99,998% hard limit); host cgroup OOM/OOM-kill/group-kill deltas — 0 среди сохранённых samples. Подробная очищенная timeline: [soak-8gvm-4gb-failed.json](evidence/soak-8gvm-4gb-failed.json). [Сводка VM change/postflight](evidence/docker-memory-change-summary.json).
 
 Счётчик cgroup OOM равен нулю; Docker OOM не установлен, давление памяти всей VM не измерялось. Наблюдения не указывают на единственную причину роста.
 
 #### Следующие проверки
 
-1. Изолировать удержание anon memory по фазам и после idle/cleanup; сравнить process RSS внутри каждой фазы, чтобы проверить, сохраняется ли рост после освобождения.
-2. Дождаться результата уже выполняемого одинакового 15-минутного смешанного workload при VM cap 8 GiB / browser cgroup 4 GiB. Прежний soak был при VM 4 GiB / browser 2,75 GiB; различие условий требует повторной проверки. Рост бюджета — mitigation-эксперимент, не fix; сохранить одинаковые workload, sampling и критерии.
+1. Разобрать `MANUAL_ACTION_NOT_APPLIED:navigate` и рост/удержание памяти в одном и том же bounded workload.
+2. После конкретного исправления повторить 900-секундный soak с теми же workload, sampling и критериями. Ни увеличение VM/browser лимитов, ни unit-тесты сами по себе не закрывают G5. Live GC contrast завершился как диагностика; снижение памяти наблюдалось, но matched idle-only сравнения ещё нет, поэтому это не доказанный fix.
 
-### G5 · фактический неуспешный capacity run
+### G5 · повторный soak при увеличенных лимитах (soak8gvm4gb1)
+
+| Измерение | Результат | Gate |
+|---|---:|---|
+| Условия | VM 8 GiB; временный browser cgroup 4 GiB; production browser limit 2816 MiB | Disposable only |
+| Длительность / cycles | 670,56 / 900 с; 3 446 cycles | FAIL: duration |
+| Samples / coverage | 106 / 669,34 с | FAIL: <885 с |
+| Memory peak | 4 294 901 760 / 4 294 967 296 B (99,998%) | FAIL: threshold <90% |
+| PID peak | 189 / 512 (36,91%) | PASS по PID бюджету |
+| Median memory growth: последние 36 минус первые 36 samples | 481 738 752 B (11,22% limit) | FAIL: budget ≤10% |
+| OOM / OOM-kill / group-kill deltas | 0 / 0 / 0 в сохранённых samples | Без OOM-события в этом окне |
+| Functional outcome | `MANUAL_ACTION_NOT_APPLIED:navigate`; `cleanup_or_idle_invariant_failed` | FAIL |
+| HTTP failure counters | API 0; action 0 | Не отражают functional failure counters; soak всё равно FAIL |
+
+Оба soak завершились у потолка памяти: исходный VM 4 GiB / browser 2,75 GiB run остановился на 359,75 с и 99,88%; повторный VM 8 GiB / browser 4 GiB run дошёл до 670,56 с, но достиг 99,998% и также завершился функциональной ошибкой. Увеличение лимитов продлило прогон, но не закрыло G5 и не устанавливает причину. [Sanitized measurements and relative timeline](evidence/soak-8gvm-4gb-failed.json). GC diagnostic live comparison завершился; наблюдаемое снижение памяти не отделено от естественного idle, matched control ожидается.
+
+### G5 · первый неуспешный capacity run (soak15m1)
 
 | Измерение | Результат | Gate |
 |---|---:|---|
@@ -70,12 +105,12 @@ Memory event counter max вырос на 319; он не является OOM cou
 ### Текущие bounded результаты и ограничения
 
 - P0: checkbox — 3/3 PASS; web_table — 3/3 PASS. Full G3 — 8/8 PASS с независимой проверкой, 120 с / 30 шагов на сценарий.
-- Свежий полный suite на source revision ffa80c1: 486 passed, 8 skipped, 0 failed за 93,14 с; группировка тестовых файлов рассчитана из JUnit XML. [Сводка текущего suite](evidence/unit-suite-gc-final.json). Предыдущие 475/8/0 на 7bc09cf остаются историческим baseline: [unit-cookie-probe-summary.json](evidence/unit-cookie-probe-summary.json). Guarded GC diagnostic endpoint покрыт тестами, но live GC contrast не запускался и production memory improvement не доказано.
+- Свежий полный suite на source revision ffa80c1: 486 passed, 8 skipped, 0 failed за 93,14 с; группировка тестовых файлов рассчитана из JUnit XML. [Сводка текущего suite](evidence/unit-suite-gc-final.json). Предыдущие 475/8/0 на 7bc09cf остаются историческим baseline: [unit-cookie-probe-summary.json](evidence/unit-cookie-probe-summary.json). Guarded GC diagnostic endpoint покрыт тестами. Live GC contrast завершился с наблюдаемым снижением памяти; forced-GC causality и production memory improvement не доказаны, matched idle control ожидается.
 - Runtime cancellation, overlay, lifecycle и cookie bridge integration прошли в bounded disposable runs. См. lifecycle-cookie2-summary.json. Cookie bridge использовал synthetic extension protocol через ChromeBroker → TaskCookieImporter → WorkerClient; это не реальный Chrome E2E. Проверены блокировки при отсутствии/неоднозначности source, baseline MISSING → READY, исключение unrelated cookie и отсутствие cookie value в task events.
 - Hints включались только для disposable test worker через BROWSER_OBSERVATION_HINTS=1; в production feature остаётся default-off.
 - Исправления текущей ревизии включают тестовую конфигурацию: MODEL_PROTOCOL передаётся control, BROWSER_OBSERVATION_HINTS передаётся browser только для проверки; эта wiring не активирует hints в production.
-- Короткий предварительный soak-smoke2: 209 циклов / 30,14 с / 0 ошибок, память 34,93%, OOM=0. Последующая capacity попытка soak15m1 завершилась FAIL через 359,75 с: 2 138 циклов, 1 API failure и cleanup/idle failure.
-- Capacity gate для soak15m1 провален: 59/60 samples покрывают 356,58 с вместо ≥885 с; memory peak 99,88% hard limit (budget <90%), PID peak 36,13%, OOM/OOM-kill delta 0 среди сохранённых samples (не утверждение об отсутствии OOM вне sample window), median growth (последние 20 минус первые 20 samples) 48,95% лимита при бюджете ≤10%. Подробности и allowlisted timeline: [soak-failed-1.json](evidence/soak-failed-1.json).
+- Короткий предварительный soak-smoke2: 209 циклов / 30,14 с / 0 ошибок, память 34,93%, OOM=0. Оба capacity run завершились FAIL: soak15m1 — 359,75 с, 2 138 циклов, 99,88%, API failure и cleanup/idle failure; soak8gvm4gb1 — 670,56 с, 3 446 циклов, 99,998%, functional navigation failure и cleanup/idle failure.
+- Capacity gate остаётся FAIL даже при VM 8 GiB / browser cgroup 4 GiB: повторный run занял 670,56/900 с, 106 samples покрыли 669,34 с, peak 99,998%, PID peak 36,91%, median growth последних 36 минус первых 36 samples 11,22% лимита (budget ≤10%); функциональные сбои `MANUAL_ACTION_NOT_APPLIED:navigate` и cleanup/idle. OOM deltas — 0 среди сохранённых samples. Более высокий лимит продлил прогон, но не исправил failure. [Новый run и измеренная timeline](evidence/soak-8gvm-4gb-failed.json); первый run: [soak-failed-1.json](evidence/soak-failed-1.json).
 - Product guidance пока описывает проверку ожидаемого account, но нет жёсткого typed identity proof. Не заявляется готовность всех авторизованных сайтов. Данные не подтверждают at-rest encryption или наличие vault.
 - Отчёт о неуспешной попытке сохранён как [soak-failed-1.json](evidence/soak-failed-1.json) и построен только из измеренных samples. Успешный soak-summary.json не создан. Bounded lifecycle/cookie агрегат сохранён отдельно в evidence/lifecycle-cookie2-summary.json; это не capacity evidence.
 
@@ -256,7 +291,7 @@ P0 закрывает только подтверждённые UI failures. О�
 | Dialog, file upload и расширенная overlay capability остаются непроверенными/неподдержанными по заявленному contract. Один bounded overlay test подтвердил безопасное поведение при перехвате: receipt `applied`, но task завершился `waiting_human/verification_required` без подтверждения целевого эффекта. **Обязательно для GO, если заявленная поддержка включает эти действия.** | Владелец browser worker | Явная политика разрешённых действий и безопасные synthetic fixtures | Для dialog/upload есть отдельные поддержанные операции и независимая проверка; при перехваченном клике task/verifier не сообщает достижение целевого результата без фактического эффекта. Неподдерживаемый путь явно блокируется. |
 | In-flight cancellation, busy/profile ownership, uncertain dispatch и запрет повторного side effect; один controlled in-flight case завершился `RECOVERING` без replay, bounded lifecycle contract проверен на synthetic fixture; охват на произвольных внешних сайтах не доказан. **Обязательно для GO, если разрешены внешние действия с возможным повторным эффектом или concurrent tasks.** | Владелец control/TaskRunner | Трассируемый dispatch lifecycle; управляемый synthetic endpoint | Расширить проверку cancel до dispatch, во время dispatch и после неизвестного ответа; отсутствие автоматического replay; idempotent/stable status; подтверждённая сверка результата; profile/context/page инварианты при занятости и recovery. |
 | Cookie source, live identity/account policy и log redaction. **Synthetic cookie bridge integration прошёл; реальный Chrome E2E и live identity/account policy остаются открытыми для авторизованных сессий или чувствительных данных.** | Владелец security/privacy | Завершить тест cookie-source и зафиксировать identity/session policy | Проверить ожидаемый account перед действием и перед отправкой; hard typed identity proof пока отсутствует. Не заявлять поддержку всех авторизованных сайтов; at-rest encryption/vault не подтверждены. |
-| Soak/capacity. **soak15m1 завершился FAIL через 359,75/900 с; memory достиг 99,88% hard limit, функциональный API/cleanup отказ остановил run.** | Владелец SRE/performance | Изолировать удержание anon memory; затем сравнить 15-минутный смешанный прогон при текущем и повышенном RAM-бюджете. Условия PASS: ≤90% memory/PID, OOM=0, рост медиан ≤10% лимита, ≥60 samples за ≥885 с. | [soak-failed-1.json](evidence/soak-failed-1.json); [memorymixed1 diagnostic](evidence/memorymixed1-summary.json). capacity PASS нет. |
+| Soak/capacity. **Оба run завершились FAIL.** Повторный soak при VM 8 GiB / browser cgroup 4 GiB шёл 670,56/900 с и достиг 99,998% memory; функциональные сбои — navigate not applied и cleanup/idle. | Владелец SRE/performance | Разобрать functional failure и рост/удержание памяти; после исправления повторить 15-минутный смешанный прогон. Условия PASS: ≤90% memory/PID, OOM=0, рост медиан ≤10% лимита, ≥60 samples за ≥885 с. | [Первый run](evidence/soak-failed-1.json); [повторный run и timeline](evidence/soak-8gvm-4gb-failed.json); [memorymixed1 diagnostic](evidence/memorymixed1-summary.json); [live GC contrast](evidence/memory-gc4gb1-summary.json). capacity PASS нет. |
 | Control DB migration/rollback marker. **N/A для текущего candidate:** control DB schema не менялась относительно базы 96; изменён только storage redaction regex. | Владелец control persistence / release engineering | Пересмотреть применимость при следующем изменении schema | Нынешний candidate rollback evidence не заявляет DB migration coverage и не требует schema migration. |
 
 ### P2 — расширение уверенности, не текущие доказанные блокеры по умолчанию

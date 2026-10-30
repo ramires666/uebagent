@@ -1,0 +1,1128 @@
+{
+  "schema": "readiness-soak-failed-allowlist/v1",
+  "run_label": "soak8gvm4gb1",
+  "status": "FAIL",
+  "configuration": {
+    "docker_vm_memory_mib": 8192,
+    "browser_cgroup_memory_limit_bytes": 4294967296,
+    "browser_cgroup_memory_limit_mib": 4096,
+    "production_browser_cgroup_limit_mib": 2816,
+    "hints_enabled": true,
+    "requested_seconds": 900
+  },
+  "run": {
+    "actual_seconds": 670.56,
+    "cycles_completed": 3446,
+    "manual_actions": 10339,
+    "api_requests": 17869,
+    "api_http_failures": 0,
+    "action_http_failures": 0,
+    "functional_failure_codes": [
+      "MANUAL_ACTION_NOT_APPLIED:navigate",
+      "cleanup_or_idle_invariant_failed"
+    ],
+    "api_p95_ms": 34.15,
+    "action_p95_ms": 104.56
+  },
+  "observed": {
+    "sample_count": 106,
+    "sample_coverage_seconds": 669.34,
+    "memory_start_bytes": 2497359872,
+    "memory_last_bytes": 4291178496,
+    "memory_peak_bytes": 4294901760,
+    "memory_peak_percent_limit": 99.998,
+    "pid_start": 189,
+    "pid_peak": 189,
+    "pid_limit": 512,
+    "memory_growth_first_last_thirds_bytes": 481738752,
+    "memory_growth_first_last_thirds_percent_limit": 11.22,
+    "oom_delta": 0,
+    "oom_kill_delta": 0,
+    "oom_group_kill_delta": 0,
+    "memory_stat_start_bytes": {
+      "anon": 612265984,
+      "file": 1856565248
+    },
+    "memory_stat_last_bytes": {
+      "anon": 4154433536,
+      "file": 82796544
+    }
+  },
+  "previous_failed_run": {
+    "run_label": "soak15m1",
+    "actual_seconds": 359.75,
+    "requested_seconds": 900,
+    "cycles_completed": 2138,
+    "sample_count": 59,
+    "sample_coverage_seconds": 356.58,
+    "memory_peak_percent_limit": 99.88,
+    "failure_codes": [
+      "BROWSER_UNAVAILABLE:api",
+      "cleanup_or_idle_invariant_failed"
+    ],
+    "resource_limit_bytes": 2952790016
+  },
+  "comparison_note": "The higher VM and browser limits extended the run from about 6 to about 11 minutes but did not satisfy the 900-second gate; both runs failed near the memory ceiling. This does not establish root cause or a production fix. HTTP failure counters are not a count of functional failures.",
+  "timeline": [
+    {
+      "elapsed_seconds": 0.0,
+      "memory_current_bytes": 2497359872,
+      "anon_bytes": 612265984,
+      "file_bytes": 1856565248,
+      "pids_current": 189,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 6.81,
+      "memory_current_bytes": 2743386112,
+      "anon_bytes": 857329664,
+      "file_bytes": 1857040384,
+      "pids_current": 184,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 13.11,
+      "memory_current_bytes": 2831200256,
+      "anon_bytes": 942018560,
+      "file_bytes": 1857040384,
+      "pids_current": 183,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 19.43,
+      "memory_current_bytes": 2915491840,
+      "anon_bytes": 925962240,
+      "file_bytes": 1857048576,
+      "pids_current": 183,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 25.72,
+      "memory_current_bytes": 2890301440,
+      "anon_bytes": 997502976,
+      "file_bytes": 1857048576,
+      "pids_current": 183,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 32.02,
+      "memory_current_bytes": 2975612928,
+      "anon_bytes": 1083711488,
+      "file_bytes": 1857048576,
+      "pids_current": 177,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 38.84,
+      "memory_current_bytes": 3060113408,
+      "anon_bytes": 1160384512,
+      "file_bytes": 1858097152,
+      "pids_current": 177,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 45.14,
+      "memory_current_bytes": 3031199744,
+      "anon_bytes": 1137381376,
+      "file_bytes": 1858097152,
+      "pids_current": 177,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 51.44,
+      "memory_current_bytes": 3092541440,
+      "anon_bytes": 1197522944,
+      "file_bytes": 1858097152,
+      "pids_current": 176,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 57.85,
+      "memory_current_bytes": 3160481792,
+      "anon_bytes": 1267621888,
+      "file_bytes": 1858097152,
+      "pids_current": 176,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 64.14,
+      "memory_current_bytes": 3123081216,
+      "anon_bytes": 1232998400,
+      "file_bytes": 1858195456,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 70.45,
+      "memory_current_bytes": 3194544128,
+      "anon_bytes": 1297068032,
+      "file_bytes": 1858195456,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 76.87,
+      "memory_current_bytes": 3232034816,
+      "anon_bytes": 1335320576,
+      "file_bytes": 1858195456,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 83.18,
+      "memory_current_bytes": 3288461312,
+      "anon_bytes": 1397047296,
+      "file_bytes": 1858195456,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 89.49,
+      "memory_current_bytes": 3321503744,
+      "anon_bytes": 1428799488,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 95.82,
+      "memory_current_bytes": 3335548928,
+      "anon_bytes": 1446580224,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 102.14,
+      "memory_current_bytes": 3399270400,
+      "anon_bytes": 1505579008,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 108.95,
+      "memory_current_bytes": 3456135168,
+      "anon_bytes": 1561579520,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 115.26,
+      "memory_current_bytes": 3483140096,
+      "anon_bytes": 1581428736,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 121.58,
+      "memory_current_bytes": 3494596608,
+      "anon_bytes": 1607225344,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 127.93,
+      "memory_current_bytes": 3632857088,
+      "anon_bytes": 1631186944,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 134.25,
+      "memory_current_bytes": 3672240128,
+      "anon_bytes": 1766936576,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 140.56,
+      "memory_current_bytes": 3706474496,
+      "anon_bytes": 1809723392,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 146.94,
+      "memory_current_bytes": 3771252736,
+      "anon_bytes": 1874403328,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 153.25,
+      "memory_current_bytes": 3804311552,
+      "anon_bytes": 1903820800,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 159.55,
+      "memory_current_bytes": 3804106752,
+      "anon_bytes": 1902579712,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 165.85,
+      "memory_current_bytes": 3844583424,
+      "anon_bytes": 1946943488,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 172.18,
+      "memory_current_bytes": 3873050624,
+      "anon_bytes": 1970782208,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 178.96,
+      "memory_current_bytes": 3923238912,
+      "anon_bytes": 2014949376,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 185.26,
+      "memory_current_bytes": 3974582272,
+      "anon_bytes": 2070556672,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 191.56,
+      "memory_current_bytes": 4131905536,
+      "anon_bytes": 2227982336,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 197.96,
+      "memory_current_bytes": 4219858944,
+      "anon_bytes": 2313297920,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 204.25,
+      "memory_current_bytes": 4272742400,
+      "anon_bytes": 2361913344,
+      "file_bytes": 1858293760,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 210.56,
+      "memory_current_bytes": 4260945920,
+      "anon_bytes": 2356154368,
+      "file_bytes": 1854636032,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 216.98,
+      "memory_current_bytes": 4243599360,
+      "anon_bytes": 2376232960,
+      "file_bytes": 1818091520,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 223.29,
+      "memory_current_bytes": 4216688640,
+      "anon_bytes": 2409213952,
+      "file_bytes": 1748992000,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 229.58,
+      "memory_current_bytes": 4284129280,
+      "anon_bytes": 2499309568,
+      "file_bytes": 1733369856,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 235.88,
+      "memory_current_bytes": 4269215744,
+      "anon_bytes": 2541420544,
+      "file_bytes": 1683038208,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 242.17,
+      "memory_current_bytes": 4220997632,
+      "anon_bytes": 2572406784,
+      "file_bytes": 1600966656,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 249.0,
+      "memory_current_bytes": 4222976000,
+      "anon_bytes": 2640809984,
+      "file_bytes": 1528090624,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 255.29,
+      "memory_current_bytes": 4257751040,
+      "anon_bytes": 2725785600,
+      "file_bytes": 1477758976,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 261.58,
+      "memory_current_bytes": 4279394304,
+      "anon_bytes": 2763669504,
+      "file_bytes": 1465176064,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 268.02,
+      "memory_current_bytes": 4253560832,
+      "anon_bytes": 2780307456,
+      "file_bytes": 1415368704,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 274.31,
+      "memory_current_bytes": 4101058560,
+      "anon_bytes": 2699550720,
+      "file_bytes": 1349308416,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 280.61,
+      "memory_current_bytes": 4225101824,
+      "anon_bytes": 2817171456,
+      "file_bytes": 1349308416,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 287.12,
+      "memory_current_bytes": 4218048512,
+      "anon_bytes": 2813800448,
+      "file_bytes": 1349308416,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 293.42,
+      "memory_current_bytes": 4286480384,
+      "anon_bytes": 2919616512,
+      "file_bytes": 1306841088,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 299.72,
+      "memory_current_bytes": 4263354368,
+      "anon_bytes": 2934525952,
+      "file_bytes": 1269616640,
+      "pids_current": 171,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 306.02,
+      "memory_current_bytes": 4206817280,
+      "anon_bytes": 2940903424,
+      "file_bytes": 1210372096,
+      "pids_current": 171,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 312.31,
+      "memory_current_bytes": 4245082112,
+      "anon_bytes": 2995552256,
+      "file_bytes": 1187225600,
+      "pids_current": 171,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 319.06,
+      "memory_current_bytes": 4294680576,
+      "anon_bytes": 3024220160,
+      "file_bytes": 1098539008,
+      "pids_current": 171,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 325.35,
+      "memory_current_bytes": 4246077440,
+      "anon_bytes": 3120222208,
+      "file_bytes": 1061695488,
+      "pids_current": 171,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 331.63,
+      "memory_current_bytes": 4253302784,
+      "anon_bytes": 3151605760,
+      "file_bytes": 1040289792,
+      "pids_current": 170,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 338.07,
+      "memory_current_bytes": 4222742528,
+      "anon_bytes": 3181228032,
+      "file_bytes": 996253696,
+      "pids_current": 170,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 344.38,
+      "memory_current_bytes": 4262387712,
+      "anon_bytes": 3218329600,
+      "file_bytes": 984379392,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 350.67,
+      "memory_current_bytes": 4265345024,
+      "anon_bytes": 3300532224,
+      "file_bytes": 899997696,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 357.11,
+      "memory_current_bytes": 4218953728,
+      "anon_bytes": 3258286080,
+      "file_bytes": 893976576,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 363.4,
+      "memory_current_bytes": 4240035840,
+      "anon_bytes": 3321012224,
+      "file_bytes": 857137152,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 369.7,
+      "memory_current_bytes": 4279578624,
+      "anon_bytes": 3411189760,
+      "file_bytes": 800849920,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 375.99,
+      "memory_current_bytes": 4201025536,
+      "anon_bytes": 3333054464,
+      "file_bytes": 800849920,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 382.29,
+      "memory_current_bytes": 4246839296,
+      "anon_bytes": 3405078528,
+      "file_bytes": 774217728,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 389.13,
+      "memory_current_bytes": 4284411904,
+      "anon_bytes": 3525799936,
+      "file_bytes": 690696192,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 395.42,
+      "memory_current_bytes": 4272644096,
+      "anon_bytes": 3489013760,
+      "file_bytes": 678592512,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 401.72,
+      "memory_current_bytes": 4288888832,
+      "anon_bytes": 3593850880,
+      "file_bytes": 627761152,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 408.12,
+      "memory_current_bytes": 4202639360,
+      "anon_bytes": 3594108928,
+      "file_bytes": 540282880,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 414.4,
+      "memory_current_bytes": 4294901760,
+      "anon_bytes": 4071518208,
+      "file_bytes": 150921216,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 420.69,
+      "memory_current_bytes": 3255791616,
+      "anon_bytes": 3070885888,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 427.13,
+      "memory_current_bytes": 3254153216,
+      "anon_bytes": 3070881792,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 433.42,
+      "memory_current_bytes": 3348553728,
+      "anon_bytes": 3172663296,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 439.71,
+      "memory_current_bytes": 3412471808,
+      "anon_bytes": 3227607040,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 446.0,
+      "memory_current_bytes": 3347845120,
+      "anon_bytes": 3167354880,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 452.3,
+      "memory_current_bytes": 3418058752,
+      "anon_bytes": 3215646720,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 459.14,
+      "memory_current_bytes": 3490508800,
+      "anon_bytes": 3310202880,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 465.44,
+      "memory_current_bytes": 3482972160,
+      "anon_bytes": 3298426880,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 471.73,
+      "memory_current_bytes": 3471454208,
+      "anon_bytes": 3287986176,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 478.17,
+      "memory_current_bytes": 3536572416,
+      "anon_bytes": 3354107904,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 484.48,
+      "memory_current_bytes": 3585482752,
+      "anon_bytes": 3394928640,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 490.76,
+      "memory_current_bytes": 3617259520,
+      "anon_bytes": 3434475520,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 497.2,
+      "memory_current_bytes": 3670392832,
+      "anon_bytes": 3480182784,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 503.49,
+      "memory_current_bytes": 3652739072,
+      "anon_bytes": 3465166848,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 509.79,
+      "memory_current_bytes": 3653165056,
+      "anon_bytes": 3469393920,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 516.09,
+      "memory_current_bytes": 3738460160,
+      "anon_bytes": 3548860416,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 522.39,
+      "memory_current_bytes": 3791757312,
+      "anon_bytes": 3606122496,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 529.2,
+      "memory_current_bytes": 3777282048,
+      "anon_bytes": 3586789376,
+      "file_bytes": 134598656,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 535.5,
+      "memory_current_bytes": 3841056768,
+      "anon_bytes": 3651497984,
+      "file_bytes": 135143424,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 541.81,
+      "memory_current_bytes": 3832627200,
+      "anon_bytes": 3639898112,
+      "file_bytes": 135143424,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 548.23,
+      "memory_current_bytes": 3875635200,
+      "anon_bytes": 3684397056,
+      "file_bytes": 135143424,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 554.53,
+      "memory_current_bytes": 3938332672,
+      "anon_bytes": 3744722944,
+      "file_bytes": 135143424,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 560.84,
+      "memory_current_bytes": 3971264512,
+      "anon_bytes": 3785879552,
+      "file_bytes": 135143424,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 567.28,
+      "memory_current_bytes": 3964420096,
+      "anon_bytes": 3771645952,
+      "file_bytes": 135180288,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 573.58,
+      "memory_current_bytes": 3978448896,
+      "anon_bytes": 3799744512,
+      "file_bytes": 135180288,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 579.9,
+      "memory_current_bytes": 4021649408,
+      "anon_bytes": 3833634816,
+      "file_bytes": 136421376,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 586.2,
+      "memory_current_bytes": 4049375232,
+      "anon_bytes": 3856867328,
+      "file_bytes": 136413184,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 592.51,
+      "memory_current_bytes": 4045606912,
+      "anon_bytes": 3851235328,
+      "file_bytes": 136413184,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 599.27,
+      "memory_current_bytes": 4100001792,
+      "anon_bytes": 3905474560,
+      "file_bytes": 136413184,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 605.56,
+      "memory_current_bytes": 4145455104,
+      "anon_bytes": 3954339840,
+      "file_bytes": 136413184,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 611.85,
+      "memory_current_bytes": 4196962304,
+      "anon_bytes": 4006858752,
+      "file_bytes": 136413184,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 618.29,
+      "memory_current_bytes": 4171763712,
+      "anon_bytes": 3974467584,
+      "file_bytes": 136413184,
+      "pids_current": 174,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 624.6,
+      "memory_current_bytes": 4186898432,
+      "anon_bytes": 4004581376,
+      "file_bytes": 123133952,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 630.9,
+      "memory_current_bytes": 4232364032,
+      "anon_bytes": 4049354752,
+      "file_bytes": 123133952,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 637.3,
+      "memory_current_bytes": 4229255168,
+      "anon_bytes": 4046503936,
+      "file_bytes": 123133952,
+      "pids_current": 173,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 643.59,
+      "memory_current_bytes": 4277641216,
+      "anon_bytes": 4100988928,
+      "file_bytes": 123166720,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 649.88,
+      "memory_current_bytes": 4269002752,
+      "anon_bytes": 4112228352,
+      "file_bytes": 121462784,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 656.17,
+      "memory_current_bytes": 4222771200,
+      "anon_bytes": 4065878016,
+      "file_bytes": 100265984,
+      "pids_current": 172,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 662.47,
+      "memory_current_bytes": 4238741504,
+      "anon_bytes": 4099608576,
+      "file_bytes": 85504000,
+      "pids_current": 171,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    },
+    {
+      "elapsed_seconds": 669.34,
+      "memory_current_bytes": 4291178496,
+      "anon_bytes": 4154433536,
+      "file_bytes": 82796544,
+      "pids_current": 171,
+      "oom_events": 0,
+      "oom_kill_events": 0,
+      "oom_group_kill_events": 0
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "schema": "readiness-memory-gc-contrast/v1",
+  "status": "DIAGNOSTIC",
+  "run": "memorygc4gb1",
+  "workload": {
+    "phase_set": "mixed",
+    "completed_full_cycle_operations": 404,
+    "observation_image_bytes": 8124036,
+    "browser_cgroup_limit_bytes": 4294967296
+  },
+  "gc": {
+    "requested": true,
+    "contrast_started_at_utc": "2026-10-30T17:07:52.625878+00:00",
+    "request_invoked_approx_at_utc": "2026-10-30T17:07:54.625878+00:00",
+    "contrast_ended_at_utc": "2026-10-30T17:08:02.659117+00:00",
+    "error_code": null
+  },
+  "observation": {
+    "before_gc_sample_at_utc": "2026-10-30T17:07:54.6077964Z",
+    "after_gc_sample_at_utc": "2026-10-30T17:08:00.8861808Z",
+    "post_gc_worker_check_at_utc": "2026-10-30T17:08:02.693898+00:00",
+    "post_gc_receipt_confirmed": true,
+    "worker_identity_stable": true,
+    "browser_identity_stable": true,
+    "page_identity_stable": true,
+    "recovery_generation_stable": true,
+    "one_context_one_page": true,
+    "idle": true,
+    "profile_fingerprints_stable": true
+  },
+  "before": {
+    "cgroup_memory_bytes": 3128995840,
+    "anon_bytes": 1251229696,
+    "file_bytes": 1842036736,
+    "oom_counter": 0,
+    "oom_kill_counter": 0,
+    "process_rss_kib": {
+      "browser_parent": 643884,
+      "web_content": 615272,
+      "extensions": 251664,
+      "python": 151624,
+      "node": 120040
+    }
+  },
+  "after": {
+    "cgroup_memory_bytes": 2569310208,
+    "anon_bytes": 696233984,
+    "file_bytes": 1842036736,
+    "oom_counter": 0,
+    "oom_kill_counter": 0,
+    "process_rss_kib": {
+      "browser_parent": 560972,
+      "web_content": 222180,
+      "extensions": 187688,
+      "python": 151624,
+      "node": 120040
+    }
+  },
+  "delta_after_minus_before": {
+    "cgroup_memory_bytes": -559685632,
+    "anon_bytes": -554995712,
+    "file_bytes": 0,
+    "process_rss_kib": {
+      "browser_parent": -82912,
+      "web_content": -393092,
+      "extensions": -63976,
+      "python": 0,
+      "node": 0
+    }
+  },
+  "limitations": [
+    "The before sample followed about 2 seconds of idle and the after sample was taken during the 8-second post-request idle window.",
+    "This run has no matched 2+8-second idle-only control; the observed decrease cannot distinguish forced collection from ordinary idle-time reclamation.",
+    "A diagnostic reduction is not evidence of a production fix or a live mitigation. The 4 GiB 15-minute capacity soak remains FAIL."
+  ]
+}

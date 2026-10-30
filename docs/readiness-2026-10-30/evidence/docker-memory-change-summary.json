@@ -23,11 +23,18 @@
     "model_preflight_ready": true
   },
   "candidate_browser_experiment": {
-    "status": "RUNNING",
+    "status": "FAIL",
     "vm_cap_mib": 8192,
     "browser_container_limit_mib": 4096,
     "control_container_limit_mib": 768,
     "duration_seconds": 900,
+    "run_label": "soak8gvm4gb1",
+    "actual_duration_seconds": 670.56,
+    "functional_failure_codes": [
+      "MANUAL_ACTION_NOT_APPLIED:navigate",
+      "cleanup_or_idle_invariant_failed"
+    ],
+    "result_evidence": "soak-8gvm-4gb-failed.json",
     "same_workload_sampling_and_predeclared_metrics": true
   }
 }
