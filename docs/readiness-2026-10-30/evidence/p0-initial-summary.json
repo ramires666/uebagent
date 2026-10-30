@@ -1,0 +1,107 @@
+{
+  "schema": "readiness-p0-summary/v1",
+  "source_commit": "52fc6e0",
+  "source_artifact": "runtime/demoqa/p0trace1/readiness-p0-report.json",
+  "source_sha256": "f05fb68fc3ed2e45abb8d1871a2d346b298037384695acb3941cf8d2fc493aee",
+  "status": "FAIL",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "scenarios": [
+    {
+      "scenario": "checkbox",
+      "status": "FAIL",
+      "task_status": "expired",
+      "error_code": "TASK_EXPIRED",
+      "steps": 14,
+      "scenario_elapsed_ms": 187790,
+      "actions": {
+        "click": 13
+      },
+      "worker_trace_count": 13,
+      "worker_targets": {
+        "other": 11,
+        "home_checkbox": 2
+      },
+      "browser_action_elapsed_ms": {
+        "minimum": 21,
+        "maximum": 52
+      },
+      "planned_action_gap_ms": {
+        "minimum": 6075,
+        "maximum": 31142,
+        "includes_model_and_orchestration_wait": true
+      },
+      "final_checked_state": {
+        "home": false,
+        "desktop": false
+      },
+      "independent_verified": false,
+      "verification_checks_passed": 0,
+      "verification_checks_total": 2
+    },
+    {
+      "scenario": "web_table",
+      "status": "FAIL",
+      "task_status": "failed",
+      "error_code": "EDITABLE_FOCUS_RETRIES_EXHAUSTED",
+      "steps": 9,
+      "scenario_elapsed_ms": 65346,
+      "actions": {
+        "click": 6,
+        "type_text": 3
+      },
+      "worker_trace_count": 9,
+      "worker_targets": {
+        "other": 6
+      },
+      "rejected_type_actions": 3,
+      "rejected_type_focus": "other before and after",
+      "all_six_fields_filled": false,
+      "browser_action_elapsed_ms": {
+        "minimum": 12,
+        "maximum": 58
+      },
+      "planned_action_gap_ms": {
+        "minimum": 3872,
+        "maximum": 12928,
+        "includes_model_and_orchestration_wait": true
+      },
+      "independent_verified": false
+    }
+  ],
+  "privacy": {
+    "raw_model_output_recorded": false,
+    "typed_values_recorded": false,
+    "task_ids_recorded": false,
+    "task_specification_recorded": false
+  },
+  "production_postflight": {
+    "verified_by_parent_direct_api": true,
+    "production_restored": true,
+    "worker_idle": true,
+    "context_count": 1,
+    "page_count": 1,
+    "preserved_task_status": "waiting_human",
+    "preserved_task_phase": "model_output_invalid",
+    "preserved_task_version": 15,
+    "preserved_task_status_unchanged": true,
+    "preserved_task_version_unchanged": true,
+    "task_id_recorded": false,
+    "timestamps_recorded": false
+  },
+  "unit_baseline_after_trace_changes": {
+    "command": "python -m pytest -q",
+    "passed": 432,
+    "skipped": 6,
+    "failed": 0,
+    "duration_seconds": 88.61,
+    "junit_artifact": "runtime/readiness-2026-10-30/pytest-p0-baseline.xml",
+    "is_live_readiness_evidence": false
+  },
+  "acceptance": {
+    "three_fresh_pass_runs_per_original_scenario": false,
+    "production_readiness_gate": "NO-GO"
+  }
+}

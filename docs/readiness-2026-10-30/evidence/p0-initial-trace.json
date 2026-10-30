@@ -1,0 +1,1332 @@
+{
+  "schema": "readiness-p0/v1",
+  "status": "FAIL",
+  "requested_scenarios": 2,
+  "completed_scenarios": 2,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "scenarios": [
+    {
+      "scenario": "checkbox",
+      "status": "failed",
+      "steps": 14,
+      "timeout_s": 180,
+      "max_steps": 40,
+      "baseline_verified": false,
+      "action_kinds": {
+        "click": 13
+      },
+      "model_action_observed": true,
+      "task_status": "expired",
+      "error_code": "TASK_EXPIRED",
+      "independent_verified": false,
+      "verification_checks": [
+        {
+          "kind": "element_checked",
+          "passed": false
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": false
+        }
+      ],
+      "planned_events": [
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": null
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 14296
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 6075
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 22912
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 26492
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 31142
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 8463
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 8614
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 13037
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 9202
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 9444
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 11268
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 10725
+        }
+      ],
+      "trace": [
+        {
+          "kind": "click",
+          "elapsed_ms": 29,
+          "x": 385.92,
+          "y": 142.2,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 31,
+          "x": 367.2,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 29,
+          "x": 385.92,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 22,
+          "x": 253.44,
+          "y": 236.7,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 52,
+          "x": 295.2,
+          "y": 236.7,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "checkbox",
+          "target": "home_checkbox",
+          "bbox": {
+            "x": 283.6,
+            "y": 230.5,
+            "width": 13.0,
+            "height": 13.0
+          },
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": true,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 29,
+          "x": 295.2,
+          "y": 236.7,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "checkbox",
+          "target": "home_checkbox",
+          "bbox": {
+            "x": 283.6,
+            "y": 230.5,
+            "width": 13.0,
+            "height": 13.0
+          },
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": true,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 21,
+          "x": 413.28,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 21,
+          "x": 385.92,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 21,
+          "x": 385.92,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 28,
+          "x": 352.8,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 21,
+          "x": 357.12,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 21,
+          "x": 351.36,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 22,
+          "x": 368.64,
+          "y": 213.3,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        }
+      ],
+      "trace_record_count": 13,
+      "task_elapsed_ms": 186448,
+      "scenario_elapsed_ms": 187790
+    },
+    {
+      "scenario": "web_table",
+      "status": "failed",
+      "steps": 9,
+      "timeout_s": 180,
+      "max_steps": 40,
+      "baseline_verified": false,
+      "action_kinds": {
+        "click": 6,
+        "type_text": 3
+      },
+      "model_action_observed": true,
+      "task_status": "failed",
+      "error_code": "EDITABLE_FOCUS_RETRIES_EXHAUSTED",
+      "independent_verified": false,
+      "verification_checks": [
+        {
+          "kind": "element_text_contains",
+          "passed": false
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": false
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": false
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": false
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": false
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": false
+        }
+      ],
+      "planned_events": [
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": null
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 5352
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 3872
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 7063
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 7795
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 6241
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 12928
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 8576
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 8107
+        }
+      ],
+      "trace": [
+        {
+          "kind": "click",
+          "elapsed_ms": 27,
+          "x": 298.08,
+          "y": 172.8,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {},
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 58,
+          "x": 298.08,
+          "y": 250.2,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "button",
+          "target": "other",
+          "target_boxes": {},
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 22,
+          "x": 648.0,
+          "y": 92.7,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 13,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "rejected"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 22,
+          "x": 993.6,
+          "y": 139.5,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 12,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "rejected"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 21,
+          "x": 993.6,
+          "y": 139.5,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 24,
+          "x": 1051.2,
+          "y": 139.5,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 13,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "rejected"
+        }
+      ],
+      "trace_record_count": 9,
+      "task_elapsed_ms": 64192,
+      "scenario_elapsed_ms": 65346
+    }
+  ],
+  "raw_model_output_recorded": false,
+  "typed_values_recorded": false
+}
