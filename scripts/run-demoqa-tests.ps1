@@ -297,15 +297,40 @@ function Export-P0Report {
     Write-Host "Saved P0 diagnostic report: $target"
 }
 
+function Assert-ObservationHintsMode {
+    param(
+        [bool]$Enabled,
+        [string]$Protocol,
+        [bool]$ProbeOnly,
+        [bool]$DiagnosticGate,
+        [bool]$SkipCases,
+        [bool]$P0Diagnostics,
+        [bool]$RunCasesAfterReadableCandidate
+    )
+    if (-not $Enabled) { return }
+    if ($Protocol -ne 'generic') { throw 'ObservationHints requires the generic model protocol.' }
+    if ($ProbeOnly -or $DiagnosticGate -or $SkipCases -or $RunCasesAfterReadableCandidate) {
+        throw 'ObservationHints requires a supported DemoQA case execution path.'
+    }
+}
+
+function Normalize-DemoqaCases {
+    param([string[]]$Cases)
+    $allowed = @('text_box', 'invalid_email', 'checkbox', 'web_table', 'radio', 'double_click', 'single_click', 'dynamic', 'notify_then_click')
+    $normalized = @($Cases | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($normalized.Count -eq 0 -or @($normalized | Where-Object { $_ -notin $allowed }).Count -gt 0) {
+        throw 'Cases contains an unknown or empty scenario name.'
+    }
+    return ,$normalized
+}
+
 try {
     if (-not (Test-Path -LiteralPath $ComposeFile -PathType Leaf)) { throw 'Disposable DemoQA compose file is missing.' }
     if ($RunLabel -notmatch '^[A-Za-z0-9_-]{1,20}$') { throw 'RunLabel may contain only letters, digits, underscores and dashes.' }
     $FontMatrixVariants = @($FontMatrixVariants | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $allowedFontVariants = @('baseline', 'arial_normal', 'arial_medium', 'system_normal', 'system_bold', 'monospace', 'system_thin100', 'arial_thin100', 'baseline_normal')
     if (@($FontMatrixVariants | Where-Object { $_ -notin $allowedFontVariants }).Count -gt 0) { throw 'FontMatrixVariants contains an unknown style.' }
-    $allowed = @('text_box', 'invalid_email', 'checkbox', 'web_table', 'radio', 'double_click', 'single_click', 'dynamic', 'notify_then_click')
-    $Cases = @($Cases | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    if ($Cases.Count -eq 0 -or @($Cases | Where-Object { $_ -notin $allowed }).Count -gt 0) { throw 'Cases contains an unknown or empty scenario name.' }
+    $Cases = Normalize-DemoqaCases -Cases $Cases
     if ($ProbeOnly -and $TaskControlChecks) { throw 'TaskControlChecks cannot be combined with ProbeOnly.' }
     if ($RunCasesAfterReadableCandidate) {
         if (-not $ProbeOnly -or -not $ExtendedComplex -or ($Cases -join ',') -ne 'checkbox,web_table') {
@@ -315,9 +340,9 @@ try {
     if ($P0Diagnostics -and ($ProbeOnly -or $DiagnosticGate -or $ReadinessChecks -or $TaskControlChecks -or $RunCasesAfterReadableCandidate)) {
         throw 'P0Diagnostics cannot be combined with probe, gate, readiness, task-control, or readability-gated modes.'
     }
-    if ($ObservationHints -and -not $P0Diagnostics) {
-        throw 'ObservationHints is currently available only with P0Diagnostics.'
-    }
+    Assert-ObservationHintsMode -Enabled $ObservationHints -Protocol $ModelProtocol -ProbeOnly $ProbeOnly `
+        -DiagnosticGate $DiagnosticGate -SkipCases $SkipCases -P0Diagnostics $P0Diagnostics `
+        -RunCasesAfterReadableCandidate $RunCasesAfterReadableCandidate
     if ($P0Diagnostics -and ($P0Scenarios.Count -eq 0 -or $P0Scenarios.Count -gt 4 -or @($P0Scenarios | Select-Object -Unique).Count -ne $P0Scenarios.Count)) {
         throw 'P0Scenarios must contain one to four unique allowlisted scenarios.'
     }

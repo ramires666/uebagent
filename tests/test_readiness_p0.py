@@ -157,9 +157,41 @@ $Root='{output_root}'; $RunLabel='offline'; Export-P0Report
 '''
     result = subprocess.run([powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", harness],
                             text=True, capture_output=True, env=env, timeout=15, check=False)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     saved = json.loads((tmp_path / "runtime" / "demoqa" / "offline" / "readiness-p0-report.json").read_text())
     assert saved == report
+
+
+def test_powershell_runner_accepts_full_generic_hint_cases_and_rejects_non_case_modes():
+    powershell = shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("Windows PowerShell is unavailable")
+    runner = str(ROOT / "scripts" / "run-demoqa-tests.ps1").replace("'", "''")
+    harness = rf'''
+$tokens=$null; $errors=$null
+$ast=[System.Management.Automation.Language.Parser]::ParseFile('{runner}', [ref]$tokens, [ref]$errors)
+if ($errors.Count) {{ throw 'runner parse failed' }}
+foreach ($name in @('Assert-ObservationHintsMode','Normalize-DemoqaCases')) {{
+  $fn=$ast.FindAll({{ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }}, $true)[0]
+  . ([scriptblock]::Create($fn.Extent.Text))
+}}
+$all=Normalize-DemoqaCases -Cases @('text_box,invalid_email,checkbox,web_table,radio,double_click,single_click,dynamic,notify_then_click')
+if (($all -join ',') -ne 'text_box,invalid_email,checkbox,web_table,radio,double_click,single_click,dynamic,notify_then_click') {{ throw 'full comma-separated case list was not preserved' }}
+Assert-ObservationHintsMode -Enabled $true -Protocol generic -ProbeOnly $false -DiagnosticGate $false -SkipCases $false -P0Diagnostics $false -RunCasesAfterReadableCandidate $false
+Assert-ObservationHintsMode -Enabled $true -Protocol generic -ProbeOnly $false -DiagnosticGate $false -SkipCases $false -P0Diagnostics $true -RunCasesAfterReadableCandidate $false
+foreach ($mode in @('ProbeOnly','DiagnosticGate','SkipCases','RunCasesAfterReadableCandidate')) {{
+  $paramsMap=@{{ Enabled=$true; Protocol='generic'; ProbeOnly=$false; DiagnosticGate=$false; SkipCases=$false; P0Diagnostics=$false; RunCasesAfterReadableCandidate=$false }}
+  $paramsMap[$mode]=$true; $rejected=$false
+  try {{ Assert-ObservationHintsMode @paramsMap }} catch {{ $rejected=$true }}
+  if (-not $rejected) {{ throw "accepted unsupported $mode mode" }}
+}}
+$rejected=$false
+try {{ Assert-ObservationHintsMode -Enabled $true -Protocol fara -ProbeOnly $false -DiagnosticGate $false -SkipCases $false -P0Diagnostics $false -RunCasesAfterReadableCandidate $false }} catch {{ $rejected=$true }}
+if (-not $rejected) {{ throw 'accepted Fara protocol' }}
+'''
+    result = subprocess.run([powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", harness],
+                            text=True, capture_output=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("hints_enabled", [False, True])
