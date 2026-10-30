@@ -338,6 +338,9 @@ async def test_standalone_task_controls_use_fresh_version_and_only_explicit_post
         await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html")
         await page.locator("#task-status").wait_for()
         await page.locator("#task-actions").get_by_role("button", name="Пауза").wait_for(state="visible")
+        assert await page.locator("#task-actions").evaluate("el => el.parentElement.classList.contains('top-actions')")
+        assert await page.locator("#task-actions").get_by_role("button", name="Отменить").is_visible()
+        assert await page.get_by_role("button", name="Забрать управление").count() == 1
         assert not any(method == "POST" for method, _, _, _ in calls)
         await page.locator("#task-actions").get_by_role("button", name="Пауза").click()
         await page.wait_for_function("document.querySelector('#task-status').textContent.includes('запрошена')")

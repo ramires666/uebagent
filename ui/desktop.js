@@ -703,7 +703,6 @@
     if (task.status === 'running') add('Пауза', 'pause');
     if (task.status === 'paused' || (task.status === 'waiting_human' && task.phase !== 'answer_required')) add('Продолжить', 'resume');
     if (task.status === 'recovering') add('Проверить восстановление', 'review-recovery');
-    if (['running', 'pause_requested', 'paused', 'waiting_human', 'waiting_approval'].includes(task.status)) add('Забрать управление', 'takeover');
     if (['queued', 'running', 'pause_requested', 'paused', 'waiting_human', 'waiting_approval', 'waiting_pause'].includes(task.status)) add('Отменить', 'cancel', true);
   }
 

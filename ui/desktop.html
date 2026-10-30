@@ -21,7 +21,7 @@
     .mark { width: 35px; height: 35px; display: grid; place-items: center; border: 1px solid #455945; border-radius: 11px; color: #c7eb9c; background: #202b23; font-size: 18px; }
     h1 { margin: 0; font-size: clamp(20px, 3vw, 27px); letter-spacing: -.025em; }
     .subtitle { margin-top: 4px; color: #94a19e; font-size: 12px; }
-    .top-actions { display: flex; align-items: center; gap: 9px; }
+    .top-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
     .status { display: flex; align-items: center; gap: 8px; padding: 8px 11px; color: #b4c2bc; background: #171f23; border: 1px solid #2d383e; border-radius: 999px; font-size: 12px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #88918f; }
     .status.good .dot { background: #a6d47e; box-shadow: 0 0 10px #a6d47e55; }
@@ -48,7 +48,7 @@
     #service-status[data-state="bad"] { color: #f0aaa1; }
     #service-status[data-state="warning"] { color: #e2c67d; }
     #service-status[data-state="good"] { color: #b4e987; }
-    .task-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0; }
     .task-action { border: 1px solid #3c4b45; border-radius: 6px; background: #1b2525; color: #dce7df; padding: 5px 8px; font-size: 10px; cursor: pointer; }
     .task-action:hover { border-color: #a6d47e; background: #253126; }
     .task-action.danger { color: #f0aaa1; }
@@ -86,7 +86,7 @@
       .task-progress { margin: 0; padding: 7px 10px; line-height: 1.35; }
       .task-progress p { margin-top: 3px; }
       .task-progress p:empty { display: none; }
-      .task-actions { margin-top: 4px; }
+      .task-actions { margin-top: 0; }
       .task-action { padding: 4px 7px; }
       .screen-head { min-height: 30px; padding: 5px 10px; }
       .viewport { min-height: 54vh; max-height: 78vh; }
@@ -112,6 +112,7 @@
         <div><h1>Ручное управление браузером</h1><div class="subtitle">Просмотр содержимого текущего браузера и ручной ввод</div></div>
       </div>
       <div class="top-actions">
+        <div id="task-actions" class="task-actions" aria-label="Управление текущей задачей"></div>
         <div id="owner-status" class="status"><span class="dot" aria-hidden="true"></span><span id="owner-label">Загрузка состояния…</span></div>
         <button id="takeover" type="button" disabled>Забрать управление</button>
         <button id="release-control" type="button" disabled>Вернуть управление</button>
@@ -130,7 +131,6 @@
       <p id="task-stop-reason" hidden><strong>Причина остановки:</strong> <span></span></p>
       <p id="task-goal"></p>
       <p id="task-detail"></p>
-      <div id="task-actions" class="task-actions" aria-label="Управление текущей задачей"></div>
     </section>
 
     <section class="task-progress" aria-label="Состояние сервисов" aria-live="polite">
