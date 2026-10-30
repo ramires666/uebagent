@@ -1592,13 +1592,15 @@ class BrowserRuntime:
             gemini_auth_document_resource = self._is_gemini_auth_document_resource(route, origin, resource_type, url)
             gemini_auth_frame_resource = self._is_gemini_auth_frame_resource(route, origin, resource_type)
             gemini_static_resource = self._is_gemini_static_resource(route, origin, resource_type)
+            ebay_static_resource = self._is_ebay_static_resource(route, origin, resource_type)
             if not self.egress_ready or self.route_generation <= 0:
                 reason = "egress_unavailable"
             elif (origin not in self._route_origins
                   and not (self.control_owner == "human" and self._manual_cross_origin_navigation)
                   and not cdn_resource and not font_resource
                   and not gemini_auth_api_resource and not gemini_auth_document_resource
-                  and not gemini_auth_frame_resource and not gemini_static_resource):
+                  and not gemini_auth_frame_resource and not gemini_static_resource
+                  and not ebay_static_resource):
                 reason = "origin_not_allowed"
             elif not await _public_host(host):
                 reason = "non_public_or_unresolved_host"
@@ -1727,6 +1729,28 @@ class BrowserRuntime:
                 return False
             return ((origin == "https://www.google.com" and resource_type == "script")
                     or (origin == "https://lh3.googleusercontent.com" and resource_type == "image"))
+        except Exception:
+            return False
+
+    def _is_ebay_static_resource(self, route: Any, origin: str, resource_type: str) -> bool:
+        """Allow only observed eBay page assets from two exact public hosts."""
+        if "https://www.ebay.com" not in self._route_origins or self._page is None:
+            return False
+        allowed_types = {
+            "https://ir.ebaystatic.com": {"stylesheet", "script"},
+            "https://i.ebayimg.com": {"image"},
+        }
+        if resource_type not in allowed_types.get(origin, set()):
+            return False
+        try:
+            request = route.request
+            frame = request.frame
+            page = self._page
+            return (request.method in {"GET", "HEAD"}
+                    and not request.is_navigation_request()
+                    and frame is not None and frame == page.main_frame
+                    and _safe_url(page.url)[1] == "https://www.ebay.com"
+                    and _safe_url(frame.url)[1] == "https://www.ebay.com")
         except Exception:
             return False
 

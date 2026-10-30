@@ -1,0 +1,5 @@
+ARG BASE_BROWSER_IMAGE=browser-mcp-readiness-browser:candidate
+FROM ${BASE_BROWSER_IMAGE}
+
+# Overlay only the reviewed worker source; the candidate already has dependencies.
+COPY worker /app/worker
