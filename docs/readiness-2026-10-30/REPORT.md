@@ -6,11 +6,11 @@
 
 ## Краткое резюме
 
-Повторяемость P0 подтверждена: checkbox и web_table прошли по 3/3 запуска; полный bounded G3 прошёл 8/8 с независимым verifier при лимитах 120 секунд / 30 шагов. Hints остаются opt-in/default-off и не включались в production. Свежий полный suite на ffa80c1: 486 PASS / 8 SKIPPED / 0 FAIL за 93,14 с; [JUnit-derived summary](evidence/unit-suite-gc-final.json). Предыдущие suite numbers остаются историческими.
+Повторяемость P0 подтверждена: checkbox и web_table прошли по 3/3 запуска; полный bounded G3 прошёл 8/8 с независимым verifier при лимитах 120 секунд / 30 шагов. Hints остаются opt-in/default-off и не включались в production. Свежий полный suite на 41438d8: 494 PASS / 8 SKIPPED / 0 FAIL за 91,46 с; [JUnit-derived summary](evidence/unit-suite-attribution-final.json). Предыдущие suite numbers остаются историческими; этот общий suite не является утверждением, что новые periodic-GC или memory-report CLI режимы были проверены live.
 
 | Gate | Текущий статус | Основание / следующий результат |
 |---|---|---|
-| G0 — tests | **Проверки пройдены в указанном объёме** | Свежий полный suite на ffa80c1: 486 passed / 8 skipped / 0 failed за 93,14 с. [JUnit-derived summary](evidence/unit-suite-gc-final.json). Исторический suite 475/8/0 на 7bc09cf: [summary](evidence/unit-cookie-probe-summary.json). |
+| G0 — tests | **Проверки пройдены в указанном объёме** | Свежий полный suite на 41438d8: 494 passed / 8 skipped / 0 failed за 91,46 с. [JUnit-derived summary](evidence/unit-suite-attribution-final.json). Исторический suite 475/8/0 на 7bc09cf: [summary](evidence/unit-cookie-probe-summary.json). |
 | G1 — API/MCP security | **PASS, bounded** | Auth/CSRF: 16/16; worker bearer проверен отдельными task-control checks. |
 | G2 — worker/control integration | **PASS, bounded** | Runtime cancel/overlay и synthetic cookie bridge PASS на disposable stack. Cookie source — synthetic extension protocol; реальный Chrome E2E не выполнялся. |
 | G3 — live browser + model | **PASS, bounded** | P0: checkbox 3/3 и web_table 3/3; full G3: 8/8. Только disposable конфигурация с MODEL_PROTOCOL=generic и BROWSER_OBSERVATION_HINTS=1; production setting остаётся выключенным. |
@@ -58,7 +58,23 @@ RAM и RSS указаны как изменение от первого к по�
 
 File memory не изменилась; снижение пришлось главным образом на anon и наблюдаемые RSS процессов браузера. Это указывает, какие группы памяти изменились в этом окне, но не устанавливает, что именно вызвало снижение. Перед запросом было около 2 с idle, после — 8 с idle; второй sample снят внутри post-request окна. Matched idle-only run ещё не выполнен. Поэтому результат — диагностический сигнал, не доказательство исправления или live mitigation; два 15-минутных capacity soak остаются FAIL, production — NO-GO. OOM и OOM-kill counters в обоих выбранных samples равны нулю. [Allowlisted GC evidence](evidence/memory-gc4gb1-summary.json).
 
-Следующая матрица: пять прогонов по 600 одинаковых циклов с одинаковым профилем и ограничением 7 циклов/с: `baseline`, `no_trace`, `no_addons`, `neither` без принудительного GC и отдельный `baseline` с GC-контрастом. Нужен matched idle control, прежде чем приписывать эффект GC; сравнение не включает производственный rollout.
+#### Пятивариантная матрица attribution (`memory-attribution-matrix/v1`)
+
+Пять bounded-прогонов завершили по 600 одинаковых циклов. Для каждого подтверждены тот же общий seed Camoufox 0.4.11, matching worker configuration, стабильная identity, один context/page и отсутствие error codes. Измеренная скорость на отрезке cycle 100–600 была 6,65–6,97 cycles/s. Host sampler снимал RSS процессов и cgroup `anon`/`file`; для графика использованы только точки до `workload_end`, а для таблицы idle — ближайший host sample к `contrast_end` примерно через 25 секунд после cycle 600. Каждый host sample привязан к UTC и signed offset относительно cycle timestamp в [allowlisted JSON](evidence/memory-attribution-matrix.json).
+
+| Вариант | Web Content RSS, cycle 100 → 600 | Δ Web Content RSS | `anon` на cycle 600 → ~25 s idle | `file` на cycle 600 → ~25 s idle |
+|---|---:|---:|---:|---:|
+| Baseline | 241,6 → 653,7 MiB | +412,1 MiB | 1 628,1 → 775,7 MiB (−852,4) | 237,6 → 237,6 MiB |
+| No action snapshots | 279,6 → 685,2 MiB | +405,7 MiB | 1 557,1 → 831,7 MiB (−725,4) | 229,5 → 229,5 MiB |
+| No default addons | 271,5 → 805,9 MiB | +534,4 MiB | 1 234,4 → 1 210,8 MiB (−23,7) | 91,2 → 91,2 MiB |
+| No snapshots + no addons | 245,7 → 745,1 MiB | +499,4 MiB | 1 158,9 → 1 082,8 MiB (−76,1) | 91,2 → 91,2 MiB |
+| Baseline + GC contrast | 350,4 → 531,7 MiB | +181,3 MiB | 1 461,9 → 675,8 MiB (−786,1) | 229,6 → 229,6 MiB |
+
+Главный вывод: рост RSS процесса Web Content сохранялся во всех вариантах. Отключение action snapshots практически не изменило рост относительно baseline; отключение addons уменьшило RSS WebExtensions, но не предотвратило рост Web Content. Поэтому neither вариант также продолжил расти. Это указывает, что измеренный рост Web Content не зависит от наличия default addons или action snapshots в этом bounded случае. WebExtensions показывал отдельные стартовые/пиковые всплески, но рост page-content процесса возникал и без него; Python/Node RSS менялись заметно меньше. Эти измерения не определяют конкретную подсистему браузера и не доказывают leak.
+
+В baseline естественный idle за ~25 секунд снизил `anon` на 852 MiB при неизменной `file`. В no_addons после такого же idle `anon` почти не снизился. В GC-contrast большинство снижения `anon` произошло в первые 15 секунд естественного idle до explicit GC request; ближайшая последующая выборка была примерно на 32 MiB ниже. Idle продолжался и во время GC-окна, поэтому этот остаточный сдвиг нельзя приписать принудительному GC. Это диагностическое наблюдение, не forced-GC mitigation или доказанное исправление. [График Web Content RSS](REPORT.html) · [Полная матрица и timestamps](evidence/memory-attribution-matrix.json).
+
+Отдельный эксперимент с periodic GC (шесть запросов за 600 циклов без добавленных пауз) и более intrusive memory-report endpoint ещё готовятся; результатов нет. Матрица не меняет NO-GO и сама не закрывает 900-секундный capacity gate.
 
 #### Среда и ограничения причинного вывода
 
@@ -105,7 +121,7 @@ Memory event counter max вырос на 319; он не является OOM cou
 ### Текущие bounded результаты и ограничения
 
 - P0: checkbox — 3/3 PASS; web_table — 3/3 PASS. Full G3 — 8/8 PASS с независимой проверкой, 120 с / 30 шагов на сценарий.
-- Свежий полный suite на source revision ffa80c1: 486 passed, 8 skipped, 0 failed за 93,14 с; группировка тестовых файлов рассчитана из JUnit XML. [Сводка текущего suite](evidence/unit-suite-gc-final.json). Предыдущие 475/8/0 на 7bc09cf остаются историческим baseline: [unit-cookie-probe-summary.json](evidence/unit-cookie-probe-summary.json). Guarded GC diagnostic endpoint покрыт тестами. Live GC contrast завершился с наблюдаемым снижением памяти; forced-GC causality и production memory improvement не доказаны, matched idle control ожидается.
+- Свежий полный suite на source revision 41438d8: 494 passed, 8 skipped, 0 failed за 91,46 с; группировка тестовых файлов рассчитана из JUnit XML. [Сводка текущего suite](evidence/unit-suite-attribution-final.json). Предыдущие 486/8/0 на ffa80c1 и 475/8/0 на 7bc09cf — исторические baselines. Unit suite не доказывает live periodic-GC или memory-report эффекты. Отдельный GC contrast завершился с наблюдаемым снижением памяти; forced-GC causality и production memory improvement не доказаны, matched idle control ожидается.
 - Runtime cancellation, overlay, lifecycle и cookie bridge integration прошли в bounded disposable runs. См. lifecycle-cookie2-summary.json. Cookie bridge использовал synthetic extension protocol через ChromeBroker → TaskCookieImporter → WorkerClient; это не реальный Chrome E2E. Проверены блокировки при отсутствии/неоднозначности source, baseline MISSING → READY, исключение unrelated cookie и отсутствие cookie value в task events.
 - Hints включались только для disposable test worker через BROWSER_OBSERVATION_HINTS=1; в production feature остаётся default-off.
 - Исправления текущей ревизии включают тестовую конфигурацию: MODEL_PROTOCOL передаётся control, BROWSER_OBSERVATION_HINTS передаётся browser только для проверки; эта wiring не активирует hints в production.
