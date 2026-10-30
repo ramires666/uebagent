@@ -18,6 +18,9 @@ param(
     [switch]$DiagnosticGate,
     [switch]$P0Diagnostics,
     [switch]$RuntimeIntegrationChecks,
+    [switch]$LifecycleIntegrationChecks,
+    [switch]$SoakChecks,
+    [ValidateRange(1, 1200)][int]$SoakSeconds = 900,
     [switch]$ObservationHints,
     [string[]]$P0Scenarios = @('checkbox', 'web_table'),
     [ValidateRange(0, 600)][int]$DiagnosticHoldSeconds = 120,
@@ -54,7 +57,11 @@ $readinessCheckAttempted = $false
 $readinessReportError = $null
 $p0ReportAttempted = $false
 $p0ReportError = $null
+$soakReportAttempted = $false
+$soakReportError = $null
 $resultLines = [System.Collections.Generic.List[string]]::new()
+$metricJob = $null
+$metricSamples = @()
 
 function Invoke-NativeCaptured {
     param([string]$FilePath, [string[]]$Arguments)
@@ -298,6 +305,49 @@ function Export-P0Report {
     Write-Host "Saved P0 diagnostic report: $target"
 }
 
+function Export-SoakReport {
+    $controlQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'control'))
+    $controlIds = @($controlQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($controlQuery.ExitCode -ne 0 -or $controlIds.Count -ne 1) { throw 'Could not identify the disposable control container for soak evidence.' }
+    $destinationDirectory = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+    $target = Join-Path $destinationDirectory 'readiness-soak.json'
+    $sourcePath = '/app/runtime/control-data/readiness-soak.json'
+    $copy = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', "$($controlIds[0]):$sourcePath", $target)
+    if ($copy.ExitCode -ne 0) {
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        $readerCode = 'import base64,pathlib; print(base64.b64encode(pathlib.Path(''/app/runtime/control-data/readiness-soak.json'').read_bytes()).decode(''ascii''))'
+        $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', $controlIds[0], 'python', '-c', $readerCode)
+        if ($encoded.ExitCode -ne 0) { throw 'Could not export soak evidence before disposable stack cleanup.' }
+        $encodedText = (($encoded.Output | ForEach-Object { [string]$_ }) -join '').Trim()
+        if ($encodedText.Length -gt 2MB) { throw 'Soak evidence exceeded the 2 MiB export limit.' }
+        try { [System.IO.File]::WriteAllBytes($target, [Convert]::FromBase64String($encodedText)) }
+        catch { throw 'Soak evidence export was not valid base64.' }
+    }
+    $raw = [System.IO.File]::ReadAllText($target)
+    if ($raw.Length -gt 1MB) { Remove-Item -LiteralPath $target -Force; throw 'Soak report exceeded the 1 MiB limit.' }
+    try { $report = $raw | ConvertFrom-Json -ErrorAction Stop }
+    catch { Remove-Item -LiteralPath $target -Force; throw 'Soak report was not valid JSON.' }
+    if ($report.schema -ne 'readiness-soak/v1' -or $report.status -notin @('PASS', 'FAIL', 'BLOCKED') -or
+        $report.duration_requested_seconds -isnot [ValueType] -or $report.duration_actual_seconds -isnot [ValueType] -or
+        $report.cycles_completed -isnot [ValueType] -or $report.latency -isnot [pscustomobject] -or
+        $report.invariants -isnot [pscustomobject]) {
+        Remove-Item -LiteralPath $target -Force
+        throw 'Soak report did not match the expected bounded schema.'
+    }
+    [System.IO.File]::WriteAllText($target, ($report | ConvertTo-Json -Depth 20) + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Saved sanitized soak report: $target"
+}
+
+function Get-NumericMedian {
+    param([double[]]$Values)
+    $ordered = @($Values | Sort-Object)
+    if ($ordered.Count -eq 0) { throw 'Cannot calculate median without numeric samples.' }
+    $middle = [int][Math]::Floor($ordered.Count / 2.0)
+    if ($ordered.Count % 2 -eq 1) { return [double]$ordered[$middle] }
+    return ([double]$ordered[$middle - 1] + [double]$ordered[$middle]) / 2.0
+}
+
 function Assert-ObservationHintsMode {
     param(
         [bool]$Enabled,
@@ -306,12 +356,14 @@ function Assert-ObservationHintsMode {
         [bool]$DiagnosticGate,
         [bool]$SkipCases,
         [bool]$P0Diagnostics,
-        [bool]$RunCasesAfterReadableCandidate
+        [bool]$RunCasesAfterReadableCandidate,
+        [bool]$SoakChecks
     )
     if (-not $Enabled) { return }
     if ($Protocol -ne 'generic') { throw 'ObservationHints requires the generic model protocol.' }
-    if ($ProbeOnly -or $DiagnosticGate -or $SkipCases -or $RunCasesAfterReadableCandidate) {
-        throw 'ObservationHints requires a supported DemoQA case execution path.'
+    if ($SoakChecks -and -not $SkipCases) { throw 'ObservationHints soak requires SkipCases.' }
+    if ($ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or ($SkipCases -and -not $SoakChecks)) {
+        throw 'ObservationHints requires a supported DemoQA case execution path or an explicitly bounded soak.'
     }
 }
 
@@ -349,9 +401,18 @@ try {
             throw 'RuntimeIntegrationChecks cannot be combined with P0, probe, diagnostic-gate, or readability-gated modes.'
         }
     }
+    if ($LifecycleIntegrationChecks -and -not $RuntimeIntegrationChecks) {
+        throw 'LifecycleIntegrationChecks requires RuntimeIntegrationChecks and SkipCases.'
+    }
+    if ($SoakChecks) {
+        if (-not $SkipCases) { throw 'SoakChecks requires SkipCases to avoid model-driven cases.' }
+        if ($P0Diagnostics -or $ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or $RuntimeIntegrationChecks -or $TaskControlChecks -or $ReadinessChecks) {
+            throw 'SoakChecks cannot be combined with model cases, probes, diagnostics, readiness, or integration checks.'
+        }
+    }
     Assert-ObservationHintsMode -Enabled $ObservationHints -Protocol $ModelProtocol -ProbeOnly $ProbeOnly `
         -DiagnosticGate $DiagnosticGate -SkipCases $SkipCases -P0Diagnostics $P0Diagnostics `
-        -RunCasesAfterReadableCandidate $RunCasesAfterReadableCandidate
+        -RunCasesAfterReadableCandidate $RunCasesAfterReadableCandidate -SoakChecks $SoakChecks
     if ($P0Diagnostics -and ($P0Scenarios.Count -eq 0 -or $P0Scenarios.Count -gt 4 -or @($P0Scenarios | Select-Object -Unique).Count -ne $P0Scenarios.Count)) {
         throw 'P0Scenarios must contain one to four unique allowlisted scenarios.'
     }
@@ -382,7 +443,7 @@ try {
         $env:READINESS_ACTION_TRACE = '1'
         $env:READINESS_P0_SCENARIOS = ($P0Scenarios -join ',')
     }
-    if ($RuntimeIntegrationChecks) { $env:READINESS_ACTION_TRACE = '1' }
+    if ($RuntimeIntegrationChecks -or $SoakChecks) { $env:READINESS_ACTION_TRACE = '1' }
     if ($ObservationHints) { $env:BROWSER_OBSERVATION_HINTS = '1' }
     else { $env:BROWSER_OBSERVATION_HINTS = '0' }
     if ($ExtendedComplex) { $env:DEMOQA_EXTENDED_COMPLEX = '1' } else { Remove-Item Env:DEMOQA_EXTENDED_COMPLEX -ErrorAction SilentlyContinue }
@@ -573,11 +634,135 @@ try {
             'control', 'python', '/app/scripts/readiness_overlay_integration.py'
         )
         $overlayIntegrationExit = Invoke-RunnerStream -RunnerArgs $overlayIntegrationArgs
-        if ($runtimeIntegrationExit -ne 0 -or $overlayIntegrationExit -ne 0) {
-            throw "Disposable runtime integration checks failed (runtime $runtimeIntegrationExit, overlay $overlayIntegrationExit)."
+        $lifecycleIntegrationExit = 0
+        if ($LifecycleIntegrationChecks) {
+            $lifecycleIntegrationArgs = (Get-ComposeArgs) + @(
+                'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+                '-e', 'READINESS_RUNTIME_INTEGRATION=1', '-e', 'READINESS_ACTION_TRACE=1',
+                '-e', 'BROWSER_WORKER_URL=http://browser:7070',
+                'control', 'python', '/app/scripts/readiness_lifecycle_integration.py', '--i-confirm-disposable'
+            )
+            $lifecycleIntegrationExit = Invoke-RunnerStream -RunnerArgs $lifecycleIntegrationArgs
+        }
+        if ($runtimeIntegrationExit -ne 0 -or $overlayIntegrationExit -ne 0 -or $lifecycleIntegrationExit -ne 0) {
+            throw "Disposable runtime integration checks failed (runtime $runtimeIntegrationExit, overlay $overlayIntegrationExit, lifecycle $lifecycleIntegrationExit)."
         }
     }
 
+    if ($SoakChecks) {
+        $soakArgs = (Get-ComposeArgs) + @(
+            'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+            '-e', 'READINESS_RUNTIME_INTEGRATION=1', '-e', 'READINESS_ACTION_TRACE=1',
+            '-e', 'BROWSER_WORKER_URL=http://browser:7070',
+            '-e', ('BROWSER_OBSERVATION_HINTS=' + $(if ($ObservationHints) { '1' } else { '0' })),
+            'control', 'python', '/app/scripts/readiness_soak.py',
+            '--url', 'http://browser:7070', '--control-url', 'http://localhost:8080',
+            '--key-file', '/run/demoqa-secrets/key', '--duration-seconds', [string]$SoakSeconds,
+            '--output', '/app/runtime/control-data/readiness-soak.json', '--i-confirm-disposable'
+        )
+        $browserIdRows = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'browser'))
+        $browserIds = @($browserIdRows.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+        if ($browserIdRows.ExitCode -ne 0 -or $browserIds.Count -ne 1) { throw 'Could not identify the single disposable browser for resource sampling.' }
+        $metricJob = Start-Job -ArgumentList $browserIds[0], $SoakSeconds -ScriptBlock {
+            param($containerId, $duration)
+            $deadline = [DateTime]::UtcNow.AddSeconds($duration)
+            while ([DateTime]::UtcNow -lt $deadline) {
+                $stats = & docker stats --no-stream --format '{{json .}}' $containerId 2>$null
+                $statsOk = ($LASTEXITCODE -eq 0 -and $stats)
+                $statsObj = $null
+                if ($statsOk) { try { $statsObj = [string]$stats | ConvertFrom-Json -ErrorAction Stop } catch { $statsOk = $false } }
+                $cg = @(& docker exec $containerId cat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.max /sys/fs/cgroup/pids.current /sys/fs/cgroup/pids.max /sys/fs/cgroup/memory.events 2>$null)
+                $cgOk = ($LASTEXITCODE -eq 0 -and $cg.Count -ge 9)
+                $cgObj = $null
+                if ($cgOk) {
+                    try {
+                        $eventValues = @{}
+                        foreach ($eventLine in $cg[4..($cg.Count - 1)]) {
+                            $eventParts = ([string]$eventLine).Trim() -split '\s+'
+                            if ($eventParts.Count -eq 2 -and $eventParts[1] -match '^\d+$') { $eventValues[$eventParts[0]] = [long]$eventParts[1] }
+                        }
+                        if (($cg[0..3] | Where-Object { ([string]$_).Trim() -notmatch '^\d+$' }).Count -eq 0) {
+                            $cgObj = [pscustomobject]@{
+                                memory_current_bytes=[long]([string]$cg[0]).Trim(); memory_limit_bytes=[long]([string]$cg[1]).Trim()
+                                pids_current=[long]([string]$cg[2]).Trim(); pids_limit=[long]([string]$cg[3]).Trim()
+                                memory_events=[pscustomobject]$eventValues
+                            }
+                        } else { $cgOk = $false }
+                    } catch { $cgOk = $false }
+                }
+                $complete = $statsOk -and $cgOk -and $null -ne $cgObj -and
+                    $cgObj.memory_current_bytes -is [ValueType] -and $cgObj.memory_limit_bytes -is [ValueType] -and
+                    $cgObj.pids_current -is [ValueType] -and $cgObj.pids_limit -is [ValueType] -and
+                    $cgObj.memory_events.oom -is [ValueType] -and $cgObj.memory_events.oom_kill -is [ValueType]
+                Write-Output ([pscustomobject]@{
+                    at_utc=[DateTime]::UtcNow.ToString('o'); complete=$complete; docker_stats=$statsObj
+                    memory_current_bytes=$cgObj.memory_current_bytes; memory_limit_bytes=$cgObj.memory_limit_bytes
+                    pids_current=$cgObj.pids_current; pids_limit=$cgObj.pids_limit; memory_events=$cgObj.memory_events
+                })
+                Start-Sleep -Seconds 5
+            }
+        }
+        $soakReportAttempted = $true
+        $metricPath = Join-Path (Join-Path $Root 'runtime/demoqa') "$RunLabel/soak-host-metrics.json"
+        $metricDirectory = Split-Path -Parent $metricPath
+        New-Item -ItemType Directory -Path $metricDirectory -Force | Out-Null
+        try {
+            $soakExit = Invoke-RunnerStream -RunnerArgs $soakArgs
+        }
+        finally {
+            if ($metricJob.State -eq 'Running') { Stop-Job -Job $metricJob -ErrorAction SilentlyContinue }
+            $metricSamples = @(Receive-Job -Job $metricJob -ErrorAction SilentlyContinue)
+            Remove-Job -Job $metricJob -Force -ErrorAction SilentlyContinue
+            $metricJob = $null
+            $partialMetricReport = [pscustomobject]@{ schema='readiness-soak-host-metrics/v1'; samples=$metricSamples; sample_count=$metricSamples.Count; resource_gate_pass=$false }
+            [System.IO.File]::WriteAllText($metricPath, ($partialMetricReport | ConvertTo-Json -Depth 12) + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+        }
+        $completeSamples = @($metricSamples | Where-Object { $_.complete -eq $true })
+        $minSamples = [Math]::Max(2, [Math]::Ceiling($SoakSeconds / 15.0))
+        $sampleCoverageSeconds = 0.0
+        if ($completeSamples.Count -ge 2) {
+            $sampleTimes = @($completeSamples | ForEach-Object { [DateTime]::Parse($_.at_utc).ToUniversalTime() })
+            $sampleCoverageSeconds = ($sampleTimes[-1] - $sampleTimes[0]).TotalSeconds
+        }
+        $memoryLimit = 0L; $pidsLimit = 0L; $peakMemory = 0L; $peakPids = 0L
+        $oomDelta = $null; $memoryGrowthBytes = $null; $metricsComplete = $false
+        $memoryPercent = $null; $pidsPercent = $null; $growthPercentLimit = $null
+        if ($completeSamples.Count -eq $metricSamples.Count -and $completeSamples.Count -ge $minSamples) {
+            $memoryLimit = [long]$completeSamples[0].memory_limit_bytes
+            $pidsLimit = [long]$completeSamples[0].pids_limit
+            $peakMemory = [long](($completeSamples | Measure-Object -Property memory_current_bytes -Maximum).Maximum)
+            $peakPids = [long](($completeSamples | Measure-Object -Property pids_current -Maximum).Maximum)
+            $firstEvents = $completeSamples[0].memory_events; $lastEvents = $completeSamples[-1].memory_events
+            $oomDelta = [pscustomobject]@{
+                oom=[long]$lastEvents.oom - [long]$firstEvents.oom
+                oom_kill=[long]$lastEvents.oom_kill - [long]$firstEvents.oom_kill
+            }
+            $thirdCount = [Math]::Max(1, [Math]::Ceiling($completeSamples.Count / 3.0))
+            $firstThird = @($completeSamples | Select-Object -First $thirdCount)
+            $lastThird = @($completeSamples | Select-Object -Last $thirdCount)
+            $firstMedian = Get-NumericMedian -Values @($firstThird | ForEach-Object { [double]$_.memory_current_bytes })
+            $lastMedian = Get-NumericMedian -Values @($lastThird | ForEach-Object { [double]$_.memory_current_bytes })
+            $memoryGrowthBytes = [long]($lastMedian - $firstMedian)
+            if ($memoryLimit -gt 0 -and $pidsLimit -gt 0) {
+                $memoryPercent = [Math]::Round(100.0 * $peakMemory / $memoryLimit, 2)
+                $pidsPercent = [Math]::Round(100.0 * $peakPids / $pidsLimit, 2)
+                $growthPercentLimit = [Math]::Round(100.0 * $memoryGrowthBytes / $memoryLimit, 2)
+                $metricsComplete = $sampleCoverageSeconds -ge [Math]::Max(0, $SoakSeconds - 15) -and
+                    $memoryLimit -gt 0 -and $pidsLimit -gt 0 -and $memoryPercent -lt 90 -and $pidsPercent -lt 90 -and
+                    $oomDelta.oom -eq 0 -and $oomDelta.oom_kill -eq 0 -and $growthPercentLimit -le 10
+            }
+        }
+        $metricReport = [pscustomobject]@{
+            schema='readiness-soak-host-metrics/v1'; samples=$metricSamples
+            sample_count=$metricSamples.Count; sample_coverage_seconds=[Math]::Round($sampleCoverageSeconds,2)
+            thresholds=[pscustomobject]@{ minimum_samples=$minSamples; max_memory_and_pids_percent=90; max_memory_growth_percent_of_limit=10; oom_delta=0 }
+            measured=[pscustomobject]@{ memory_limit_bytes=$memoryLimit; pids_limit=$pidsLimit; peak_memory_bytes=$peakMemory; peak_pids=$peakPids; memory_peak_percent=$memoryPercent; pids_peak_percent=$pidsPercent; memory_growth_bytes=$memoryGrowthBytes; memory_growth_percent_of_limit=$growthPercentLimit; oom_delta=$oomDelta }
+            resource_gate_pass=$metricsComplete
+        }
+        [System.IO.File]::WriteAllText($metricPath, ($metricReport | ConvertTo-Json -Depth 12) + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+        if (-not $metricsComplete) { throw 'Soak resource evidence is incomplete or crossed a predeclared memory, PID, OOM, or growth threshold.' }
+        if ($soakExit -ne 0) { throw "Disposable bounded soak failed (exit $soakExit)." }
+    }
     $profileDigestAfter = Get-TestProfileDigest
     $profileDigestRow = [pscustomobject]@{ scenario = 'test_profile_fingerprint'; status = 'read_only'; sha256_before = $profileDigestBefore; sha256_after = $profileDigestAfter; unchanged = ($profileDigestBefore -eq $profileDigestAfter) }
     $profileDigestJson = $profileDigestRow | ConvertTo-Json -Compress
@@ -586,6 +771,7 @@ try {
     if ($profileDigestBefore -ne $profileDigestAfter) { throw 'Disposable worker fingerprint changed during the run; same-profile comparison is invalid.' }
 }
 finally {
+    if ($metricJob -and $metricJob.State -eq 'Running') { Stop-Job -Job $metricJob -ErrorAction SilentlyContinue; Remove-Job -Job $metricJob -Force -ErrorAction SilentlyContinue }
     $cleanupError = $null
     if ($readinessCheckAttempted) {
         try { Export-ReadinessReport }
@@ -599,6 +785,13 @@ finally {
         catch {
             $p0ReportError = 'Could not export P0 evidence before disposable stack cleanup.'
             $resultLines.Add('{"scenario":"readiness_p0","status":"report_export_failed"}')
+        }
+    }
+    if ($soakReportAttempted) {
+        try { Export-SoakReport }
+        catch {
+            $soakReportError = 'Could not export soak evidence before disposable stack cleanup.'
+            $resultLines.Add('{"scenario":"readiness_soak","status":"report_export_failed"}')
         }
     }
     if ($stackCleanupNeeded) {
@@ -696,6 +889,7 @@ finally {
     if ($cleanupError) { throw $cleanupError }
     if ($readinessReportError) { throw $readinessReportError }
     if ($p0ReportError) { throw $p0ReportError }
+    if ($soakReportError) { throw $soakReportError }
 }
 
 Write-Host "Saved sanitized test output to $ResultsPath"

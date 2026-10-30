@@ -24,6 +24,7 @@ services:
       BROWSER_MCP_UI_DIR: /app/ui
       MODEL_BASE_URL: ${MODEL_BASE_URL:-http://host.docker.internal:8080/v1}
       MODEL_ALIAS: ${MODEL_ALIAS:-auto}
+      MODEL_PROTOCOL: ${MODEL_PROTOCOL:-generic}
       BROWSER_WORKER_URL: http://browser:7070
       WORKER_API_KEY_FILE: /run/worker-secrets/key
     ports:
@@ -59,6 +60,7 @@ services:
       WORKER_DATA_DIR: /app/runtime/worker-state
       BROWSER_BACKEND: camoufox
       BROWSER_HEADLESS: "false"
+      BROWSER_OBSERVATION_HINTS: ${BROWSER_OBSERVATION_HINTS:-0}
       # Fail readiness until a real per-browser transparent egress route is installed and checked.
       EGRESS_READY: "false"
     volumes:

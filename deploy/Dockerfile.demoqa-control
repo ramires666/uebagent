@@ -11,3 +11,6 @@ COPY scripts/readiness_p0.py /app/scripts/readiness_p0.py
 COPY scripts/readiness_p0_fixture.py /app/scripts/readiness_p0_fixture.py
 COPY scripts/readiness_runtime_integration.py /app/scripts/readiness_runtime_integration.py
 COPY scripts/readiness_overlay_integration.py /app/scripts/readiness_overlay_integration.py
+
+COPY scripts/readiness_lifecycle_integration.py /app/scripts/readiness_lifecycle_integration.py
+COPY scripts/readiness_soak.py /app/scripts/readiness_soak.py
