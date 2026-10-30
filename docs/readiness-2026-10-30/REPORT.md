@@ -1,8 +1,8 @@
 # Инженерный отчёт о готовности к выпуску
 
-## Текущий итог — 31 октября 2026, 00:02 (Asia/Qyzylorda)
+## Текущий итог — 31 октября 2026, 00:15 (Asia/Qyzylorda)
 
-**Статус: NO-GO; production не развёрнут.** Ограниченные проверки перед возможным развёртыванием завершились для перечисленных сценариев. Производственный rollout ожидает явного разрешения пользователя; эти результаты не подтверждают общую готовность продукта.
+**Локальный кандидат установлен и проверен.** Ручное управление восстановлено; переходы на другие сайты включены. Общая готовность к промышленной эксплуатации за пределами проверенных сценариев не подтверждена. [Postflight](evidence/deployment-candidate-summary.json).
 
 | Gate | Текущий результат | Границы проверки |
 |---|---|---|
@@ -12,7 +12,7 @@
 | G4 — lifecycle/concurrency | **PASS в ограниченном disposable scope** | Восстановление/review сохранено, повторного dispatch нет; конкурентная задача отклонена как `PROFILE_BUSY`. |
 | G5 — ресурсы | **PASS для maintenance soak; два ранних прогона без maintenance — FAIL** | `soak-maint2`: 900,07 с; 5 902 цикла; 59/59 maintenance requests; 141 sample / 895,54 с; пик памяти 50,40%, PID 32,23%, рост 5,66%, OOM delta 0. Только конфигурация VM 8 GiB / browser cgroup 4 GiB и фиксированная нагрузка. [Evidence](evidence/soak-maintenance-pass.json). |
 | G6 — rollback/DB | Candidate rollback проверен; DB migration N/A | Схема БД не менялась относительно baseline 96. Это не production deployment. |
-| G7 — production release | **NO-GO; не развёрнут** | Ожидается явное разрешение на rollout. Поведение с реальными аккаунтами/сессиями, защищёнными сайтами, CAPTCHA и неподдержанными dialogs/uploads/frames/multiple windows не проверялось. Intrusive memory report не классифицировал пик renderer memory. |
+| G7 — deployment/readiness | **Кандидат установлен локально; ручное управление восстановлено** | Candidate images active; rollback images preserved. Локальный postflight PASS не является сертификатом широкой production readiness. Реальные аккаунты/сессии, protected-site/CAPTCHA flows и unsupported dialogs/uploads/frames/multiple windows не проверялись. Intrusive memory report не классифицировал renderer peak. [Postflight](evidence/deployment-candidate-summary.json). |
 
 **Manual cross-origin:** стандартная навигация и клик по целевому элементу прошли; opt-out и навигация от agent отклонены с `POLICY_DENIED`; один context/page сохранён. [Сводка](evidence/manual-browsing-summary.json).
 

@@ -1,15 +1,15 @@
 # Readiness evidence — 2026-10-30
 
-## Текущий результат — 31 октября 2026, 00:02 (Asia/Qyzylorda)
+## Текущий результат — 31 октября 2026, 00:15 (Asia/Qyzylorda)
 
-**Production не развёрнут; общий статус NO-GO.** Ограниченные pre-deployment проверки для перечисленных сценариев завершены. Это не подтверждает общую готовность или аккаунтные сессии.
+**Локальный кандидат установлен и проверен.** Ручное управление восстановлено; переходы на другие сайты включены. Общая готовность к промышленной эксплуатации за пределами проверенных сценариев не подтверждена. [Postflight](evidence/deployment-candidate-summary.json).
 
 - Полный pytest на `ec922b8`: **533 passed, 8 skipped, 0 failed** из 541 теста за 94,77 с. Последующая малая правка quoting runner не вошла в этот прогон. [JUnit summary](evidence/unit-suite-manual-public-final.json).
 - Manual `public-manual2`: навигация и target click прошли; opt-out и навигация от agent получили `POLICY_DENIED`; один context/page сохранён. [Сводка](evidence/manual-browsing-summary.json).
 - Public `public-final3` (30 октября, 19:02 UTC): DemoQA, Amazon, eBay и Sannysoft имели положительные признаки ожидаемого origin на гостевых страницах без авторизации, model calls и CAPTCHA bypass. Скриншоты: [DemoQA](evidence/public-web/demoqa.png), [Amazon](evidence/public-web/amazon.png), [eBay](evidence/public-web/ebay.png), [Sannysoft](evidence/public-web/sannysoft.png). Это доступность страниц, не anti-bot PASS. На Sannysoft WebDriver missing и WebDriverAdvanced passed; Chrome (New) missing failed; permissions prompt присутствовал. [Структурированная сводка](evidence/public-web-summary.json).
 - Maintenance soak `soak-maint2`: **PASS** 900,07 с / 5 902 цикла; 59/59 maintenance requests; память 50,40%, PIDs 32,23%, median growth 5,66%, OOM delta 0. Ограничено VM 8 GiB, browser cgroup 4 GiB и фиксированной workload. Два ранних no-maintenance soak остаются FAIL. [Evidence](evidence/soak-maintenance-pass.json).
 
-Реальное поведение аккаунтов/сессий, protected-site и CAPTCHA flows, а также dialogs/uploads/frames/multiple windows не проверялись. Production rollout ожидает явного разрешения пользователя.
+Реальное поведение аккаунтов/сессий, protected-site и CAPTCHA flows, а также dialogs/uploads/frames/multiple windows не проверялись. Локальная установка завершена и ручное управление возвращено. Поведение с реальными аккаунтами/сессиями, protected-site/CAPTCHA flows и dialogs/uploads/frames/multiple windows не проверялось; установка не сертифицирует широкую production readiness.
 ## Evidence
 
 | Gate | Команда / сценарий | Статус | Измеренный результат | Evidence |
