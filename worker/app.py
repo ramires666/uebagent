@@ -469,6 +469,12 @@ class BrowserRuntime:
             raise ValueError("Chromium backend is restricted to explicit test/debug mode")
         self.data_dir = Path(data_dir).resolve()
         self.backend = backend
+        self._readiness_trace_snapshots_enabled = ReadinessActionTrace.capture_enabled()
+        if backend == "camoufox":
+            from worker.fingerprint import readiness_default_addons_enabled
+            self._readiness_default_addons_enabled = readiness_default_addons_enabled()
+        else:
+            self._readiness_default_addons_enabled = False
         self.runtime_environment = "docker" if Path("/.dockerenv").is_file() else "host"
         self.headless = headless
         self.egress_ready = bool(egress_ready)
@@ -605,10 +611,13 @@ class BrowserRuntime:
 
                 from worker.fingerprint import profile_launch_options
 
+                readiness_config: dict[str, bool] = {}
                 options = await asyncio.to_thread(
                     profile_launch_options, profile, headless=self.headless,
-                    viewport=VIEWPORT, env=self._clean_browser_env(),
+                    viewport=VIEWPORT, env=self._clean_browser_env(), readiness_config=readiness_config,
                 )
+                self._readiness_default_addons_enabled = readiness_config.get(
+                    "default_addons_enabled", self._readiness_default_addons_enabled)
                 self._camoufox_cm = AsyncCamoufox(persistent_context=True, from_options=options)
                 context = await self._camoufox_cm.__aenter__()
             else:
@@ -1786,7 +1795,7 @@ class BrowserRuntime:
                               expected_epoch: int, site_capability: SiteCapability | None = None,
                               action_id: str | None = None) -> dict[str, Any]:
         kind = action.get("kind") if isinstance(action, dict) else None
-        if not (ReadinessActionTrace.enabled() and kind in {"click", "type_text", "press_key", "scroll", "wait", "navigate", "drag", "mouse_move"}):
+        if not (ReadinessActionTrace.capture_enabled() and kind in {"click", "type_text", "press_key", "scroll", "wait", "navigate", "drag", "mouse_move"}):
             return await self._execute_action_untraced(action, allowed, manual=manual, allow_write=allow_write,
                 expected_epoch=expected_epoch, site_capability=site_capability, action_id=action_id)
         try:
@@ -2785,6 +2794,24 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
             return {"records": runtime._readiness_trace.snapshot()}
         except HTTPException: raise
         except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
+
+    @app.get("/diagnostics/readiness-memory-config", dependencies=[Depends(require_bearer)])
+    async def readiness_memory_config() -> dict[str, Any]:
+        readiness_trace_allowed()
+        trace_snapshots_enabled = getattr(runtime, "_readiness_trace_snapshots_enabled", None)
+        if type(trace_snapshots_enabled) is not bool:
+            trace_snapshots_enabled = ReadinessActionTrace.capture_enabled()
+        default_addons_enabled = getattr(runtime, "_readiness_default_addons_enabled", None)
+        if type(default_addons_enabled) is not bool:
+            backend_name = getattr(runtime, "backend", "camoufox")
+            if backend_name == "camoufox":
+                from worker.fingerprint import readiness_default_addons_enabled
+                default_addons_enabled = readiness_default_addons_enabled()
+            else:
+                default_addons_enabled = False
+        return {"trace_snapshots_enabled": trace_snapshots_enabled,
+                "default_addons_enabled": default_addons_enabled,
+                "backend": getattr(runtime, "backend", "camoufox")}
 
     @app.post("/diagnostics/readiness-actions/reset", dependencies=[Depends(require_bearer)])
     async def reset_readiness_actions() -> dict[str, Any]:

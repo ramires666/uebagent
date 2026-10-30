@@ -39,6 +39,13 @@ _SYSTEM_UI_FONT_PREFS = {
 }
 
 
+def readiness_default_addons_enabled() -> bool:
+    """Test-only variant switch; production always keeps Camoufox defaults."""
+    test_trace = (os.environ.get("APP_ENV", "production").lower() == "test"
+                  and os.environ.get("READINESS_ACTION_TRACE") == "1")
+    return not (test_trace and os.environ.get("READINESS_DISABLE_DEFAULT_ADDONS") == "1")
+
+
 def _prepare_fontconfig(options: dict[str, Any], state_dir: Path) -> None:
     """Build a private absolute-path fontconfig for the selected Camoufox OS."""
     env = options.get("env")
@@ -215,9 +222,15 @@ def profile_lock(path: Path):
         os.close(fd)
 
 
-def profile_launch_options(profile: Path, *, headless: bool, viewport: dict[str, int], env: dict[str, str]) -> dict[str, Any]:
+def profile_launch_options(profile: Path, *, headless: bool, viewport: dict[str, int], env: dict[str, str],
+                          readiness_config: dict[str, bool] | None = None) -> dict[str, Any]:
     from importlib.metadata import version
     from camoufox.utils import launch_options, validate_config
+
+    addon_options: dict[str, Any] = {}
+    if not readiness_default_addons_enabled():
+        from camoufox import DefaultAddons
+        addon_options["exclude_addons"] = [DefaultAddons.UBO]
 
     if version("camoufox") != VERSION:
         raise RuntimeError("unsupported Camoufox version for persisted fingerprint")
@@ -245,9 +258,16 @@ def profile_launch_options(profile: Path, *, headless: bool, viewport: dict[str,
             if set(prefs) - {"webgl.enable-webgl2", "webgl.force-enabled"} or any(type(v) is not bool for v in prefs.values()):
                 raise ValueError("invalid persisted browser preferences")
             validate_config(config)
-            options = launch_options(config=dict(config), firefox_user_prefs=dict(prefs), headless=headless,
+            effective_config = dict(config)
+            if addon_options:
+                # Fingerprint files are shared across variants; remove only the
+                # known Camoufox addon list from this launch's working copy.
+                effective_config.pop("addons", None)
+            options = launch_options(config=effective_config, firefox_user_prefs=dict(prefs), headless=headless,
                                      user_data_dir=str(profile), viewport=viewport, env=env, geoip=False,
-                                     i_know_what_im_doing=True)
+                                     i_know_what_im_doing=True, **addon_options)
+            if readiness_config is not None:
+                readiness_config["default_addons_enabled"] = bool(effective_config.get("addons"))
             _apply_system_ui_font_preferences(options)
             _prepare_fontconfig(options, profile.parent.parent)
             return options
@@ -256,7 +276,10 @@ def profile_launch_options(profile: Path, *, headless: bool, viewport: dict[str,
         if profile.exists() and any(profile.iterdir()):
             raise ValueError("fingerprint missing for existing browser profile")
         config: dict[str, Any] = {}
-        options = launch_options(config=config, headless=headless, user_data_dir=str(profile), viewport=viewport, env=env, geoip=False)
+        options = launch_options(config=config, headless=headless, user_data_dir=str(profile), viewport=viewport,
+                                 env=env, geoip=False, **addon_options)
+        if readiness_config is not None:
+            readiness_config["default_addons_enabled"] = bool(config.get("addons"))
         persisted_prefs = options.get("firefox_user_prefs")
         if not isinstance(persisted_prefs, dict):
             raise RuntimeError("Camoufox launch options are missing their Firefox preferences")

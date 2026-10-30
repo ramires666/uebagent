@@ -16,3 +16,4 @@ COPY scripts/readiness_lifecycle_integration.py /app/scripts/readiness_lifecycle
 COPY scripts/readiness_soak.py /app/scripts/readiness_soak.py
 COPY scripts/readiness_cookie_bridge.py /app/scripts/readiness_cookie_bridge.py
 COPY scripts/readiness_memory_probe.py /app/scripts/readiness_memory_probe.py
+COPY scripts/readiness_memory_attribution.py /app/scripts/readiness_memory_attribution.py

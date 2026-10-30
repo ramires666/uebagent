@@ -13,6 +13,11 @@ class ReadinessActionTrace:
     def enabled() -> bool:
         return os.environ.get("APP_ENV", "production").lower() == "test" and os.environ.get("READINESS_ACTION_TRACE") == "1"
 
+    @staticmethod
+    def capture_enabled() -> bool:
+        """Whether action-level DOM snapshots are enabled for this test run."""
+        return ReadinessActionTrace.enabled() and os.environ.get("READINESS_SKIP_ACTION_SNAPSHOTS") != "1"
+
     def __init__(self) -> None:
         self._records: deque[dict[str, Any]] = deque(maxlen=self.LIMIT)
 
