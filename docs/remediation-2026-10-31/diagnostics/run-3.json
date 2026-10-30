@@ -1,0 +1,64 @@
+{
+  "schema": "readiness-diagnostic-observations/v1",
+  "profile_id": "p2",
+  "observed_at_utc": "2026-10-30T22:02:03.081150+00:00",
+  "overall_verdict": "DIAGNOSTIC_COMPLETED",
+  "diagnostic_scope": "sannysoft",
+  "runtime": {
+    "viewer_origin": "http://localhost:18081",
+    "worker": "disposable-antibot-test",
+    "viewport": [
+      1440,
+      900
+    ],
+    "profile_reused": true,
+    "cookies_imported": false,
+    "allowed_origins_policy": "exact page origin plus source-confirmed static origins per site",
+    "third_party_resources": "only exact Sannysoft dependencies cdnjs and jsdelivr are allowed; no analytics origin"
+  },
+  "pages": [
+    {
+      "site": "sannysoft",
+      "expected_url": "https://bot.sannysoft.com/",
+      "observed_url": "https://bot.sannysoft.com/",
+      "url_verified": true,
+      "resource_origins_allowlisted": [
+        "https://bot.sannysoft.com",
+        "https://cdnjs.cloudflare.com",
+        "https://cdn.jsdelivr.net"
+      ],
+      "required_labels": {
+        "Intoli.com tests": true,
+        "WebDriver Advanced": true
+      },
+      "challenge_indicators": {
+        "Verify you are human": false,
+        "Access denied": false,
+        "Robot Check": false,
+        "unusual traffic": false,
+        "Request blocked": false,
+        "Security Measure": false,
+        "Just a moment...": false,
+        "challenge-platform": false
+      },
+      "outcomes": {
+        "webdriver": "missing (passed)",
+        "chrome": "missing (failed)",
+        "permissions": "prompt",
+        "advanced_webdriver": "passed",
+        "plugin_array": "passed",
+        "plugins_length_bucket": "nonzero",
+        "languages_presence": "present"
+      },
+      "challenge_detected": false,
+      "initialization": {
+        "status": "inferred_from_resolved_result_cells",
+        "known_dependency_script_blocks": {},
+        "completion_marker_available": false
+      },
+      "verdict": "DIAGNOSTIC_COMPLETED"
+    }
+  ],
+  "evidence_scope": "fixed URL, label, challenge, and boolean/bucket predicates only",
+  "raw_page_data_saved": false
+}

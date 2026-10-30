@@ -1,0 +1,90 @@
+{
+  "schema": "readiness-diagnostic-observations/v1",
+  "profile_id": "p2",
+  "observed_at_utc": "2026-10-30T21:54:57.698604+00:00",
+  "overall_verdict": "OBSERVATIONS",
+  "diagnostic_scope": "sannysoft",
+  "runtime": {
+    "viewer_origin": "http://localhost:18081",
+    "worker": "disposable-antibot-test",
+    "viewport": [
+      1440,
+      900
+    ],
+    "profile_reused": true,
+    "cookies_imported": false,
+    "allowed_origins_policy": "one exact diagnostic origin per visit",
+    "third_party_resources": "not allowlisted; script observations may reflect this policy"
+  },
+  "pages": [
+    {
+      "site": "sannysoft",
+      "expected_url": "https://bot.sannysoft.com/",
+      "observed_url": "https://bot.sannysoft.com/",
+      "url_verified": true,
+      "required_labels": {
+        "Intoli.com tests": true,
+        "WebDriver Advanced": true
+      },
+      "challenge_indicators": {
+        "Verify you are human": false,
+        "Access denied": false,
+        "Robot Check": false,
+        "unusual traffic": false,
+        "Request blocked": false,
+        "Security Measure": false,
+        "Just a moment...": false,
+        "challenge-platform": false
+      },
+      "outcomes": {
+        "webdriver": "present (failed)",
+        "chrome": "missing (failed)",
+        "permissions": "UNVERIFIED",
+        "advanced_webdriver": "failed",
+        "plugin_array": "failed",
+        "plugins_length_bucket": "UNVERIFIED",
+        "languages_presence": "empty"
+      },
+      "challenge_detected": false,
+      "verdict": "OBSERVATIONS",
+      "initialization": {
+        "status": "UNVERIFIED",
+        "reason": "Required public script assets were blocked by the worker origin policy; outcome cells can remain at initial placeholders.",
+        "initial_public_html": {
+          "result_nodes": 7,
+          "default_result_class": "failed result",
+          "default_result_text": "empty"
+        },
+        "primary_script_assets": {
+          "same_origin_files": [
+            "fpCollect.min.js",
+            "modernizr.js",
+            "fpScanner.js"
+          ],
+          "cdnjs_files": [
+            "lodash.min.js",
+            "jquery.min.js"
+          ],
+          "jsdelivr_files": [
+            "ua-parser.min.js"
+          ]
+        },
+        "inline_test_script": {
+          "references_all_seven_result_ids": true,
+          "mutates_result_dom": true,
+          "uses_async_await": true,
+          "15s_timer_found": false,
+          "explicit_completion_marker_found": false
+        },
+        "worker_blocked_script_counts": {
+          "cdnjs.cloudflare.com": 4,
+          "cdn.jsdelivr.net": 2
+        },
+        "block_reason": "origin_not_allowed",
+        "interpretation": "Preserve visible outcomes as historical observations; do not treat failed classes or an empty language cell as initialized browser results."
+      }
+    }
+  ],
+  "evidence_scope": "fixed URL, label, challenge, and boolean/bucket predicates only",
+  "raw_page_data_saved": false
+}
