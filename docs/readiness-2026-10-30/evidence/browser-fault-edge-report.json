@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "overall_status": "BLOCKED",
+  "scenario_counts": {
+    "pass": 8,
+    "fail": 0,
+    "blocked": 4
+  },
+  "scenarios": {
+    "fixture_navigation": {"status": "PASS", "actual": {"outcome": "applied", "fixture_requests": 1}},
+    "initial_observation": {"status": "PASS", "actual": {"width": 1440, "height": 900, "bytes": 19170, "context_count": 1, "page_count": 1}},
+    "delayed_render": {"status": "PASS", "actual": {"verified": true}},
+    "dynamic_id": {"status": "PASS", "actual": {"old_id_gone": true, "new_id_visible": true}},
+    "synthetic_type": {"status": "PASS", "actual": {"click_outcome": "applied", "type_outcome": "applied", "verified": true, "text_length": 21}},
+    "overlay_interception": {"status": "BLOCKED", "actual": {"worker_receipt": "applied", "overlay_caught_click": true, "target_activated": false}},
+    "shadow_dom": {"status": "PASS", "actual": {"worker_receipt": "applied", "verified": true}},
+    "iframe": {"status": "PASS", "actual": {"worker_receipt": "applied", "verified": true}},
+    "native_dialog": {"status": "BLOCKED", "reason": "No dialog accept/dismiss operation is exposed; fixture was not triggered."},
+    "file_upload": {"status": "BLOCKED", "reason": "Worker action schema has no file-upload operation; fixture was not triggered."},
+    "task_cancel_idempotency": {"status": "BLOCKED", "reason": "Worker-only harness does not instantiate TaskRunner/model or create tasks."},
+    "final_resources": {"status": "PASS", "actual": {"context_count": 1, "page_count": 1, "resource_violation": false, "runtime_ready_under_synthetic_route_flag": true}}
+  },
+  "network": {
+    "policy": "Fixture-only fulfill; abort all other page requests.",
+    "fixture_requests": 1,
+    "blocked_requests": 0
+  },
+  "limitations": [
+    "Synthetic temporary profile only; no real website or egress validation.",
+    "Native dialogs and file upload are BLOCKED, not passed.",
+    "Queued/in-flight cancellation and browser restart/crash recovery are separate suites; live cancel idempotency is not verified by this worker-only audit."
+  ]
+}

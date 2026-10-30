@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "source_revision": "f6af7ed",
+  "timestamps_and_task_identifiers_removed": true,
+  "worker_edge_audit": {
+    "status": "BLOCKED",
+    "pass": 8,
+    "fail": 0,
+    "blocked": 4,
+    "evidence": "browser-fault-edge-report.json"
+  },
+  "runtime_audit": {
+    "status": "PASS",
+    "test_count": 1,
+    "failure_records": 0,
+    "scope": "Camoufox restart fencing, capture/input, extra-page enforcement, fingerprint persistence"
+  },
+  "recovery_smoke": {
+    "status": "PASS",
+    "scope": "canonical-page close and Camoufox parent SIGKILL recovery",
+    "preservation_checks": {
+      "synthetic_cookie": true,
+      "action_receipt": true,
+      "capability_use": true
+    },
+    "final_worker_ready": true,
+    "final_context_count": 1,
+    "final_page_count": 1
+  },
+  "production_pre_postcondition": {
+    "task_unchanged": true,
+    "worker_ready_before": true,
+    "worker_ready_after": true,
+    "control_owner_none_after": true,
+    "action_in_progress_after": false,
+    "import_in_progress_after": false,
+    "context_count_after": 1,
+    "page_count_after": 1,
+    "recovery_state_after": "idle",
+    "recovery_needed_after": false,
+    "resource_violation_after": false
+  }
+}
