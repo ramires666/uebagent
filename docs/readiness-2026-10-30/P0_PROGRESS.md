@@ -61,17 +61,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-demoqa-tests.ps1
 
 ## Критерий результата
 
-Исходный прогон — диагностика, а не приёмка исправления. Для признания обоих путей исправленными нужны **три свежих независимых PASS запуска checkbox и три web_table**, каждый с успешным TaskRunner завершением и независимой проверкой конечного состояния. Таких результатов нет; release gate остаётся прежним **NO-GO** до закрытия подтверждённых отказов и остальных обязательных gates.
+Критерий воспроизводимости этих двух P0-сценариев — **три свежих независимых PASS запуска checkbox и три web_table**, каждый с успешным TaskRunner завершением и независимой проверкой конечного состояния. Этот критерий теперь выполнен для opt-in hints prototype. Это закрывает только повторяемость двух P0-сценариев; общий release gate остаётся **NO-GO** до прохождения остальных обязательных gates.
 
 Первый прогон указывает на ошибки наведения/focus: большинство кликов не попадали в интерактивный target; для web_table worker отклонял ввод без editable focus. Он не доказывает конкретный внутренний механизм модели, не разделяет чистую model latency и orchestration wait, и не устанавливает, что изменения prompt или интерфейса исправят задачи.
 
-Следующий эксперимент сравнит исходный путь с opt-in generic interaction hints при тех же задачах и лимитах. Это прототип, а не уже проверенное исправление; не считать его PASS без новых независимых live результатов.
+Исходные live-отказы сохранены как историческая база для сравнения с opt-in generic interaction hints при тех же задачах и лимитах.
 
 ## Opt-in hints prototype
 
 Прототип добавляет только к generic model текущего screenshot-turn ограниченные metadata видимых интерактивных controls на HTTPS-страницах: максимум 32 элемента и 4 KiB, normalized-1000 center/bounds, tag/role и label до 80 символов. Password controls исключены; значения полей не передаются, допускается только Boolean `value_present` и безопасные состояния вроде `checked`/`expanded`. Labels являются недоверенными данными страницы. Hints сверяются с размерами PNG того же observation, не сохраняются в следующих ходах; feature по умолчанию выключен (`BROWSER_OBSERVATION_HINTS=0`).
 
-Hints лишь помогают модели выбрать target: runtime не перемещает и не snap-ит координаты, не меняет policy, число попыток, лимиты или verifier. Исходный P0-результат остаётся историческим **FAIL**; до выполнения критерия выше release gate — **NO-GO**.
+Hints лишь помогают модели выбрать target: runtime не перемещает и не snap-ит координаты, не меняет policy, число попыток, лимиты или verifier. Исходный P0-результат остаётся историческим **FAIL**. Hints остаются opt-in и выключены по умолчанию (`BROWSER_OBSERVATION_HINTS=0`); в production не развёрнуты.
 
 Повторить исходные checkbox и web_table с prototype можно в disposable P0 runner, включив `-ObservationHints`; лимиты остаются 180 секунд и 40 шагов:
 
@@ -79,17 +79,19 @@ Hints лишь помогают модели выбрать target: runtime не
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-demoqa-tests.ps1 -ModelBaseUrl http://host.docker.internal:8080/v1 -ModelAlias auto -ModelProtocol generic -AllowSuspendedTasks -P0Diagnostics -ObservationHints -P0Scenarios 'checkbox,web_table' -RunLabel p0hints1
 ```
 
-### Live hints run 1
+### Live hints runs 1–3
 
-Первый opt-in прогон завершил оба сценария **PASS** при тех же лимитах 180 секунд и 40 шагов. В обоих `baseline_verified=false`, `independent_verified=true`, `task_events_truncated=false`.
+Три opt-in прогона завершили оба сценария **PASS** при тех же лимитах 180 секунд и 40 шагов. Во всех шести сценарных запусках `baseline_verified=false`, `independent_verified=true`, `task_events_truncated=false`. Продуктовый код во всех трёх запусках соответствовал коммиту `7f5151d`; образы между прогонами не пересобирались (`-SkipBuild`). Отличие harness третьего запуска не меняло продуктовый код.
 
-| Сценарий | Исходная база без hints | Hints run 1 | Наблюдение по trace |
-|---|---|---|---|
-| `checkbox` | `expired`, 14 шагов, 187.790 с | `succeeded`, 3 шага, 31.286 с | Первый click промахнулся; второй попал в expander Home, третий выбрал Desktop. Независимая проверка checkbox и результата прошла. |
-| `web_table` | `failed`, 9 шагов, 65.346 с, editable-focus retries exhausted | `succeeded`, 15 шагов, 113.373 с | Все 6 `type_text` были применены с focus на соответствующих полях; 6 условий таблицы прошли независимую проверку. |
+| Сценарий | Исходная база без hints | Hints run 1 | Hints run 2 | Hints run 3 | Наблюдение по trace |
+|---|---|---|---|---|---|
+| `checkbox` | `expired`, 14 шагов, 187.790 с | `succeeded`, 3 шага, 31.286 с | `succeeded`, 3 шага, 29.247 с | `succeeded`, 3 шага, 29.249 с | Во всех трёх hint runs первый click промахнулся; второй попал в expander Home, третий выбрал Desktop. Независимые проверки checkbox и результата прошли. |
+| `web_table` | `failed`, 9 шагов, 65.346 с, editable-focus retries exhausted | `succeeded`, 15 шагов, 113.373 с | `succeeded`, 15 шагов, 111.380 с | `succeeded`, 15 шагов, 115.385 с | Во всех трёх hint runs все 6 `type_text` применены с focus на соответствующих полях; все 6 условий таблицы прошли независимую проверку. |
 
-Успех одного запуска на каждый сценарий — **1/3 PASS** по release-критерию, поэтому **NO-GO** сохраняется. Web table завершился медленнее исходного отказа; intervals между действиями не являются чистой model latency, и по этой паре нельзя заявлять её снижение. Checkbox trace всё ещё показывает начальный промах. Hints остаются opt-in и выключены по умолчанию; production не развёртывался.
+Успех трёх запусков на каждый сценарий — **3/3 PASS** по критерию воспроизводимости P0-сценариев. Web table завершился медленнее исходного отказа; intervals между действиями не являются чистой model latency, и по этим прогонам нельзя заявлять её снижение. Checkbox trace во всех трёх запусках всё ещё показывает начальный промах. Общий release **NO-GO** сохраняется до остальных gates; hints остаются выключены по умолчанию и не развёрнуты в production.
 
-Сохранён полный sanitized allowlisted trace: [p0-hints-1.json](evidence/p0-hints-1.json); [summary](evidence/p0-hints-1-summary.json). SHA-256 отчёта: `ee31bf26b6cda84534e3a8bff29e50f3a2855f5ad30a069cfc5020b6a76816f2`. В artifact отсутствуют task IDs, page labels, selectors, typed values, credentials и raw model output.
+После третьего прогона parent подтвердил production worker `ready=true`, `idle` с 29 задачами; ранее ожидавшая human-review задача осталась в прежних status/version/phase/timestamps.
 
-Проверено локально focused-набором model/runtime/P0 tests: **71 passed**. Полный стабильный unit suite: **455 passed, 6 skipped, 0 failed за 79.55 секунды** ([JUnit](../../runtime/readiness-2026-10-30/pytest-p0-hints.xml)). Unit tests не заменяют три независимых live PASS на каждый сценарий.
+Сохранены полные sanitized allowlisted traces: [run 1](evidence/p0-hints-1.json) ([summary](evidence/p0-hints-1-summary.json)), [run 2](evidence/p0-hints-2.json) ([summary](evidence/p0-hints-2-summary.json)) и [run 3](evidence/p0-hints-3.json) ([summary](evidence/p0-hints-3-summary.json)). SHA-256: run 1 `ee31bf26b6cda84534e3a8bff29e50f3a2855f5ad30a069cfc5020b6a76816f2`; run 2 `8dd4ee9accac5069644027c74d3c9f7e13a46e543735664c982709be0a95be7f`; run 3 `b3cf4de7cb914b701731d0b2fb13db2bc0f7061f6946836200d7779de799eb57`. В artifacts отсутствуют task IDs, page labels, selectors, typed values, credentials и raw model output.
+
+Проверено локально focused-набором model/runtime/P0 tests: **71 passed**. Полный стабильный unit suite: **455 passed, 6 skipped, 0 failed за 79.55 секунды** ([JUnit](../../runtime/readiness-2026-10-30/pytest-p0-hints.xml)). Шесть skipped — environment-bound тесты: 2 требуют isolated Camoufox/X11 для cookie persistence, 2 — Camoufox/X11 для fingerprint migration, 1 — isolated X11 для native input, 1 — disposable browser container для runtime audit. Отдельный полный G3 suite `hints-fullg3` ещё выполняется; его результат здесь не утверждается.
