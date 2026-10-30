@@ -1,0 +1,28 @@
+{
+  "schema": "intrusive-memory-classification/v1",
+  "status": "FAIL",
+  "cycles_completed": 600,
+  "memory_report_requested": true,
+  "error_codes": [
+    "memory_report_request_failed"
+  ],
+  "memory_report_started_at_utc": "2026-10-30T17:52:12.588882+00:00",
+  "memory_report_ended_at_utc": "2026-10-30T17:52:27.677422+00:00",
+  "identity_stable": false,
+  "one_context_one_page": false,
+  "samples": {
+    "before_failure": {
+      "at_utc": "2026-10-30T17:52:08.2794630Z",
+      "web_content_rss_kib": 783252,
+      "anon_bytes": 1559793664,
+      "memory_current_bytes": 1750462464
+    },
+    "after_failure": {
+      "at_utc": "2026-10-30T17:52:14.6947058Z",
+      "web_content_rss_kib": null,
+      "anon_bytes": 662925312,
+      "memory_current_bytes": 848490496
+    }
+  },
+  "interpretation": "The bounded memory-report request timed out/faulted and the worker identity/context invariants were lost; Web Content was absent from the next process sample. The interval cannot classify the renderer peak or reveal the exact heap cause. Treat this diagnostic as unusable for component attribution, not as evidence that memory was successfully reclaimed."
+}
