@@ -1,0 +1,75 @@
+{
+  "schema": "readiness-model-coverage/v1",
+  "status": "PASS",
+  "scenarios": [
+    {
+      "scenario": "ebay_guest_search",
+      "status": "PASS",
+      "task_id": "a668b537-b787-4a5f-9d5c-7d34f73fca36",
+      "started_at": "2026-10-30T21:51:46+00:00",
+      "finished_at": "2026-10-30T21:52:37+00:00",
+      "limits": {
+        "max_steps": 16,
+        "timeout_s": 420
+      },
+      "control_origin": "http://localhost:18081",
+      "runtime_profile_hint": "p2",
+      "prompt_provenance": "scripts/readiness_model_coverage.py:SCENARIOS",
+      "task_status": "succeeded",
+      "phase": "verified",
+      "verified": true,
+      "milestone_independently_verified": true,
+      "final_conditions_independently_verified": true,
+      "signed_out_verified_before_search": true,
+      "item_independently_verified": true,
+      "history_back_to_results_verified": true,
+      "action_kinds": [
+        "navigate",
+        "navigate",
+        "click",
+        "history_back"
+      ],
+      "read_only_actions_only": true,
+      "challenge_detected": false,
+      "error_code": null
+    }
+  ],
+  "worker_observation": {
+    "url_host": "www.ebay.com",
+    "control_owner": "none",
+    "context_count": 1,
+    "page_count": 1,
+    "recovery_state": "idle",
+    "recovery_reason": "healthy",
+    "blocked_resources": [
+      {
+        "host": "ir.ebaystatic.com",
+        "resource_type": "image",
+        "reason": "origin_not_allowed",
+        "method": "GET",
+        "count": 8
+      },
+      {
+        "host": "ir.ebaystatic.com",
+        "resource_type": "font",
+        "reason": "origin_not_allowed",
+        "method": "GET",
+        "count": 8
+      },
+      {
+        "host": "i.ebayimg.com",
+        "resource_type": "fetch",
+        "reason": "origin_not_allowed",
+        "method": "HEAD",
+        "count": 1
+      }
+    ]
+  },
+  "runtime_provenance": {
+    "worker_image": "browser-mcp-remediation-browser:ebay-assets-b437221",
+    "worker_source_sha256": "b6b8a5fdb978f20d38a69bc88732871ad036941dc321df247b3368bffdaa9a96",
+    "worker_volume": "browser-mcp-antibot-2026-10-31-worker-state-p2",
+    "deployment_scope": "disposable test stack only; production not deployed"
+  },
+  "comparison_note": "Observed run-1 eBay attempt ended PARTIAL/waiting_human with MODEL_OUTPUT_INVALID after 14 actions; run-2 ended PASS after 4 actions with signed-out, results, item, and history-back evidence. These runs differ in worker image and task behavior; the comparison is observational and does not establish a single cause or general reliability."
+}

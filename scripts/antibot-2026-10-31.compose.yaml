@@ -2,7 +2,7 @@ name: browser-mcp-antibot-2026-10-31
 
 services:
   browser:
-    image: browser-mcp-readiness-browser:candidate
+    image: browser-mcp-remediation-browser:ebay-assets-b437221
     pull_policy: never
     init: true
     mem_limit: 2816m
