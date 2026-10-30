@@ -1,0 +1,1036 @@
+{
+  "schema": "readiness-soak-failed-allowlist/v1",
+  "run_label": "soak15m1",
+  "status": "FAIL",
+  "failure_codes": [
+    "BROWSER_UNAVAILABLE:api",
+    "cleanup_or_idle_invariant_failed"
+  ],
+  "run": {
+    "requested_seconds": 900,
+    "actual_seconds": 359.75,
+    "cycles_completed": 2138,
+    "api_requests": 11042,
+    "manual_actions": 6414,
+    "api_failures": 1,
+    "action_failures": 0
+  },
+  "resource_limits": {
+    "memory_bytes": 2952790016,
+    "pids": 512
+  },
+  "observed": {
+    "sample_count": 59,
+    "sample_coverage_seconds": 356.58,
+    "memory_start_bytes": 734867456,
+    "memory_last_bytes": 2926678016,
+    "memory_peak_bytes": 2949316608,
+    "memory_peak_percent_limit": 99.88,
+    "memory_growth_start_to_last_bytes": 2191810560,
+    "memory_growth_start_to_last_percent_limit": 74.23,
+    "median_memory_bytes": 1815490560,
+    "median_memory_growth_from_start_percent_limit": 36.6,
+    "pids_min": 171,
+    "pids_max": 185,
+    "pids_peak_percent_limit": 36.13,
+    "cpu_percent_median": 149.99,
+    "cpu_percent_max": 193.97,
+    "memory_events": {
+      "high": {
+        "first": 0,
+        "last": 0,
+        "delta": 0,
+        "observed_max": 0
+      },
+      "max": {
+        "first": 0,
+        "last": 319,
+        "delta": 319,
+        "observed_max": 319
+      },
+      "oom": {
+        "first": 0,
+        "last": 0,
+        "delta": 0,
+        "observed_max": 0
+      },
+      "oom_kill": {
+        "first": 0,
+        "last": 0,
+        "delta": 0,
+        "observed_max": 0
+      },
+      "oom_group_kill": {
+        "first": 0,
+        "last": 0,
+        "delta": 0,
+        "observed_max": 0
+      }
+    }
+  },
+  "capacity_checks": {
+    "duration_900_seconds": false,
+    "minimum_60_samples": false,
+    "memory_below_90_percent": false,
+    "pids_below_90_percent": true,
+    "zero_oom_deltas": true,
+    "overall": "FAIL",
+    "median_last_third_minus_first_third_at_most_10_percent_limit": false
+  },
+  "samples": [
+    {
+      "at_utc": "2026-10-30T15:03:12.7544160Z",
+      "elapsed_seconds": 0.0,
+      "memory_current_bytes": 734867456,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 185,
+      "pids_limit": 512,
+      "cpu_percent": 86.54,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:03:18.9025705Z",
+      "elapsed_seconds": 6.148,
+      "memory_current_bytes": 952983552,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 183,
+      "pids_limit": 512,
+      "cpu_percent": 149.48,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:03:25.0442196Z",
+      "elapsed_seconds": 12.29,
+      "memory_current_bytes": 1047117824,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 182,
+      "pids_limit": 512,
+      "cpu_percent": 164.18,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:03:31.1785546Z",
+      "elapsed_seconds": 18.424,
+      "memory_current_bytes": 1086394368,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 182,
+      "pids_limit": 512,
+      "cpu_percent": 151.24,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:03:37.3116875Z",
+      "elapsed_seconds": 24.557,
+      "memory_current_bytes": 1128087552,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 182,
+      "pids_limit": 512,
+      "cpu_percent": 150.38,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:03:43.4532723Z",
+      "elapsed_seconds": 30.699,
+      "memory_current_bytes": 1175527424,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 177,
+      "pids_limit": 512,
+      "cpu_percent": 157.9,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:03:49.5999109Z",
+      "elapsed_seconds": 36.845,
+      "memory_current_bytes": 1212989440,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 177,
+      "pids_limit": 512,
+      "cpu_percent": 147.86,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:03:55.7489155Z",
+      "elapsed_seconds": 42.994,
+      "memory_current_bytes": 1272115200,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 177,
+      "pids_limit": 512,
+      "cpu_percent": 146.06,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:01.8839755Z",
+      "elapsed_seconds": 49.13,
+      "memory_current_bytes": 1124126720,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 149.99,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:08.0198292Z",
+      "elapsed_seconds": 55.265,
+      "memory_current_bytes": 1201668096,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 149.9,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:14.1532512Z",
+      "elapsed_seconds": 61.399,
+      "memory_current_bytes": 1164050432,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 174,
+      "pids_limit": 512,
+      "cpu_percent": 162.52,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:20.2938112Z",
+      "elapsed_seconds": 67.539,
+      "memory_current_bytes": 1234284544,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 174,
+      "pids_limit": 512,
+      "cpu_percent": 148.17,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:26.4360889Z",
+      "elapsed_seconds": 73.682,
+      "memory_current_bytes": 1268908032,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 174,
+      "pids_limit": 512,
+      "cpu_percent": 147.93,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:32.5768435Z",
+      "elapsed_seconds": 79.822,
+      "memory_current_bytes": 1287835648,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 166.03,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:38.7324077Z",
+      "elapsed_seconds": 85.978,
+      "memory_current_bytes": 1343246336,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 148.84,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:44.8701206Z",
+      "elapsed_seconds": 92.116,
+      "memory_current_bytes": 1377550336,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 147.75,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:51.0116063Z",
+      "elapsed_seconds": 98.257,
+      "memory_current_bytes": 1394151424,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 160.75,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:04:57.1415445Z",
+      "elapsed_seconds": 104.387,
+      "memory_current_bytes": 1435017216,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 149.89,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:03.2790610Z",
+      "elapsed_seconds": 110.525,
+      "memory_current_bytes": 1492295680,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 145.2,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:09.4213083Z",
+      "elapsed_seconds": 116.667,
+      "memory_current_bytes": 1530122240,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 174.95,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:15.5536545Z",
+      "elapsed_seconds": 122.799,
+      "memory_current_bytes": 1583095808,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 147.62,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:21.6814759Z",
+      "elapsed_seconds": 128.927,
+      "memory_current_bytes": 1619562496,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 151.39,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:27.8190539Z",
+      "elapsed_seconds": 135.065,
+      "memory_current_bytes": 1663156224,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 165.63,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:33.9536013Z",
+      "elapsed_seconds": 141.199,
+      "memory_current_bytes": 1667104768,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 185.46,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:40.4804009Z",
+      "elapsed_seconds": 147.726,
+      "memory_current_bytes": 1638072320,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 146.15,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:46.6139098Z",
+      "elapsed_seconds": 153.859,
+      "memory_current_bytes": 1739030528,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 147.16,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:52.7563570Z",
+      "elapsed_seconds": 160.002,
+      "memory_current_bytes": 1740955648,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 148.2,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:05:58.8875948Z",
+      "elapsed_seconds": 166.133,
+      "memory_current_bytes": 1801437184,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 169.19,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:05.0321414Z",
+      "elapsed_seconds": 172.278,
+      "memory_current_bytes": 1815490560,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 175,
+      "pids_limit": 512,
+      "cpu_percent": 167.92,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:11.1641944Z",
+      "elapsed_seconds": 178.41,
+      "memory_current_bytes": 1805029376,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 177,
+      "pids_limit": 512,
+      "cpu_percent": 147.65,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:17.2997150Z",
+      "elapsed_seconds": 184.545,
+      "memory_current_bytes": 1859760128,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 177,
+      "pids_limit": 512,
+      "cpu_percent": 148.63,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:23.4360661Z",
+      "elapsed_seconds": 190.682,
+      "memory_current_bytes": 1863983104,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 177,
+      "pids_limit": 512,
+      "cpu_percent": 147.25,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:29.5708195Z",
+      "elapsed_seconds": 196.816,
+      "memory_current_bytes": 2025328640,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 147.58,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:35.7065171Z",
+      "elapsed_seconds": 202.952,
+      "memory_current_bytes": 2050445312,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 171.95,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:41.8420246Z",
+      "elapsed_seconds": 209.088,
+      "memory_current_bytes": 2053042176,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 179.32,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:47.9760550Z",
+      "elapsed_seconds": 215.222,
+      "memory_current_bytes": 2030641152,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 179.91,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:06:54.1233926Z",
+      "elapsed_seconds": 221.369,
+      "memory_current_bytes": 2070491136,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 143.97,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:00.2667362Z",
+      "elapsed_seconds": 227.512,
+      "memory_current_bytes": 2141331456,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 145.81,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:06.4084832Z",
+      "elapsed_seconds": 233.654,
+      "memory_current_bytes": 2149347328,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 147.8,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:12.5418315Z",
+      "elapsed_seconds": 239.787,
+      "memory_current_bytes": 2282336256,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 145.78,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:18.6958329Z",
+      "elapsed_seconds": 245.941,
+      "memory_current_bytes": 2319073280,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 144.87,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:24.8422587Z",
+      "elapsed_seconds": 252.088,
+      "memory_current_bytes": 2311233536,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 144.66,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:30.9875321Z",
+      "elapsed_seconds": 258.233,
+      "memory_current_bytes": 2353467392,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 145.21,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:37.1301494Z",
+      "elapsed_seconds": 264.376,
+      "memory_current_bytes": 2463043584,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 146.33,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:43.2699492Z",
+      "elapsed_seconds": 270.516,
+      "memory_current_bytes": 2454036480,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 145.93,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:49.4010690Z",
+      "elapsed_seconds": 276.647,
+      "memory_current_bytes": 2465943552,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 143.88,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:07:55.5484827Z",
+      "elapsed_seconds": 282.794,
+      "memory_current_bytes": 2582999040,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 151.51,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:01.6877252Z",
+      "elapsed_seconds": 288.933,
+      "memory_current_bytes": 2616528896,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 155.63,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:07.8424185Z",
+      "elapsed_seconds": 295.088,
+      "memory_current_bytes": 2638479360,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 176,
+      "pids_limit": 512,
+      "cpu_percent": 175.47,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:13.9839870Z",
+      "elapsed_seconds": 301.23,
+      "memory_current_bytes": 2743435264,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 173,
+      "pids_limit": 512,
+      "cpu_percent": 174.71,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:20.1317750Z",
+      "elapsed_seconds": 307.377,
+      "memory_current_bytes": 2699554816,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 173,
+      "pids_limit": 512,
+      "cpu_percent": 177.76,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:26.3099547Z",
+      "elapsed_seconds": 313.556,
+      "memory_current_bytes": 2706436096,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 173,
+      "pids_limit": 512,
+      "cpu_percent": 188.72,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:32.4554640Z",
+      "elapsed_seconds": 319.701,
+      "memory_current_bytes": 2833625088,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 173,
+      "pids_limit": 512,
+      "cpu_percent": 181.78,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:38.6041656Z",
+      "elapsed_seconds": 325.85,
+      "memory_current_bytes": 2766123008,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 173,
+      "pids_limit": 512,
+      "cpu_percent": 193.97,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:44.7348955Z",
+      "elapsed_seconds": 331.98,
+      "memory_current_bytes": 2904674304,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 172,
+      "pids_limit": 512,
+      "cpu_percent": 160.33,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:50.8816057Z",
+      "elapsed_seconds": 338.127,
+      "memory_current_bytes": 2913853440,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 171,
+      "pids_limit": 512,
+      "cpu_percent": 168.68,
+      "memory_events": {
+        "high": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:08:57.0203839Z",
+      "elapsed_seconds": 344.266,
+      "memory_current_bytes": 2917154816,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 171,
+      "pids_limit": 512,
+      "cpu_percent": 164.42,
+      "memory_events": {
+        "high": 0,
+        "max": 25,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:09:03.1982678Z",
+      "elapsed_seconds": 350.444,
+      "memory_current_bytes": 2949316608,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 171,
+      "pids_limit": 512,
+      "cpu_percent": 177.95,
+      "memory_events": {
+        "high": 0,
+        "max": 306,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    },
+    {
+      "at_utc": "2026-10-30T15:09:09.3329843Z",
+      "elapsed_seconds": 356.579,
+      "memory_current_bytes": 2926678016,
+      "memory_limit_bytes": 2952790016,
+      "pids_current": 171,
+      "pids_limit": 512,
+      "cpu_percent": 174.75,
+      "memory_events": {
+        "high": 0,
+        "max": 319,
+        "oom": 0,
+        "oom_kill": 0,
+        "oom_group_kill": 0
+      }
+    }
+  ],
+  "memory_growth_criterion": {
+    "definition": "median(last third) minus median(first third) <= 10% of memory limit",
+    "samples_per_window": 20,
+    "first_third_median_bytes": 1223636992.0,
+    "last_third_median_bytes": 2669017088.0,
+    "growth_bytes": 1445380096.0,
+    "growth_percent_limit": 48.95,
+    "maximum_percent_limit": 10.0,
+    "passed": false
+  }
+}

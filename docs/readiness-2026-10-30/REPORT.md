@@ -1,39 +1,64 @@
 # Инженерный отчёт о готовности к выпуску
 
-**Дата проверки:** 30 октября 2026, Asia/Qyzylorda
+**Снимок состояния:** 30 октября 2026; run soak15m1 завершился FAIL через 359,75 с из запрошенных 900 с.
 
-**Решение:** **NO-GO для production release**
-
-**Объём:** API/MCP, UI, модель, browser worker, управление задачами, восстановление, ограниченная нагрузка и candidate rollback.
+**Решение:** **NO-GO для production release**, пока обязательные release gates не закрыты фактическими результатами.
 
 ## Краткое резюме
 
-Аудит завершён, однако production release по текущим критериям не готов. После opt-in bounded observation hints критичные сценарии прошли 3/3 повторов каждый, а полный live G3 прошёл 8/8 с независимой проверкой. Исторические результаты 6/8 PASS и два FAIL ниже сохранены как снимок до этой серии, а не как текущее состояние. Общий релиз остаётся NO-GO: feature default-off и не развёрнута в production; остаются другие незакрытые gates.
+Повторяемость P0 подтверждена: checkbox и web_table прошли по 3/3 запуска; полный bounded G3 прошёл 8/8 с независимым verifier при лимитах 120 секунд / 30 шагов. Hints остаются opt-in/default-off и не включались в production. Последний завершённый полный unit suite — 457 PASS / 8 SKIPPED / 0 FAIL; он предшествует текущим исправлениям и не считается повторной проверкой текущего HEAD. Результат нового полного suite ожидается.
 
-| Показатель | Результат | Как читать |
-|---|---:|---|
-| Итог readiness | **NO-GO** | Текущий bounded G3 — PASS; G2/G4/G5 и rollout evidence остаются частичными |
-| Последний полный pytest | **457 PASS / 8 SKIPPED / 0 FAIL / 0 errors**, 465 всего | 80.07 с; [устойчивая сводка по файлам](evidence/unit-final-summary.json), [локальный JUnit](../../runtime/readiness-2026-10-30/pytest-p0-final.xml) |
-| Расширение, Node contract suite | **29/29 PASS** | Отдельный запуск, не часть pytest-числа |
-| Live UI сценарии, исторический снимок | **6 PASS / 2 FAIL** | До opt-in hints; актуальный follow-up ниже: полный G3 8/8 PASS |
-| Control/API/MCP security | **16/16 PASS** | Auth/CSRF матрица; worker bearer positive/negative — отдельные task-control checks |
-| Runtime cancel integration | **PASS** | Queued cancellation дала `CANCELLED`; in-flight cancel наблюдал действие и завершился `RECOVERING` без replay |
-| Synthetic model smoke | **4 шага PASS за 17.82 с** | Chromium fixture; не полный Camoufox/control/worker стек |
-| Browser peak в короткой выборке | **1,522,884,608 / 2,952,790,016 B (51.58%)** | 189/512 PID, OOM counters = 0; это не capacity test |
-| Candidate → baseline → candidate | **PASS с ограничением** | Production восстановлен; control DB migration marker не проверялся |
-
-### Итог по воротам
-
-| Gate | Статус | Вывод |
+| Gate | Текущий статус | Основание / следующий результат |
 |---|---|---|
-| G0 — базовые тесты | **PASS в проверенном объёме** | Последний полный pytest: 457 passed / 8 skipped / 0 failed; 2 opt-in real-worker checks запускались отдельно и прошли. Остальные extension/CheckOnly результаты — отдельные наборы. |
-| G1 — API/MCP security | **PASS** | Реализованная auth/CSRF матрица 16/16. Worker bearer positive/negative проверен отдельно в task-control suite (5 checks всего), не включён в эти 16. Это не полная оценка всех security/data policy. |
-| G2 — worker/control integration | **PARTIAL** | Исторический synthetic edge audit дал 8 PASS и 4 BLOCKED. Отдельные bounded cancel/overlay checks теперь PASS, а полный G3 control/model/worker путь завершил 8/8; остаются непроверенные capability-варианты и contract cases. |
-| G3 — live browser + model | **PASS в bounded disposable run; rollout gate не закрыт** | Full `hints-fullg3`: 8/8 PASS с independent verifier; feature opt-in/default-off. См. текущий follow-up ниже. |
-| G4 — cancel/restart/concurrency | **PARTIAL** | Ограниченные queued/in-flight cancel и overlay integration checks PASS. Restart/concurrency и другие contract cases не закрыты. |
-| G5 — ресурсы/нагрузка | **PARTIAL** | Короткий read-only прогон прошёл без OOM; soak и capacity не проверены. |
-| G6 — deploy/rollback | **PASS с ограничением** | Изолированный цикл прошёл, профиль не менялся, production восстановлен; миграционная совместимость БД не проверялась. |
-| G7 — production release | **NO-GO** | Hints не развёрнуты; остаются release-contract, restart/concurrency и условные capacity/DB gates. |
+| G0 — tests | **PENDING** | Последний полный suite: 457/8/0 за 80,07 с (исторический baseline). После текущих изменений ожидается полный suite. |
+| G1 — API/MCP security | **PASS, bounded** | Auth/CSRF: 16/16; worker bearer проверен отдельными task-control checks. |
+| G2 — worker/control integration | **PARTIAL** | Отдельные cancel/overlay проверки PASS; cookie-source bridge integration ожидает фактического завершения. |
+| G3 — live browser + model | **PASS, bounded** | P0: checkbox 3/3 и web_table 3/3; full G3: 8/8. Только disposable конфигурация с MODEL_PROTOCOL=generic и BROWSER_OBSERVATION_HINTS=1; production setting остаётся выключенным. |
+| G4 — cancel/restart/concurrency | **PENDING live rerun** | Cancel/overlay bounded evidence PASS; lifecycle harness исправлен после первого сбоя, live повторный прогон ещё не завершён. |
+| G5 — ресурсы/нагрузка | **FAIL: capacity blocker** | soak15m1 завершился через 359,75/900 с после 2 138 циклов. 59 samples покрывают 356,58 с; peak memory 2 949 316 608 / 2 952 790 016 B (99,88%). Функциональный отказ BROWSER_UNAVAILABLE:api и cleanup_or_idle_invariant_failed совпал с почти исчерпанной памятью; причинная связь и компонентный fix пока расследуются. |
+| G6 — deploy/rollback | **PASS, DB migration N/A** | Candidate rollback проверен; control DB schema не менялась относительно базы 96, изменён только storage redaction regex. |
+| G7 — production release | **NO-GO** | Подтверждённый G5 resource failure; ожидаются исправление worker resource growth, bounded repro, новый полный soak, G0 full suite, cookie-source integration и G4 live rerun. |
+
+### G5 · фактический неуспешный capacity run
+
+| Измерение | Результат | Gate |
+|---|---:|---|
+| Длительность | 359,75 / 900 с | FAIL |
+| Циклы / API / manual actions | 2 138 / 11 042 / 6 414 | run остановлен |
+| Samples / покрытие | 59 / 356,58 с | FAIL: <60 и <885 с |
+| Memory peak | 2 949 316 608 / 2 952 790 016 B (99,88%) | FAIL: threshold <90% |
+| PID peak | 185 / 512 (36,13%) | PASS по PID бюджету |
+| Median growth: последние 20 минус первые 20 samples | 48,95% memory limit (1 445 380 096 B) | FAIL: budget ≤10% |
+| OOM, OOM-kill, group-kill deltas среди samples | 0 / 0 / 0 | PASS только в наблюдённом sample window |
+| Functional outcome | BROWSER_UNAVAILABLE:api; cleanup_or_idle_invariant_failed | FAIL |
+
+Memory event counter max вырос на 319; он не является OOM counter. Из-за прерывания run PS summary не заполнил итоговые поля; таблица рассчитана напрямую из 59 complete raw samples. [Sanitized allowlisted measurements](evidence/soak-failed-1.json); исходные метрики остаются локальным runtime evidence.
+
+### Текущие bounded результаты и ограничения
+
+- P0: checkbox — 3/3 PASS; web_table — 3/3 PASS. Full G3 — 8/8 PASS с независимой проверкой, 120 с / 30 шагов на сценарий.
+- Последний завершённый полный pytest: 457 passed, 8 skipped, 0 failed, 80,07 с. Это исторический снимок до текущих правок; не выдаётся за проверку новой ревизии.
+- Runtime cancellation и overlay integration прошли. Lifecycle end-to-end и cookie-source integration ожидают live результатов.
+- Hints включались только для disposable test worker через BROWSER_OBSERVATION_HINTS=1; в production feature остаётся default-off.
+- Исправления текущей ревизии включают тестовую конфигурацию: MODEL_PROTOCOL передаётся control, BROWSER_OBSERVATION_HINTS передаётся browser только для проверки; эта wiring не активирует hints в production.
+- Короткий предварительный soak-smoke2: 209 циклов / 30,14 с / 0 ошибок, память 34,93%, OOM=0. Последующая capacity попытка soak15m1 завершилась FAIL через 359,75 с: 2 138 циклов, 1 API failure и cleanup/idle failure.
+- Capacity gate для soak15m1 провален: 59/60 samples покрывают 356,58 с вместо ≥885 с; memory peak 99,88% hard limit (budget <90%), PID peak 36,13%, OOM/OOM-kill delta 0 среди сохранённых samples (не утверждение об отсутствии OOM вне sample window), median growth (последние 20 минус первые 20 samples) 48,95% лимита при бюджете ≤10%. Подробности и allowlisted timeline: [soak-failed-1.json](evidence/soak-failed-1.json).
+- Product guidance пока описывает проверку ожидаемого account, но нет жёсткого typed identity proof. Не заявляется готовность всех авторизованных сайтов. Данные не подтверждают at-rest encryption или наличие vault.
+- Отчёт о неуспешной попытке сохранён как [soak-failed-1.json](evidence/soak-failed-1.json) и построен только из измеренных samples. Успешный soak-summary.json не создан; lifecycle-summary.json появится после фактического live run.
+
+~~~mermaid
+stateDiagram-v2
+    [*] --> Planned: action planned persisted
+    Planned --> WorkerEffect: one worker execute
+    WorkerEffect --> ReplyLost: response held or dropped
+    ReplyLost --> Recovering: task requires review
+    Recovering --> RestartReview: reopen database and runner
+    RestartReview --> NoReplay: no automatic redispatch
+    NoReplay --> [*]: independent effect and idle-worker checks
+~~~
+
+Состояния на диаграмме — контракт lifecycle сценария. Live lifecycle rerun остаётся отдельным незакрытым gate.
+
 
 ## Текущий follow-up: P0 и полный G3 (30 октября 2026)
 
@@ -69,7 +94,7 @@ flowchart LR
 
 Hints содержат ограниченный набор видимых элементов и геометрию относительно того же снимка; значения полей не передаются. Они не меняют policy, не выбирают цель автоматически, не корректируют координаты и не ослабляют независимую проверку. Postflight production остался ready/idle; 29 задач и историческая waiting-human задача не изменились. Последний полный unit suite: **457 passed, 8 skipped, 0 failed** за 80,07 с ([сводка по test-file группам](evidence/unit-final-summary.json); локальный [JUnit](../../runtime/readiness-2026-10-30/pytest-p0-final.xml)). Шесть skip связаны с изолированными Camoufox/X11 или disposable browser окружениями; два opt-in real-worker checks исполняются отдельными CLI и проверены отдельно.
 
-**Решение остаётся NO-GO.** P0-критерий воспроизводимости и полный G3 в opt-in test конфигурации выполнены, но feature не включена в production. P1 runtime integration checks прошли: queued cancellation завершилась `CANCELLED`, наблюдаемая in-flight cancellation — `RECOVERING`; overlay дошёл до `waiting_human/verification_required` после одного click и одной verification repair, сохранив `target_effect_verified=false`. Так worker не сообщил ложный SUCCESS и не повторил клик. [Allowlisted runtime integration summary](evidence/runtime-integration.json). Остаются другие cancel/restart/concurrency случаи, capacity/soak и DB migration marker перед изменением schema. Upload, browser dialog, frame targeting и multiple windows не запускались и не считаются поддержанными этим evidence.
+**Решение остаётся NO-GO.** P0 воспроизводимость и full G3 в opt-in test конфигурации выполнены, но feature не включена в production. Runtime cancel и overlay integration PASS; lifecycle restart/concurrency uncertain-response live rerun ожидает фактического завершения, как и cookie-source bridge. 15-минутный soak выполняется; 30-секундный smoke не закрывает capacity gate. Storage redaction regex изменён, но control DB schema относительно базы 96 не менялась, поэтому migration gate для candidate N/A. Upload, browser dialog, frame targeting и multiple windows не запускались и не считаются поддержанными этим evidence. Авторизованные account scope остаются ограниченными: hard typed identity proof не реализован.
 
 ---
 
@@ -154,13 +179,13 @@ flowchart LR
     D -->|ready, production восстановлен| E[Проверка task state и очистки]
 ```
 
-Все три фазы прошли health/operator session/browser checks. **Control DB migration marker не проверялся**, поэтому совместимость миграции и гарантия rollback для схемы БД не доказаны. Этот результат — deployment evidence с ограничением, не доказательство полного production rollout.
+Изолированный candidate → baseline → candidate rollback прошёл. Для этого candidate control DB schema не менялась относительно базы 96; изменён только storage redaction regex, поэтому DB migration gate N/A. Это не утверждение о будущих schema migrations.
 
 ## Ресурсы и границы измерений
 
 В bounded Live2 read-only прогоне было 6/6 HTTP 200 при concurrency 2 и 3 итерациях; p95 — 14.23 мс. Browser container достиг peak **1,522,884,608 B из 2,952,790,016 B (51.58%)**, PID peak **189/512**, OOM/OOM-kill/high counters — 0; отмечено 6 throttled CPU periods.
 
-Это короткая выборка, а не soak/capacity test. Низкий peak в ней не задаёт безопасную ёмкость и не описывает тяжёлые страницы, длительную нагрузку, несколько workers или конкурирующие задачи. До выполнения длительного bounded run G5 остаётся PARTIAL.
+Soak15m1 завершился FAIL на 359,75 с с 2 138 циклами; сохранены 59 валидных samples за 356,58 с. Peak memory 99,88% лимита и memory growth превышают budgets; API unavailable и cleanup/idle invariant также завершились failure. PIDs были в пределах budget; OOM/kill counters не увеличились среди сохранённых samples. API отказ совпал с почти исчерпанной памятью, но причинная связь ещё не установлена. Исправление/диагностика компонента и повторный capacity run ожидаются.
 
 ## Остаточные риски
 
@@ -197,9 +222,9 @@ P0 закрывает только подтверждённые UI failures. О�
 |---|---|---|---|
 | Dialog, file upload и расширенная overlay capability остаются непроверенными/неподдержанными по заявленному contract. Один bounded overlay test подтвердил безопасное поведение при перехвате: receipt `applied`, но task завершился `waiting_human/verification_required` без подтверждения целевого эффекта. **Обязательно для GO, если заявленная поддержка включает эти действия.** | Владелец browser worker | Явная политика разрешённых действий и безопасные synthetic fixtures | Для dialog/upload есть отдельные поддержанные операции и независимая проверка; при перехваченном клике task/verifier не сообщает достижение целевого результата без фактического эффекта. Неподдерживаемый путь явно блокируется. |
 | In-flight cancellation, busy/profile ownership, uncertain dispatch и запрет повторного side effect; один controlled in-flight case завершился `RECOVERING` без replay, полный lifecycle contract ещё не проверен. **Обязательно для GO, если разрешены внешние действия с возможным повторным эффектом или concurrent tasks.** | Владелец control/TaskRunner | Трассируемый dispatch lifecycle; управляемый synthetic endpoint | Расширить проверку cancel до dispatch, во время dispatch и после неизвестного ответа; отсутствие автоматического replay; idempotent/stable status; подтверждённая сверка результата; profile/context/page инварианты при занятости и recovery. |
-| Cookie source, live identity/account policy и log redaction. **Обязательно для GO при использовании авторизованной сессии или чувствительных данных.** | Владелец security/privacy | Зафиксированная политика identity/session и test data | Перед действием подтверждаются ожидаемый аккаунт и источник сессии; неверный/неизвестный контекст блокируется; секреты и личные данные отсутствуют в логах и export artifacts. Readiness1 cookie-source block остаётся именно setup failure, не capability PASS. |
-| Soak/capacity. Сейчас только короткий Live2 run, поэтому **обязательно лишь при capacity claim или заданной нагрузке в релизном SLO**. | Владелец SRE/performance | Явные concurrency/duration/resource budgets | Длительный bounded run с заранее утверждёнными длительностью, concurrency, лимитами RAM/PID/CPU и критериями деградации; сохранены cgroup метрики и error/latency summaries. Никаких capacity выводов из коротких 6 запросов. |
-| Control DB migration/rollback marker. Сейчас marker не проверялся, поэтому **обязательно перед изменением control DB schema**. | Владелец control persistence / release engineering | Версионирование схемы и isolated baseline/candidate окружение | Кандидат с миграцией стартует; rollback/candidate redeploy проверены на совместимом состоянии данных; marker/version явно прочитан и записан в evidence; production state защищён. |
+| Cookie source, live identity/account policy и log redaction. **Cookie-source integration ещё ожидает фактического завершения; требуется при использовании авторизованных сессий или чувствительных данных.** | Владелец security/privacy | Завершить тест cookie-source и зафиксировать identity/session policy | Проверить ожидаемый account перед действием и перед отправкой; hard typed identity proof пока отсутствует. Не заявлять поддержку всех авторизованных сайтов; at-rest encryption/vault не подтверждены. |
+| Soak/capacity. **soak15m1 завершился FAIL через 359,75/900 с; memory достиг 99,88% hard limit, функциональный API/cleanup отказ остановил run.** | Владелец SRE/performance | Повторить bounded 15-минутный run только после исправления роста памяти; ≤90% memory/PID, OOM=0, разница медиан последних и первых третей samples ≤10% лимита, ≥60 samples за ≥885 секунд | [Фактические 59 samples и измерения](evidence/soak-failed-1.json); capacity PASS нет. |
+| Control DB migration/rollback marker. **N/A для текущего candidate:** control DB schema не менялась относительно базы 96; изменён только storage redaction regex. | Владелец control persistence / release engineering | Пересмотреть применимость при следующем изменении schema | Нынешний candidate rollback evidence не заявляет DB migration coverage и не требует schema migration. |
 
 ### P2 — расширение уверенности, не текущие доказанные блокеры по умолчанию
 

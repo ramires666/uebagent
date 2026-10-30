@@ -6,13 +6,32 @@
 
 - Checkbox: 3/3 свежих PASS; web_table: 3/3 свежих PASS.
 - Полный hints-enabled G3: 8/8 PASS с независимой проверкой, лимит 120 секунд / 30 шагов.
-- Последний полный pytest: 457 passed, 8 skipped, 0 failed за 80.07 с ([сводка по test-file группам](evidence/unit-final-summary.json); локальный [JUnit](../../runtime/readiness-2026-10-30/pytest-p0-final.xml)). Два opt-in real-worker CLI checks исполнялись отдельно и оба прошли.
-- P1 runtime integration: queued cancel → `CANCELLED`; in-flight cancel → `RECOVERING` после наблюдаемого действия; overlay → `waiting_human/verification_required` после одного click и одной verification repair. Целевой эффект не подтверждён; ложного SUCCESS и повторного клика нет. [Allowlisted summary](evidence/runtime-integration.json).
-- Hints были включены только в test worker; feature остаётся default-off и не развёрнута в production. Остались restart/concurrency и другие dispatch lifecycle cases, capability contract для неподдержанных сценариев, capacity/soak при заявлении SLO и DB migration marker перед изменением schema.
+- Последний завершённый полный pytest baseline: 457 passed, 8 skipped, 0 failed за 80.07 с; текущий полный suite ещё ожидается.
+- Bounded runtime integration: queued cancel → CANCELLED; in-flight cancel → RECOVERING; overlay → waiting_human/verification_required. Полный lifecycle restart/uncertain-response rerun ожидает live результата.
+- Hints включались только в test worker; feature default-off и не развёрнута в production. Lifecycle rerun и cookie-source integration ещё ожидаются. soak15m1 завершился FAIL: 359,75/900 с, memory peak 99,88%, 59 samples, 2 138 циклов, BROWSER_UNAVAILABLE:api и cleanup/idle failure. Подробный allowlisted evidence и график есть в REPORT.md.
 
 Подробности и текущая матрица gates: [REPORT.md](REPORT.md). Хронология P0 и артефакты повторов: [P0_PROGRESS.md](P0_PROGRESS.md). Разделы ниже содержат исторические baseline результаты и их ограничения; они не описывают нынешний статус checkbox/web_table/G3.
 
 Эта ведомость отражает проверенные локальные артефакты и переданные оператором результаты. Секреты и модельные пути не сохраняются. Сводный PASS отдельного сценария не подменяет gate полного стека.
+
+## Актуальный статус оставшихся прогонов
+
+**Production release остаётся NO-GO до закрытия оставшихся gates.** Значения ниже разделяют подтверждённые bounded результаты и незавершённые прогоны.
+
+| Gate | Подтверждено | Ещё ожидается |
+|---|---|---|
+| P0 / G3 | checkbox 3/3; web_table 3/3; полный G3 8/8, независимый verifier, 120 с / 30 шагов | Ничего для bounded P0/G3 набора; rollout не разрешён, hints default-off. |
+| G0 | Последний полный suite: 457 PASS / 8 SKIP / 0 FAIL, 80,07 с | Новый полный suite на актуальной ревизии. |
+| G2 | Runtime cancel и overlay integration | Cookie-source bridge integration. Account identity остаётся guidance-based, не typed hard proof. |
+| G4 | Отдельные cancel/overlay bounded проверки; lifecycle harness имеет локальные unit tests | Повторный live lifecycle run с uncertain reply и RUNNING restart. До завершения нет lifecycle PASS. |
+| G5 | soak15m1: 2 138 циклов за 359,75 с; memory peak 99,88%; 59 samples за 356,58 с; 1 API failure и cleanup/idle failure. | FAIL: memory peak 99,88%, growth между медианами последних/первых третей 48,95%, duration/sample coverage; расследовать рост ресурсов и повторить soak после bounded repro. PID peak 36,13%; OOM counters не увеличились в сохранённых samples. |
+| G6 | Candidate → baseline → candidate deploy/rollback прошёл | DB migration gate N/A для candidate: schema не менялась от базы 96; изменён storage redaction regex. |
+
+Неуспешный run сохранён в [soak-failed-1.json](evidence/soak-failed-1.json), derived из 59 complete samples. Успешный soak-summary.json не создан; lifecycle-summary.json появится после фактического live run. Ресурсный график строится только по этим измеренным samples.
+
+**Test-configuration wiring:** MODEL_PROTOCOL передаётся control, BROWSER_OBSERVATION_HINTS — browser в disposable проверки. Это не включает feature в production.
+
+**Security/product scope:** нет доказательства at-rest encryption или vault; не заявляется готовность всех авторизованных сайтов. Cookie-source integration и проверка целевого account остаются отдельными условиями применения.
 
 ## Исторический итог исходного аудита (до opt-in hints)
 
@@ -54,7 +73,7 @@
 | G5 | Live2 bounded read-only load + cgroup metrics | PARTIAL, не soak/capacity PASS | Read-only API: concurrency 2, 3 итерации, 6/6 HTTP 200, p95 14.23 ms. Browser cgroup peak 1,522,884,608 / 2,952,790,016 B (2816 MiB, 51.58%); PID peak 189/512; OOM/OOM kill/high counters 0. Зафиксировано 6 throttled CPU periods. Это короткая нагрузочная выборка и не подтверждает устойчивую ёмкость. | [sanitized load summary](evidence/live2-load-summary.json), raw metrics snapshots `runtime/readiness-2026-10-30/live2-metrics-20261030-154128.json` и `...154210.json` |
 | G6 | Candidate → exact baseline images → candidate redeploy в отдельном Compose project | PASS с migration limitation | Три фазы прошли ready, operator session, browser started, один context/page; image IDs зафиксированы в sanitized evidence. Fingerprint не менялся между фазами; отдельные project containers удалены, production восстановлен, production task state до/после совпал. Control/worker использовали отдельные project volumes, host profiles не монтировались. Control DB marker не проверялся, поэтому migration compatibility/rollback для DB schema не доказаны. Первичный invocation отказ «Could not inspect running browser containers» устранён исправлением PowerShell quoting (`b8c319a`) и успешным повтором. | [sanitized rollback summary](evidence/rollback-summary.json), [full operator artifact](../../runtime/readiness-2026-10-30/rollback-results-2.json) |
 
-## Gate status
+## Historical gate status before current follow-up
 
 | Gate | Статус | Причина |
 |---|---|---|
@@ -80,7 +99,7 @@
 - Task control smoke закончил в `recovering`, держал стабильные 2 секунды без новых planned actions и восстановил worker idle; это не доказывает остановку уже dispatched action.
 - Live2 resource peak был ниже лимита и без OOM, но выборка короткая; она не доказывает длительную работу под нагрузкой.
 
-## Следующие шаги после NO-GO
+## Historical plan after the initial NO-GO (current status is above)
 
 1. Исправить подтверждённые DemoQA path failures: checkbox должен завершить задачу с независимой проверкой Desktop checked; web_table должен внести и независимо проверить synthetic row до deadline. Текущий retry без изменения поведения не считать прогрессом.
 2. Повторить оба сценария на disposable stack с тем же наблюдаемым evidence, затем повторить обязательные real-stack gates. При повторном FAIL ограничить поддержку/GO scope только через явный пересмотр обязательных gates, не переименовывать отказ в PASS.

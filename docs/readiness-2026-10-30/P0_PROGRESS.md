@@ -1,6 +1,10 @@
 # P0: диагностика двух live отказов
 
-**Статус:** исходный диагностический прогон checkbox и web_table завершён; оба сценария остались FAIL. Эта заметка фиксирует дополнительное evidence после readiness-аудита; она не меняет исторические выводы в [REPORT.md](REPORT.md) и [RESULTS.md](RESULTS.md).
+**Текущий статус:** P0 criteria закрыты в bounded disposable scope: checkbox — 3/3 PASS, web_table — 3/3 PASS; full G3 — 8/8 PASS с независимым verifier при лимитах 120 секунд / 30 шагов. Hints включались только тестовой конфигурацией, production остаётся default-off. Новый полный unit suite и lifecycle rerun ожидаются. soak15m1 завершился FAIL через 359,75/900 с: 59 samples, memory peak 99,88% лимита, BROWSER_UNAVAILABLE:api и cleanup/idle failure; ресурсный блокер расследуется. Документ ниже сохраняет исторические traces исходного P0 провала.
+
+**Важно:** первоначальные checkbox/web_table failures далее — архивная диагностика, а не текущее состояние P0.
+
+**Архивный статус исходной диагностики:** checkbox и web_table тогда завершились FAIL. Этот снимок объясняет исходный дефект; актуальное bounded состояние P0 указано выше.
 
 ## Ранний снимок checkbox
 
