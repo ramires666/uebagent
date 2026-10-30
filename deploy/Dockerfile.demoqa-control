@@ -14,3 +14,5 @@ COPY scripts/readiness_overlay_integration.py /app/scripts/readiness_overlay_int
 
 COPY scripts/readiness_lifecycle_integration.py /app/scripts/readiness_lifecycle_integration.py
 COPY scripts/readiness_soak.py /app/scripts/readiness_soak.py
+COPY scripts/readiness_cookie_bridge.py /app/scripts/readiness_cookie_bridge.py
+COPY scripts/readiness_memory_probe.py /app/scripts/readiness_memory_probe.py

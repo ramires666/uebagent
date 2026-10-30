@@ -2704,7 +2704,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
             permitted = parsed.scheme == "https" and ((parsed.hostname == "demoqa.com" and path in {
                 "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}) or
                 (parsed.hostname == "readiness-fixture.test" and path in {
-                "/tree", "/form", "/overlay", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}))
+                "/tree", "/form", "/overlay", "/cookie_bridge", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}))
             if not permitted:
                 raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
             return {"records": runtime._readiness_trace.snapshot()}
@@ -2719,7 +2719,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
         try:
             parsed = urlsplit(await runtime._adapter.url())
             if parsed.scheme != "https" or parsed.hostname not in {"demoqa.com", "readiness-fixture.test"} or parsed.path.rstrip("/") not in {
-                    "/tree", "/form", "/overlay", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}:
+                    "/tree", "/form", "/overlay", "/cookie_bridge", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}:
                 raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
         except HTTPException: raise
         except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
@@ -2729,8 +2729,12 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
     @app.post("/diagnostics/readiness-fixture", dependencies=[Depends(require_bearer)])
     async def install_readiness_fixture(body: dict[str, Any]) -> dict[str, Any]:
         readiness_trace_allowed()
-        if (set(body) != {"scenario"} or not isinstance(body.get("scenario"), str)
-                or body["scenario"] not in {"tree", "form", "overlay"}):
+        scenario = body.get("scenario")
+        expected_fields = {"scenario", "cookie_name"} if scenario == "cookie_bridge" else {"scenario"}
+        if (set(body) != expected_fields or not isinstance(scenario, str)
+                or scenario not in {"tree", "form", "overlay", "cookie_bridge"}
+                or (scenario == "cookie_bridge" and (not isinstance(body.get("cookie_name"), str)
+                    or not re.fullmatch(r"readiness_bridge_[a-f0-9]{12}", body["cookie_name"])) )):
             raise HTTPException(status_code=422, detail={"code": "INVALID_FIXTURE_SCENARIO"})
         if not getattr(runtime, "_started", False) or getattr(runtime, "_page", None) is None:
             raise HTTPException(status_code=503, detail={"code": "BROWSER_UNAVAILABLE"})
@@ -2749,7 +2753,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
         fixture_url = f"https://readiness-fixture.test/{scenario}"
         try:
             from scripts.readiness_p0_fixture import fixture_html
-            html = fixture_html(scenario)
+            html = fixture_html(scenario, body.get("cookie_name"))
             if not isinstance(html, str) or len(html) > 100_000:
                 raise ValueError("invalid static fixture")
             async def fulfill(route: Any) -> None:

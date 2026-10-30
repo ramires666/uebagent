@@ -1,6 +1,9 @@
 """Static reduced DOM fixtures for bounded P0 model diagnostics."""
 from __future__ import annotations
 
+import re
+import json
+
 
 TREE_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><title>Readiness tree fixture</title><style>
 *{box-sizing:border-box}body{margin:0;background:#f4f6fa;color:#202124;font:16px Arial,sans-serif}
@@ -43,8 +46,16 @@ document.querySelector('#target').onclick=()=>{window.__targetEffectCount++;docu
 document.querySelector('#overlay').onclick=()=>{window.__overlayEffectCount++;document.querySelector('#overlay-count').textContent=String(window.__overlayEffectCount)};
 </script></main></body></html>"""
 
+COOKIE_BRIDGE_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><title>Readiness cookie fixture</title></head>
+<body><main id="session-state">SESSION_MISSING</main><script>
+const expectedName=__COOKIE_NAME__;
+const expectedValue='synthetic-only-cookie-value';
+const ready=document.cookie.split(';').some(part=>{const pair=part.trim().split('=');return pair[0]===expectedName&&pair.slice(1).join('=')===expectedValue});
+document.querySelector('#session-state').textContent=ready?'SESSION_READY':'SESSION_MISSING';
+</script></body></html>"""
 
-def fixture_html(scenario: str) -> str:
+
+def fixture_html(scenario: str, cookie_name: str | None = None) -> str:
     """Return fixed content for an allowlisted synthetic scenario."""
     if scenario == "tree":
         return TREE_HTML
@@ -52,4 +63,8 @@ def fixture_html(scenario: str) -> str:
         return FORM_HTML
     if scenario == "overlay":
         return OVERLAY_HTML
+    if scenario == "cookie_bridge":
+        if not isinstance(cookie_name, str) or not re.fullmatch(r"readiness_bridge_[a-f0-9]{12}", cookie_name):
+            raise ValueError("invalid cookie fixture name")
+        return COOKIE_BRIDGE_HTML.replace("__COOKIE_NAME__", json.dumps(cookie_name))
     raise ValueError("unsupported P0 fixture scenario")

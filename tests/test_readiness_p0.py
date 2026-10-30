@@ -131,6 +131,31 @@ def test_fixture_behavior_in_offline_headless_chromium():
             assert await page.evaluate("window.__targetEffectCount") == 0
             assert await page.evaluate("window.__overlayEffectCount") == 1
             assert requested == []
+
+            cookie_name = "readiness_bridge_012345abcdef"
+            cookie_url = "https://readiness-fixture.test/cookie_bridge"
+            html = fixture_html("cookie_bridge", cookie_name)
+            assert "SESSION_READY" in html and "document.cookie" in html
+            assert "synthetic-only-cookie-value" in html
+            await page.unroute("**/*", block_network)
+
+            async def fulfill_cookie_fixture(route):
+                if route.request.url != cookie_url:
+                    await route.abort()
+                    return
+                await route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
+
+            await page.route(cookie_url, fulfill_cookie_fixture)
+            await page.goto(cookie_url)
+            assert await page.locator("#session-state").inner_text() == "SESSION_MISSING"
+            await context.add_cookies([{"name": cookie_name, "value": "synthetic-secret", "url": cookie_url}])
+            await page.goto(cookie_url)
+            assert await page.locator("#session-state").inner_text() == "SESSION_MISSING"
+            await context.clear_cookies()
+            await context.add_cookies([{"name": cookie_name, "value": "synthetic-only-cookie-value", "url": cookie_url}])
+            await page.goto(cookie_url)
+            assert await page.locator("#session-state").inner_text() == "SESSION_READY"
+            assert "synthetic-only-cookie-value" not in await page.locator("body").inner_text()
             await context.close()
             await browser.close()
         finally:
