@@ -1,0 +1,71 @@
+{
+  "schema": "antibot-probe/v1",
+  "site": "sannysoft",
+  "profile_id": "p1",
+  "run": 1,
+  "verdict": "PARTIAL",
+  "scope": "public diagnostic page; category labels checked; individual outcomes not inferred",
+  "guest_profile": {
+    "provenance": "new dedicated disposable worker_state volume",
+    "initial_page": "about:blank",
+    "cookies_imported": false,
+    "site_authentication_checked": "not applicable to diagnostic site"
+  },
+  "runtime": {
+    "application_image": "browser-mcp-readiness-control:candidate",
+    "browser_backend": "camoufox",
+    "browser_version": "not exposed by the worker status API",
+    "os": "Linux browser container on Docker/WSL2",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "network_route": "dedicated direct-egress network; no proxy rotation",
+    "route_generation": 1,
+    "browser_timezone": "not measured",
+    "host_timezone": "Asia/Qyzylorda"
+  },
+  "navigation": {
+    "expected_origin": "https://bot.sannysoft.com",
+    "observed_origin": "https://bot.sannysoft.com",
+    "expected_url_loaded": true
+  },
+  "category_label_presence": {
+    "Intoli.com tests": true,
+    "WebDriver": true,
+    "WebDriver Advanced": true,
+    "Chrome": true,
+    "permissions": true,
+    "plugins": true,
+    "languages": true
+  },
+  "challenge_text_detected": false,
+  "notes": [
+    "No CAPTCHA or challenge was solved or bypassed.",
+    "No cookies, IP, raw fingerprint fields, network dumps, or full diagnostic screenshot were retained.",
+    "Browser viewer is available at http://localhost:18081/desktop.",
+    "Start timestamp was not captured; observed timestamp is post-navigation. Browser timezone was not measured.",
+    "Specific Sannysoft rows were checked with fixed, source-confirmed selectors and bounded text predicates; no raw diagnostic values were saved.",
+    "Sannysoft row outcomes were checked with source-confirmed fixed selectors and bounded text predicates."
+  ],
+  "evidence": {
+    "safe_screenshot": "page-banner.png",
+    "safe_screenshot_dimensions": [
+      900,
+      64
+    ],
+    "raw_screenshot_retained": false,
+    "raw_screenshot_deleted_after_sanitization": true
+  },
+  "started_at_utc": null,
+  "observed_at_utc": "2026-10-30T20:12:06.836637+00:00",
+  "timestamp_note": "start time not recorded by runner; observed time was recorded after navigation",
+  "diagnostic_outcomes": {
+    "webdriver": "missing (passed)",
+    "chrome": "missing (failed)",
+    "permissions": "prompt",
+    "webdriver_advanced": "unverified",
+    "plugins": "label present; outcome unverified",
+    "languages": "label present; value not retained"
+  }
+}
