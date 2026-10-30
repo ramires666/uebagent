@@ -1,49 +1,40 @@
 {
-  "schema": "antibot-probe/v1",
+  "schema": "antibot-eff/v1",
   "site": "eff",
   "profile_id": "p1",
   "run": 1,
-  "started_at_utc": "2026-10-30T20:25:42.004461+00:00",
-  "observed_at_utc": "2026-10-30T20:25:48.523284+00:00",
+  "started_at_utc": "2026-10-30T20:28:01.714793+00:00",
   "verdict": "PARTIAL",
-  "scope": "fixed public diagnostic navigation; labels only; no outcome inference",
+  "scope": "one public EFF browser test CTA and aggregate result labels only",
   "guest_profile": {
-    "provenance": "new dedicated disposable worker_state volume",
+    "provenance": "dedicated disposable worker_state volume",
     "cookies_imported": false,
-    "initial_page_origin": "https://www.ebay.com",
-    "site_authentication_checked": "not applicable to this diagnostic page"
+    "authentication": "no account credentials or login submitted"
   },
   "runtime": {
-    "application_image": "browser-mcp-readiness-control:candidate",
     "browser_backend": "camoufox",
-    "browser_version": "not exposed by worker status API",
-    "os": "Linux browser container on Docker/WSL2",
-    "viewport": {
-      "width": 1440,
-      "height": 900
-    },
-    "browser_timezone": "not measured",
-    "host_timezone": "Asia/Qyzylorda",
-    "network_route": "dedicated direct-egress network; no proxy rotation",
+    "viewport": [
+      1440,
+      900
+    ],
+    "network_route": "antibot-2026-10-31-direct",
     "route_generation": 1
   },
-  "navigation": {
-    "expected_origin": "https://coveryourtracks.eff.org",
-    "observed_origin": "https://coveryourtracks.eff.org",
-    "expected_url_loaded": true
+  "result_page": {
+    "origin": "https://coveryourtracks.eff.org",
+    "path": "/kcarter",
+    "aggregate_heading_checks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
   },
-  "required_label_presence": {
-    "Cover Your Tracks": true,
-    "Test Your Browser": false
-  },
-  "challenge_text_detected": false,
-  "notes": [
-    "No CAPTCHA/challenge was solved or bypassed.",
-    "No IP, cookies, raw fingerprint fields, screenshots, or network dumps retained."
-  ],
-  "evidence": {
-    "safe_screenshot": null,
-    "raw_screenshot_requested": false,
-    "raw_screenshot_retained": false
-  }
+  "challenge_detected": false,
+  "evidence_scope": "aggregate result label booleans only; detailed fingerprint results discarded"
 }
