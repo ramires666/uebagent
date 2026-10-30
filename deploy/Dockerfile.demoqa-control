@@ -4,3 +4,4 @@ COPY src /app/src
 COPY ui /app/ui
 COPY config /app/config
 COPY scripts/test_demoqa.py /app/scripts/test_demoqa.py
+COPY scripts/readiness_live.py /app/scripts/readiness_live.py

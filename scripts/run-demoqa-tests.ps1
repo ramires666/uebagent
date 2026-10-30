@@ -1,6 +1,12 @@
 [CmdletBinding()]
 param(
     [string[]]$Cases = @('text_box', 'invalid_email', 'checkbox', 'web_table', 'notify_then_click'),
+    [string]$ModelBaseUrl = 'http://host.docker.internal:8080/v1',
+    [string]$ModelAlias = 'fara-browser',
+    [ValidateSet('generic', 'fara')][string]$ModelProtocol = 'fara',
+    [string]$ProductionControlUrl = 'http://127.0.0.1:8090',
+    [switch]$ReadinessChecks,
+    [switch]$AllowSuspendedTasks,
     [switch]$ExtendedComplex,
     [string]$RunLabel = 'v4',
     [switch]$SkipBuild,
@@ -20,12 +26,24 @@ $Project = 'browser-mcp-demoqa-test'
 $ServiceUrl = 'http://127.0.0.1:18080'
 $ResultsPath = Join-Path $Root "runtime/demoqa/results-$RunLabel.jsonl"
 $workerKey = $null
+$managedDemoqaEnv = @(
+    'DEMOQA_MODEL_BASE_URL', 'DEMOQA_MODEL_ALIAS', 'DEMOQA_MODEL_PROTOCOL', 'DEMOQA_BROWSER_MEMORY_LIMIT',
+    'DEMOQA_WORKER_KEY', 'DEMOQA_CASES', 'DEMOQA_EXTENDED_COMPLEX', 'DEMOQA_RUN_LABEL',
+    'DEMOQA_FRAME_PREFIX', 'DEMOQA_FONT_VARIANTS', 'DEMOQA_DIAGNOSTIC_HOLD_SECONDS'
+)
+$priorDemoqaEnv = @{}
+$processEnv = [Environment]::GetEnvironmentVariables('Process')
+foreach ($name in $managedDemoqaEnv) {
+    $priorDemoqaEnv[$name] = [pscustomobject]@{ Present = $processEnv.Contains($name); Value = [Environment]::GetEnvironmentVariable($name, 'Process') }
+}
 $stackCleanupNeeded = $false
 $productionContainerId = $null
 $productionWasRunning = $false
 $productionStopAttempted = $false
 $productionStopped = $false
 $continueCases = $false
+$readinessCheckAttempted = $false
+$readinessReportError = $null
 $resultLines = [System.Collections.Generic.List[string]]::new()
 
 function Invoke-NativeCaptured {
@@ -63,6 +81,29 @@ function Get-TestProfileDigest {
 
 function Get-ComposeArgs {
     return @('compose', '-p', $Project, '-f', $ComposeFile)
+}
+
+function Wait-ProductionReady {
+    $null = Get-Command Invoke-RestMethod -ErrorAction Stop
+    $deadline = [DateTime]::UtcNow.AddSeconds(90)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $health = Invoke-RestMethod -Uri "$($ProductionControlUrl.TrimEnd('/'))/health/ready" -Method Get -TimeoutSec 5 -UseBasicParsing
+            if ($health.status -eq 'ok' -or $health.ready -eq $true) {
+                $checkArgs = @((Join-Path $PSScriptRoot 'demoqa_preflight.py'), '--control-url', $ProductionControlUrl)
+                if ($AllowSuspendedTasks) { $checkArgs += '--allow-suspended-tasks' }
+                $check = Invoke-NativeCaptured -FilePath 'python' -Arguments $checkArgs
+                if ($check.ExitCode -eq 0) {
+                    try {
+                        $state = ($check.Output -join '') | ConvertFrom-Json -ErrorAction Stop
+                        if ($state.ready -eq $true) { return $true }
+                    } catch { }
+                }
+            }
+        } catch { }
+        Start-Sleep -Seconds 2
+    }
+    return $false
 }
 
 function Save-ViewerScreenshot {
@@ -166,6 +207,37 @@ function Copy-DemoqaScreenshots {
     }
 }
 
+function Export-ReadinessReport {
+    $controlQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'control'))
+    $controlIds = @($controlQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($controlQuery.ExitCode -ne 0 -or $controlIds.Count -ne 1) { throw 'Could not identify the disposable control container for readiness evidence.' }
+
+    $destinationDirectory = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+    $target = Join-Path $destinationDirectory 'readiness-live-report.json'
+    $sourcePath = '/app/runtime/control-data/readiness-live-report.json'
+    $copy = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', "$($controlIds[0]):$sourcePath", $target)
+    if ($copy.ExitCode -ne 0) {
+        $readerCode = 'import base64,pathlib; print(base64.b64encode(pathlib.Path("/app/runtime/control-data/readiness-live-report.json").read_bytes()).decode("ascii"))'
+        $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', '-T', $controlIds[0], 'python', '-c', $readerCode)
+        if ($encoded.ExitCode -ne 0) { throw 'Could not export readiness evidence before disposable stack cleanup.' }
+        $encodedText = (($encoded.Output | ForEach-Object { [string]$_ }) -join '').Trim()
+        if ($encodedText.Length -gt 2MB) { throw 'Readiness evidence exceeded the export size limit.' }
+        try { [System.IO.File]::WriteAllBytes($target, [Convert]::FromBase64String($encodedText)) }
+        catch { throw 'Readiness evidence export was not valid base64.' }
+    }
+    $raw = [System.IO.File]::ReadAllText($target)
+    if ($raw.Length -gt 1MB) { Remove-Item -LiteralPath $target -Force; throw 'Readiness report exceeded the 1 MiB limit.' }
+    try { $report = $raw | ConvertFrom-Json -ErrorAction Stop }
+    catch { Remove-Item -LiteralPath $target -Force; throw 'Readiness report was not valid JSON.' }
+    if ($report.schema_version -ne 1 -or $report.overall_status -notin @('PASS', 'FAIL', 'BLOCKED')) {
+        Remove-Item -LiteralPath $target -Force
+        throw 'Readiness report did not match the expected sanitized schema.'
+    }
+    [System.IO.File]::WriteAllText($target, ($report | ConvertTo-Json -Depth 20) + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Saved sanitized readiness report: $target"
+}
+
 try {
     if (-not (Test-Path -LiteralPath $ComposeFile -PathType Leaf)) { throw 'Disposable DemoQA compose file is missing.' }
     if ($RunLabel -notmatch '^[A-Za-z0-9_-]{1,20}$') { throw 'RunLabel may contain only letters, digits, underscores and dashes.' }
@@ -180,6 +252,15 @@ try {
             throw 'RunCasesAfterReadableCandidate requires ProbeOnly, ExtendedComplex, and exactly checkbox,web_table.'
         }
     }
+
+    # Validate the exact endpoint and served alias before any Docker command can
+    # interrupt the production browser. Compose receives this same validated URL.
+    $env:DEMOQA_MODEL_BASE_URL = $ModelBaseUrl
+    $env:DEMOQA_MODEL_ALIAS = $ModelAlias
+    $env:DEMOQA_MODEL_PROTOCOL = $ModelProtocol
+    $env:DEMOQA_BROWSER_MEMORY_LIMIT = '2816m'
+    $modelPreflight = Invoke-NativeCaptured -FilePath 'python' -Arguments @((Join-Path $PSScriptRoot 'demoqa_model_preflight.py'), '--base-url', $ModelBaseUrl, '--alias', $ModelAlias)
+    if ($modelPreflight.ExitCode -ne 0) { throw 'Configured model endpoint is unavailable or does not serve the required alias; production was left running.' }
 
     $keyBytes = [byte[]]::new(48)
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -205,7 +286,9 @@ try {
     if ($productionWorkers.Count -eq 1) {
         $productionContainerId = $productionWorkers[0]
         $productionWasRunning = $true
-        $preflight = Invoke-NativeCaptured -FilePath 'python' -Arguments @((Join-Path $PSScriptRoot 'demoqa_preflight.py'))
+        $preflightArgs = @((Join-Path $PSScriptRoot 'demoqa_preflight.py'), '--control-url', $ProductionControlUrl)
+        if ($AllowSuspendedTasks) { $preflightArgs += '--allow-suspended-tasks' }
+        $preflight = Invoke-NativeCaptured -FilePath 'python' -Arguments $preflightArgs
         if ($preflight.ExitCode -ne 0) { throw 'Production preflight did not prove that its browser and tasks are idle; production was left running.' }
         try { $preflightState = ($preflight.Output -join '') | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Production preflight returned unreadable state; production was left running.' }
         if ($preflightState.ready -ne $true) { throw 'Production preflight did not prove idle state; production was left running.' }
@@ -222,6 +305,7 @@ try {
 
     # Create the local UI cookie session first; otherwise the auth middleware can return a
     # browser redirect instead of JSON and obscure whether the test service is ready.
+    $null = Get-Command Invoke-RestMethod -ErrorAction Stop
     $web = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
     $uiReady = $false
     $deadline = [DateTime]::UtcNow.AddSeconds(90)
@@ -243,6 +327,19 @@ try {
         } catch { Start-Sleep -Seconds 2 }
     }
     if (-not $healthReady) { throw 'Disposable control service health did not become ready within 60 seconds.' }
+
+    if ($ReadinessChecks) {
+        $readinessArgs = (Get-ComposeArgs) + @(
+            'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+            'control', 'python', '/app/scripts/readiness_live.py',
+            '--url', 'http://127.0.0.1:8080', '--origin', 'http://localhost:18080',
+            '--allow-disposable-internal', '--i-confirm-disposable',
+            '--output', '/app/runtime/control-data/readiness-live-report.json'
+        )
+        $readinessCheckAttempted = $true
+        $readinessExit = Invoke-RunnerStream -RunnerArgs $readinessArgs
+        if ($readinessExit -ne 0) { throw "Disposable readiness checks failed (exit $readinessExit)." }
+    }
 
     $profileDigestBefore = Get-TestProfileDigest
 
@@ -319,6 +416,13 @@ try {
 }
 finally {
     $cleanupError = $null
+    if ($readinessCheckAttempted) {
+        try { Export-ReadinessReport }
+        catch {
+            $readinessReportError = 'Could not export readiness evidence before disposable stack cleanup.'
+            $resultLines.Add('{"scenario":"readiness_live","status":"report_export_failed"}')
+        }
+    }
     if ($stackCleanupNeeded) {
         # Scope cleanup to this project's name; the stack uses no persistent volumes.
         $downArgs = (Get-ComposeArgs) + @('down', '--remove-orphans')
@@ -348,25 +452,33 @@ finally {
         }
     }
     if ($productionWasRunning -and $productionStopAttempted) {
+        $restoreError = $null
         $testWorkers = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "label=com.docker.compose.project=$Project", '--filter', 'label=com.docker.compose.service=browser')
         if ($testWorkers.ExitCode -ne 0 -or @($testWorkers.Output | Where-Object { [string]$_ }).Count -gt 0) {
-            $cleanupError = 'Test browser is still running; production will not be restarted concurrently.'
+            $restoreError = 'Test browser is still running; production will not be restarted concurrently.'
         }
         else {
             $currentProduction = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "id=$productionContainerId")
-            if ($currentProduction.ExitCode -ne 0) { $cleanupError = 'Could not verify production browser state before restore.' }
+            if ($currentProduction.ExitCode -ne 0) { $restoreError = 'Could not verify production browser state before restore.' }
             else {
                 if (@($currentProduction.Output | Where-Object { [string]$_ }).Count -eq 0) {
                     $startProduction = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('start', $productionContainerId)
-                    if ($startProduction.ExitCode -ne 0) { $cleanupError = 'Could not restore the production browser container.' }
+                    if ($startProduction.ExitCode -ne 0) { $restoreError = 'Could not restore the production browser container.' }
                 }
-                if (-not $cleanupError) {
+                if (-not $restoreError) {
                     $verifiedProduction = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "id=$productionContainerId")
                     if ($verifiedProduction.ExitCode -ne 0 -or @($verifiedProduction.Output | Where-Object { [string]$_ }).Count -ne 1) {
-                        $cleanupError = 'Production browser did not return to its original running state.'
+                        $restoreError = 'Production browser did not return to its original running state.'
+                    }
+                    elseif (-not (Wait-ProductionReady)) {
+                        $restoreError = 'Production browser is running, but health/ready and idle worker state did not recover.'
                     }
                 }
             }
+        }
+        if ($restoreError) {
+            if ($cleanupError) { $cleanupError = "$cleanupError $restoreError" }
+            else { $cleanupError = $restoreError }
         }
     }
     if ($RemoveTestVolume) {
@@ -395,8 +507,18 @@ finally {
     Remove-Item Env:DEMOQA_FRAME_PREFIX -ErrorAction SilentlyContinue
     Remove-Item Env:DEMOQA_FONT_VARIANTS -ErrorAction SilentlyContinue
     Remove-Item Env:DEMOQA_DIAGNOSTIC_HOLD_SECONDS -ErrorAction SilentlyContinue
+    foreach ($name in $managedDemoqaEnv) {
+        if ($priorDemoqaEnv[$name].Present) {
+            [Environment]::SetEnvironmentVariable($name, $priorDemoqaEnv[$name].Value, 'Process')
+        }
+        else {
+            [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+        }
+    }
     $workerKey = $null
+    if ($cleanupError -and $readinessReportError) { throw "$cleanupError $readinessReportError" }
     if ($cleanupError) { throw $cleanupError }
+    if ($readinessReportError) { throw $readinessReportError }
 }
 
 Write-Host "Saved sanitized test output to $ResultsPath"

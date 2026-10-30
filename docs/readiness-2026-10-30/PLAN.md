@@ -91,6 +91,31 @@ python scripts/demoqa_preflight.py
 
 Обязательно до выполнения прочитать актуальный runner: он останавливает точный production browser container, поднимает disposable stack и восстанавливает сервис. Нужна подтверждённая idle проверка и допустимое окно недоступности браузера. Не включать удаление test volume и не запускать на пользовательском профиле. `-ProbeOnly` — read-only диагностика, не тест модели. Для настоящего full-stack gate нужен сценарий через UI/MCP и реальную model; если готового безопасного runner нет, обозначить BLOCKED, а не считать synthetic smoke достаточным.
 
+Read-only live security/health/observation/load probe для уже поднятого disposable сервиса на loopback:18080:
+
+```powershell
+python scripts/readiness_live.py --i-confirm-disposable --output docs/readiness-2026-10-30/live-report.json
+```
+
+Probe ограничивает target loopback:18080, concurrency максимум 4, итерации максимум 10; делает GET, read-only MCP `tools/list` auth probes и DELETE только собственной throwaway UI session для CSRF-проверки. Он не создаёт task и не выполняет browser action. Для проверки валидного MCP bearer передать test-only token file через `--mcp-token-file` или `READINESS_MCP_TOKEN_FILE`; значение token не включается в JSON. Без файла MCP positive check будет BLOCKED. Probe не реализует delay/dynamic-ID/overlay/iframe/dialog fixtures: текущий control API не предоставляет read-only интерфейс для их ввода.
+
+Если harness запущен внутри disposable control container, разрешён loopback:8080 только с `--allow-disposable-internal`, `APP_ENV=test` и `READINESS_DISPOSABLE=1`; origin остаётся `http://localhost:18080`. Без этих двух marker-переменных внутренний URL отвергается до сетевого запроса.
+
+```sh
+APP_ENV=test READINESS_DISPOSABLE=1 READINESS_MCP_TOKEN_FILE=/app/runtime/control-data/mcp-token.txt \
+  python scripts/readiness_live.py --url http://127.0.0.1:8080 --origin http://localhost:18080 \
+  --allow-disposable-internal --i-confirm-disposable --output /app/runtime/control-data/readiness-live-report.json
+```
+
+Отдельный UI edge audit запускается только после остановки disposable browser worker, в одноразовом Camoufox контейнере с network namespace `none`, Xvfb и только временным профилем:
+
+```sh
+APP_ENV=test READINESS_DISPOSABLE=1 READINESS_BROWSER_AUDIT=1 READINESS_NETWORK_DISABLED=1 \
+  xvfb-run -a python scripts/readiness_browser_audit.py --output /tmp/readiness-browser-audit.json
+```
+
+Он маршрутизирует exact synthetic fixture через worker и прерывает остальные page requests; проверяет delay/dynamic ID, coordinate click/type, overlay, open shadow DOM и synthetic iframe. Overlay, native dialog, file upload и повторную cancel idempotency возвращает BLOCKED как непроверенные capability/сценарии, не PASS. Queued/in-flight cancel и restart/crash recovery проверять существующими suites; повторный cancel live API здесь не выполняется, поскольку потребовал бы запуск TaskRunner/model task. Никогда не запускать audit рядом со вторым worker или на пользовательском профиле.
+
 ### G4 — cancel/restart/concurrency
 
 На disposable stack и synthetic page: отменить задачу после начала действия и проверить отсутствие новых действий после ack; перезапустить control в idle и проверить task/API; перезапустить/crash browser и проверить bounded recovery, generation, новая observation/lease, одна page/context. Сверить action dispatch count, чтобы неизвестное внешнее действие не повторилось. Послать конкурентные API/MCP requests и проверить idempotency, task locking, concurrency limits, finite queues и корректные 4xx/5xx/timeout. По завершении каждого теста подтвердить task terminal state, idle worker и отсутствие import/action in progress.

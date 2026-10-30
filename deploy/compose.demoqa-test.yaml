@@ -9,8 +9,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.demoqa-browser
     init: true
-    mem_limit: 2g
-    memswap_limit: 2g
+    mem_limit: ${DEMOQA_BROWSER_MEMORY_LIMIT:-2816m}
+    memswap_limit: ${DEMOQA_BROWSER_MEMORY_LIMIT:-2816m}
     cpus: 2.0
     pids_limit: 512
     shm_size: 256m
@@ -54,8 +54,9 @@ services:
       BROWSER_MCP_ORIGIN: http://localhost:18080
       BROWSER_MCP_OPERATOR_AUTH: local
       BROWSER_MCP_UI_DIR: /app/ui
-      MODEL_BASE_URL: http://host.docker.internal:8081/v1
-      MODEL_ALIAS: fara-browser
+      MODEL_BASE_URL: ${DEMOQA_MODEL_BASE_URL:-http://host.docker.internal:8080/v1}
+      MODEL_ALIAS: ${DEMOQA_MODEL_ALIAS:-fara-browser}
+      MODEL_PROTOCOL: ${DEMOQA_MODEL_PROTOCOL:-fara}
       BROWSER_WORKER_URL: http://browser:7070
       WORKER_API_KEY_FILE: /run/demoqa-secrets/key
     entrypoint: ["sh", "-c"]
