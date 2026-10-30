@@ -35,7 +35,7 @@ services:
     networks: [readiness_net, browser_direct_uplink]
 
   control:
-    image: browser-mcp-readiness-control:candidate
+    image: browser-mcp-antibot-control:prompt-3184fb4
     pull_policy: never
     init: true
     mem_limit: 768m
@@ -57,6 +57,8 @@ services:
       MODEL_ALIAS: auto
       MODEL_PROTOCOL: generic
       BROWSER_WORKER_URL: http://browser:7070
+      APP_ENV: test
+      READINESS_DISPOSABLE: "1"
     entrypoint: ["sh", "-c"]
     command:
       - 'printf %s "$$READINESS_WORKER_KEY" > /run/antibot-secrets/key; unset READINESS_WORKER_KEY; exec python -m browser_mcp.cli --host 0.0.0.0 --port 8080'
@@ -75,4 +77,4 @@ volumes:
   control_state:
     name: browser-mcp-antibot-2026-10-31-control-state
   worker_state:
-    name: browser-mcp-antibot-2026-10-31-worker-state
+    name: browser-mcp-antibot-2026-10-31-worker-state-p2

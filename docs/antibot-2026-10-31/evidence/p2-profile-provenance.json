@@ -1,0 +1,32 @@
+﻿{
+    "schema":  "antibot-profile-provenance/v1",
+    "profile_id":  "p2",
+    "created_at_utc":  "2026-10-30T20:40:48.2742827Z",
+    "worker_state_volume":  "browser-mcp-antibot-2026-10-31-worker-state-p2",
+    "p1_volume_preserved":  "browser-mcp-antibot-2026-10-31-worker-state",
+    "browser_image":  "browser-mcp-readiness-browser:candidate",
+    "browser_image_id":  "sha256:24eb3e58f686356401a4cb43ce999eeae31b40fe190085766b22a0fc1cf53f18",
+    "control_image":  "browser-mcp-antibot-control:prompt-3184fb4",
+    "control_image_id":  "sha256:cb2f97ff4e56fa9d9ea5713eafe30ccd076b66032d1bf31ce3186df8bf9c1509",
+    "browser_backend":  "camoufox",
+    "runtime_state":  {
+                          "initial_url":  "about:blank",
+                          "control_owner":  "none",
+                          "context_count":  1,
+                          "page_count":  1,
+                          "viewport":  [
+                                           1440,
+                                           900
+                                       ],
+                          "route_assignment":  "antibot-2026-10-31-direct",
+                          "route_generation":  1,
+                          "browser_instance_id":  "browser-instance-0d202dce-ad2d-44e2-ad10-f72baa3970c2"
+                      },
+    "model_client":  {
+                         "module_source_sha256":  "df71413c352b5cb3dc5243576058e52b2b3c08e1f6a15a5fce17f58908545e64",
+                         "generic_system_prompt_sha256":  "6103ffbf2e019c388ae5379d8041bb0fb4d95eb27a3d75f1e64aa6ef0cbb1e77",
+                         "source_hash_matches_test_control":  true,
+                         "test_environment_flags_present":  true
+                     },
+    "no_credentials_or_cookies_recorded":  true
+}

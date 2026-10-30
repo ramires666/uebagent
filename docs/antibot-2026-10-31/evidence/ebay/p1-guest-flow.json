@@ -41,7 +41,8 @@
                   "signed_out_confirmed_before_search":  false,
                   "signed_out_confirmed_after_search":  true,
                   "after_search_sign_out_marker":  "Sign in or register (visible header text, fixed verifier predicate)",
-                  "limitation":  "The pre-search check used unbound generic text markers and is not accepted as signed-out proof; exact signed-out header text was confirmed after search. No credentials/cookies imported; public search/card/back steps otherwise completed."
+                  "limitation":  "The pre-search check used unbound generic text markers and is not accepted as signed-out proof; exact signed-out header text was confirmed after search. No credentials/cookies imported; public search/card/back steps otherwise completed.",
+                  "scroll_action_record":  "Scroll was issued after history back; no independent action receipt was retained, so scroll is not counted as verified."
               },
-    "evidence_scope":  "public guest marker and fixed URL/text booleans; no screenshot/cookies/raw page data; public product ID omitted"
+    "evidence_scope":  "public guest marker and fixed URL/text booleans; history back verified; scroll not independently verified; no screenshot/cookies/raw page data; public product ID omitted"
 }

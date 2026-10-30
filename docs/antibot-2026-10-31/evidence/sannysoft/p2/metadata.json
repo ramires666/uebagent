@@ -1,0 +1,63 @@
+﻿{
+    "schema":  "antibot-probe/v1",
+    "site":  "sannysoft",
+    "profile_id":  "p2",
+    "run":  1,
+    "started_at_utc":  "2026-10-30T20:41:04.273519+00:00",
+    "observed_at_utc":  "2026-10-30T20:41:10.391897+00:00",
+    "verdict":  "PARTIAL",
+    "scope":  "fixed public diagnostic navigation; labels only; no outcome inference",
+    "guest_profile":  {
+                          "provenance":  "new dedicated disposable worker_state volume",
+                          "cookies_imported":  false,
+                          "initial_page_origin":  null,
+                          "site_authentication_checked":  "not applicable to this diagnostic page"
+                      },
+    "runtime":  {
+                    "application_image":  "browser-mcp-antibot-control:prompt-3184fb4",
+                    "browser_backend":  "camoufox",
+                    "browser_version":  "not exposed by worker status API",
+                    "os":  "Linux browser container on Docker/WSL2",
+                    "viewport":  {
+                                     "width":  1440,
+                                     "height":  900
+                                 },
+                    "browser_timezone":  "not measured",
+                    "host_timezone":  "Asia/Qyzylorda",
+                    "network_route":  "dedicated direct-egress network; no proxy rotation",
+                    "route_generation":  1
+                },
+    "navigation":  {
+                       "expected_origin":  "https://bot.sannysoft.com",
+                       "observed_origin":  "https://bot.sannysoft.com",
+                       "expected_url_loaded":  true
+                   },
+    "required_label_presence":  {
+                                    "Intoli.com tests":  true,
+                                    "WebDriver":  true,
+                                    "WebDriver Advanced":  true,
+                                    "Chrome":  true,
+                                    "permissions":  true,
+                                    "plugins":  true,
+                                    "languages":  true
+                                },
+    "challenge_text_detected":  false,
+    "notes":  [
+                  "No CAPTCHA/challenge was solved or bypassed.",
+                  "No IP, cookies, raw fingerprint fields, screenshots, or network dumps retained.",
+                  "Fixed row outcome predicates were checked on the open p2 page using antibot_sannysoft_outcomes.py; only listed outcomes were retained."
+              ],
+    "evidence":  {
+                     "safe_screenshot":  null,
+                     "raw_screenshot_requested":  false,
+                     "raw_screenshot_retained":  false
+                 },
+    "diagnostic_outcomes":  {
+                                "webdriver":  "missing (passed)",
+                                "chrome":  "missing (failed)",
+                                "permissions":  "prompt",
+                                "webdriver_advanced":  "unverified",
+                                "plugins":  "label present; outcome unverified",
+                                "languages":  "label present; value not retained"
+                            }
+}

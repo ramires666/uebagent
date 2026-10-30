@@ -1,0 +1,45 @@
+﻿{
+    "schema":  "antibot-eff/v1",
+    "site":  "eff",
+    "profile_id":  "p2",
+    "run":  1,
+    "started_at_utc":  "2026-10-30T20:44:00.780352+00:00",
+    "verdict":  "PARTIAL",
+    "scope":  "one public EFF browser test CTA and aggregate result labels only",
+    "guest_profile":  {
+                          "provenance":  "dedicated disposable worker_state volume",
+                          "cookies_imported":  false,
+                          "authentication":  "no account credentials or login submitted"
+                      },
+    "runtime":  {
+                    "browser_backend":  "camoufox",
+                    "viewport":  [
+                                     1440,
+                                     900
+                                 ],
+                    "network_route":  "antibot-2026-10-31-direct",
+                    "route_generation":  1,
+                    "application_image":  "browser-mcp-antibot-control:prompt-3184fb4"
+                },
+    "result_page":  {
+                        "origin":  "https://coveryourtracks.eff.org",
+                        "path":  "/kcarter",
+                        "aggregate_heading_checks":  [
+                                                         false,
+                                                         false,
+                                                         false,
+                                                         false,
+                                                         false,
+                                                         false,
+                                                         false,
+                                                         false,
+                                                         false
+                                                     ],
+                        "results_heading_visible":  false,
+                        "summary_row_labels_visible":  false
+                    },
+    "challenge_detected":  false,
+    "evidence_scope":  "aggregate result label booleans only; detailed fingerprint results discarded",
+    "result_checked_at_utc":  "2026-10-30T20:45:52.9070186Z",
+    "cta_visible_verified":  true
+}

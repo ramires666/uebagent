@@ -1,0 +1,18 @@
+﻿{
+    "schema":  "antibot-sannysoft-outcomes/v1",
+    "profile_id":  "p2",
+    "source_script":  "scripts/antibot_sannysoft_outcomes.py",
+    "page_url":  "https://bot.sannysoft.com/",
+    "bounded_results":  {
+                            "webdriver":  "missing (passed)",
+                            "chrome":  "missing (failed)",
+                            "permissions":  "prompt"
+                        },
+    "other_rows":  {
+                       "webdriver_advanced":  "unverified",
+                       "plugins":  "label present; outcome unverified",
+                       "languages":  "label present; value not retained"
+                   },
+    "challenge_detected":  false,
+    "verdict":  "PARTIAL"
+}

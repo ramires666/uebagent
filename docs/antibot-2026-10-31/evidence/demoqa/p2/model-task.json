@@ -1,0 +1,24 @@
+{
+  "schema": "antibot-model-task/v1",
+  "status": "PASS",
+  "task": {
+    "id": "ca2d93cb-3156-4b11-a5e9-58722f91d789",
+    "status": "succeeded",
+    "phase": "verified",
+    "step_count": 3,
+    "verified": true,
+    "final_home_url_verified": true,
+    "applied_action_kinds": [
+      "navigate",
+      "click",
+      "history_back"
+    ],
+    "trace_has_click_then_history_back": true,
+    "elements_url_and_content_independently_observed": true,
+    "read_only_actions_only": true,
+    "task_spec_profile_id": "default",
+    "browser_runtime_profile_hint": "p2",
+    "summary_present": true
+  },
+  "error": null
+}

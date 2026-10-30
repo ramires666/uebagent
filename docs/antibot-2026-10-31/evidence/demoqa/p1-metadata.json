@@ -1,40 +1,56 @@
-{
-  "schema": "antibot-demoqa/v1",
-  "site": "demoqa",
-  "profile_id": "p1",
-  "run": 1,
-  "started_at_utc": "2026-10-30T20:31:15.621935+00:00",
-  "verdict": "PASS",
-  "scope": "public home -> Elements -> history back; read-only headings only",
-  "guest_profile": {
-    "provenance": "dedicated disposable worker_state volume",
-    "cookies_imported": false,
-    "authentication": "no account credentials used"
-  },
-  "runtime": {
-    "browser_backend": "camoufox",
-    "viewport": [
-      1440,
-      900
-    ],
-    "network_route": "antibot-2026-10-31-direct",
-    "route_generation": 1
-  },
-  "steps": {
-    "home_labels": {
-      "expected_url": true,
-      "DemoQA": false,
-      "Elements": true
-    },
-    "elements_labels": {
-      "expected_url": true,
-      "Elements": true,
-      "Text Box": true,
-      "Check Box": true,
-      "Web Tables": true
-    },
-    "history_back_to_home": true,
-    "challenge_detected": false
-  },
-  "evidence_scope": "fixed text and URL booleans; no screenshots, cookies, or raw page data"
+﻿{
+    "schema":  "antibot-demoqa/v1",
+    "site":  "demoqa",
+    "profile_id":  "p1",
+    "run":  1,
+    "started_at_utc":  "2026-10-30T20:31:15.621935+00:00",
+    "verdict":  "PASS",
+    "scope":  "public home -\u003e Elements -\u003e history back; read-only headings only",
+    "guest_profile":  {
+                          "provenance":  "dedicated disposable worker_state volume",
+                          "cookies_imported":  false,
+                          "authentication":  "no account credentials used"
+                      },
+    "runtime":  {
+                    "browser_backend":  "camoufox",
+                    "viewport":  [
+                                     1440,
+                                     900
+                                 ],
+                    "network_route":  "antibot-2026-10-31-direct",
+                    "route_generation":  1
+                },
+    "steps":  {
+                  "home_labels":  {
+                                      "expected_url":  true,
+                                      "DemoQA":  false,
+                                      "Elements":  true
+                                  },
+                  "elements_labels":  {
+                                          "expected_url":  true,
+                                          "Elements":  true,
+                                          "Text Box":  true,
+                                          "Check Box":  true,
+                                          "Web Tables":  true
+                                      },
+                  "history_back_to_home":  true,
+                  "challenge_detected":  false
+              },
+    "evidence_scope":  "fixed text and URL booleans; no screenshots, cookies, or raw page data",
+    "attempts":  [
+                     {
+                         "attempt":  1,
+                         "status":  "PARTIAL",
+                         "verified_home_text":  {
+                                                    "Elements":  true,
+                                                    "DemoQA":  false
+                                                },
+                         "action":  "stopped before Elements because generic DemoQA text predicate was false"
+                     },
+                     {
+                         "attempt":  2,
+                         "status":  "PASS",
+                         "action":  "home URL+Elements; /elements URL+Elements/Text Box/Check Box/Web Tables; history_back verified"
+                     }
+                 ]
 }

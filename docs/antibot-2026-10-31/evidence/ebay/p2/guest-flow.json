@@ -1,0 +1,45 @@
+{
+  "schema": "antibot-guest-flow/v1",
+  "run": 1,
+  "observed_at_utc": "2026-10-30T20:48:11Z",
+  "runtime": {
+    "browser_backend": "camoufox",
+    "application_image": "browser-mcp-antibot-control:prompt-3184fb4",
+    "viewport": [
+      1440,
+      900
+    ],
+    "network_route": "antibot-2026-10-31-direct",
+    "route_generation": 1
+  },
+  "steps": {
+    "site": "ebay",
+    "profile_id": "p2",
+    "site_authentication_checked": {
+      "fresh_profile": true,
+      "cookies_imported": false,
+      "visible_signed_out_marker": {
+        "Sign in or register": true
+      },
+      "visible_guest_confirmed": true
+    },
+    "home_url_verified": true,
+    "search_url": "https://www.ebay.com/sch/i.html?_nkw=notebook",
+    "term": "notebook",
+    "search_url_verified": true,
+    "result_markers": {
+      "notebook": true,
+      "results": true
+    },
+    "product_detail_verified": true,
+    "history_back_verified": true,
+    "challenge_detected": false,
+    "verdict": "PASS",
+    "signed_out_confirmed_before_search": true,
+    "product_path": "/itm/[public id omitted]",
+    "product_title_verified": true,
+    "guest_confirmation_after_search": true,
+    "scroll_action_applied": true
+  },
+  "evidence_scope": "public guest markers and fixed URL/text booleans; no screenshot/cookies/raw page data"
+}
