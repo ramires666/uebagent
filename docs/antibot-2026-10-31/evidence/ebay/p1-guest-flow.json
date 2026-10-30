@@ -1,0 +1,47 @@
+﻿{
+    "schema":  "antibot-guest-flow/v1",
+    "run":  1,
+    "observed_at_utc":  "2026-10-30T20:37:14Z",
+    "runtime":  {
+                    "browser_backend":  "camoufox",
+                    "viewport":  [
+                                     1440,
+                                     900
+                                 ],
+                    "network_route":  "antibot-2026-10-31-direct",
+                    "route_generation":  1
+                },
+    "steps":  {
+                  "site":  "ebay",
+                  "profile_id":  "p1",
+                  "site_authentication_checked":  {
+                                                      "fresh_profile":  true,
+                                                      "cookies_imported":  false,
+                                                      "visible_signed_out_marker":  {
+                                                                                        "Hi!":  true,
+                                                                                        "Sign in":  true
+                                                                                    },
+                                                      "visible_guest_confirmed":  true
+                                                  },
+                  "home_url_verified":  true,
+                  "search_url":  "https://www.ebay.com/sch/i.html?_nkw=notebook",
+                  "term":  "notebook",
+                  "search_url_verified":  true,
+                  "result_markers":  {
+                                         "notebook":  true,
+                                         "results":  true
+                                     },
+                  "product_detail_verified":  true,
+                  "history_back_verified":  true,
+                  "challenge_detected":  false,
+                  "verdict":  "PARTIAL",
+                  "product_path":  "/itm/[public item id omitted]",
+                  "product_title_verified":  true,
+                  "guest_confirmation_after_search":  true,
+                  "signed_out_confirmed_before_search":  false,
+                  "signed_out_confirmed_after_search":  true,
+                  "after_search_sign_out_marker":  "Sign in or register (visible header text, fixed verifier predicate)",
+                  "limitation":  "The pre-search check used unbound generic text markers and is not accepted as signed-out proof; exact signed-out header text was confirmed after search. No credentials/cookies imported; public search/card/back steps otherwise completed."
+              },
+    "evidence_scope":  "public guest marker and fixed URL/text booleans; no screenshot/cookies/raw page data; public product ID omitted"
+}
