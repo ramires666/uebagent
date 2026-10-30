@@ -7,11 +7,65 @@ import threading
 import os
 from pathlib import Path
 import shutil
+import time
 
 import pytest
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def wait_for_extension_worker(context, timeout_s=15):
+    started = queue.Queue(maxsize=1)
+
+    def on_service_worker(worker):
+        try:
+            started.put_nowait(worker)
+        except queue.Full:
+            pass
+
+    context.on("serviceworker", on_service_worker)
+    deadline = time.monotonic() + timeout_s
+    while True:
+        workers = context.service_workers
+        if workers:
+            return workers[0]
+        try:
+            return started.get_nowait()
+        except queue.Empty:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError("extension service worker did not start before the deadline")
+            try:
+                return context.wait_for_event("serviceworker", timeout=min(50, remaining * 1000))
+            except PlaywrightTimeoutError:
+                pass
+
+
+def test_wait_for_extension_worker_observes_worker_after_initial_empty_snapshot():
+    worker = object()
+
+    class StartingContext:
+        reads = 0
+
+        @property
+        def service_workers(self):
+            self.reads += 1
+            if self.reads == 1:
+                self.callback(worker)
+                return []
+            return [worker]
+
+        def on(self, event, callback):
+            assert event == "serviceworker"
+            self.callback = callback
+
+        def wait_for_timeout(self, milliseconds):
+            pass
+
+    context = StartingContext()
+    assert wait_for_extension_worker(context, timeout_s=1) is worker
+    assert context.reads == 1
 
 
 
@@ -130,7 +184,7 @@ def test_unpacked_extension_with_isolated_chromium(tmp_path):
                 {"name": "unselected", "value": "synthetic-unselected", "domain": "app.example.test", "path": "/", "secure": True},
                 {"name": "sibling", "value": "synthetic-sibling", "domain": "other.example.test", "path": "/", "secure": True},
             ])
-            worker = context.service_workers[0] if context.service_workers else context.wait_for_event("serviceworker", timeout=15000)
+            worker = wait_for_extension_worker(context)
             extension_page = context.new_page()
             extension_page.goto(worker.url.rsplit("/", 1)[0] + "/popup/popup.html")
             assert extension_page.locator("#extension-version").inner_text() == "Extension 0.1.3"
@@ -220,7 +274,7 @@ def test_task_cookie_export_uses_normal_store_when_task_site_is_closed(tmp_path)
             normal_anchor = context.new_page()
             normal_anchor.goto("https://unrelated.example.net/", wait_until="domcontentloaded")
 
-            worker = context.service_workers[0] if context.service_workers else context.wait_for_event("serviceworker", timeout=15000)
+            worker = wait_for_extension_worker(context)
             extension_page = context.new_page()
             extension_page.goto(worker.url.rsplit("/", 1)[0] + "/popup/popup.html")
             with local_test_api(task_export_origins=origins) as (api_origin, evidence):
@@ -252,7 +306,7 @@ def test_insecure_cookie_requires_exact_http_permission_even_for_https_site(tmp_
             headless=True, args=[f"--disable-extensions-except={extension}", f"--load-extension={extension}"],
         )
         try:
-            worker = context.service_workers[0] if context.service_workers else context.wait_for_event("serviceworker", timeout=15000)
+            worker = wait_for_extension_worker(context)
             popup = context.new_page()
             popup.goto(worker.url.rsplit("/", 1)[0] + "/popup/popup.html")
             missing = popup.evaluate("""async () => {
