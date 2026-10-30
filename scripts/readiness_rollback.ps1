@@ -74,10 +74,15 @@ function Get-ComposeImageReference {
 }
 
 function Assert-NoOtherRunningBrowser {
-    $rows = Invoke-Native 'docker' @('ps', '--format', '{{.ID}} {{.Label "com.docker.compose.project"}} {{.Label "com.docker.compose.service"}}') 'Could not inspect running browser containers.'
-    foreach ($row in $rows) {
-        $parts = ([string]$row).Trim() -split '\s+'
-        if ($parts.Count -ge 3 -and $parts[2] -eq 'browser' -and $parts[1] -ne $ProductionProject) {
+    $rows = @(Invoke-Native 'docker' @('ps', '-q') 'Could not list running containers.')
+    $ids = @($rows | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    foreach ($id in $ids) {
+        $metadataRows = Invoke-Native 'docker' @('inspect', '--format', '{{json .Config.Labels}}', $id) 'Could not inspect running container labels.'
+        $metadataText = (($metadataRows | ForEach-Object { [string]$_ }) -join '').Trim()
+        try { $labels = $metadataText | ConvertFrom-Json -ErrorAction Stop }
+        catch { throw 'Docker returned invalid running container label data.' }
+        if ($labels.'com.docker.compose.service' -eq 'browser' -and
+            $labels.'com.docker.compose.project' -ne $ProductionProject) {
             throw 'Another non-production browser container is running; rollback exercise is unsafe.'
         }
     }

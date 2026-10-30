@@ -50,7 +50,7 @@ def test_rollback_script_runs_read_only_guards_before_stopping_exact_production_
     stop_production = script.index("Invoke-Native 'docker' (@('stop') + $productionIds)", capture_images)
     assert main < preflight < other_browser < capture_images < stop_production
     assert "'--allow-suspended-tasks'" in script
-    assert "$parts[1] -ne $ProductionProject" in script
+    assert "$labels.'com.docker.compose.project' -ne $ProductionProject" in script
     assert "Get-ExactProductionContainer 'control'" in script
     assert "Get-ExactProductionContainer 'browser'" in script
 
@@ -81,12 +81,27 @@ def _write_shims(directory: Path, *, ready: bool, multiple_control_ids: bool) ->
         encoding="ascii",
     )
     docker = directory / "docker.cmd"
-    if multiple_control_ids:
+    if multiple_control_ids == "other_browser":
         docker.write_text(
             "@echo off\r\n"
             '>>"%ROLLBACK_DOCKER_LOG%" echo %*\r\n'
-            'echo %* | findstr /C:"com.docker.compose.service=control" >nul\r\n'
+            'echo %* | findstr /C:"ps -q" >nul\r\n'
+            "if not errorlevel 1 (echo other-browser)\r\n"
+            'echo %* | findstr /C:"inspect --format" >nul\r\n'
+            "if not errorlevel 1 (echo {\"com.docker.compose.project\":\"other-stack\",\"com.docker.compose.service\":\"browser\"})\r\n"
+            "exit /b 0\r\n",
+            encoding="ascii",
+        )
+    elif multiple_control_ids:
+        docker.write_text(
+            "@echo off\r\n"
+            '>>"%ROLLBACK_DOCKER_LOG%" echo %*\r\n'
+            'echo %* | findstr /C:"service=control" >nul\r\n'
             "if not errorlevel 1 (\r\n  echo production-control-a\r\n  echo production-control-b\r\n)\r\n"
+            'echo %* | findstr /C:"ps -q" >nul\r\n'
+            "if not errorlevel 1 (echo prod-control \necho prod-browser)\r\n"
+            'echo %* | findstr /C:"inspect --format" >nul\r\n'
+            'if not errorlevel 1 (echo {"com.docker.compose.project":"browser-mcp-local","com.docker.compose.service":"control"})\r\n'
             "exit /b 0\r\n",
             encoding="ascii",
         )
@@ -171,4 +186,42 @@ def test_multiple_production_container_ids_are_rejected_before_stop_or_up(tmp_pa
     assert "stop" not in calls and "up" not in calls
     report = json.loads((tmp_path / "rollback-report.json").read_text(encoding="utf-8-sig"))
     assert report["status"] == "FAIL"
+
+
+def test_other_running_browser_detected_without_nested_go_template_quotes(tmp_path):
+    shims = _write_shims(tmp_path / "shims", ready=True, multiple_control_ids="other_browser")
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            payload = {"authenticated": True} if self.path == "/api/v1/operator/session" else {"tasks": []}
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", "operator_session=synthetic; Path=/")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        result = _run_script(shims, tmp_path, production_url=base)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    log = tmp_path / "docker-calls.log"
+    assert log.exists(), f"PowerShell exited before Docker shim invocation: stdout={result.stdout!r} stderr={result.stderr!r}"
+    calls = log.read_text(encoding="ascii")
+    assert result.returncode == 1
+    assert "inspect --format" in calls
+    assert "stop" not in calls and "up" not in calls
+    report = json.loads((tmp_path / "rollback-report.json").read_text(encoding="utf-8-sig"))
+    assert report["failure"] == "Another non-production browser container is running; rollback exercise is unsafe."
 
