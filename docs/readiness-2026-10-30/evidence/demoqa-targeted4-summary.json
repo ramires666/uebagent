@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "scenario_counts": {"passed": 3, "failed": 2},
+  "readiness_security_summary": {"status": "PASS", "pass": 16, "fail": 0, "blocked": 0,
+    "report_export_succeeded": true},
+  "scenarios": [
+    {"scenario": "radio", "status": "passed", "steps": 4, "elapsed_s": 47.2, "independent_verified": true},
+    {"scenario": "double_click", "status": "passed", "steps": 7, "elapsed_s": 99.24, "independent_verified": true},
+    {"scenario": "dynamic", "status": "passed", "steps": 1, "elapsed_s": 15.21, "independent_verified": true},
+    {"scenario": "checkbox", "status": "failed", "steps": 16, "elapsed_s": 191.98, "error_code": "TASK_EXPIRED", "task_status": "expired",
+      "independent_verified": false, "home_expanded": true, "visible_checkbox_roles": 4,
+      "desktop_checked": false, "model_output_invalid_previous_run": true},
+    {"scenario": "web_table", "status": "failed", "steps": 20, "elapsed_s": 186.27, "error_code": "TASK_EXPIRED", "task_status": "expired",
+      "independent_verified": false}
+  ],
+  "safety": {"all_inputs_synthetic": true, "production_preflight_ready": true,
+    "runner_profile_digest_postcheck": "not_reached_after_scenario_failures",
+    "independent_disposable_volume_postflight": {
+      "method": "read-only non-browser check of disposable volume fingerprint",
+      "matched_control3_before_after_digest": true
+    },
+    "production_browser_restored": true,
+    "existing_test_fixtures_preserved": true}
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "project": "browser-mcp-readiness-rollback",
+  "phases": {
+    "candidate_initial": {"ready": true, "operator_session": true, "browser_started": true, "context_count": 1, "page_count": 1,
+      "control_image_id": "sha256:d38aea106fc8afe0e1521d14f866ab6c3731345e709e120fc22fed4a269f563e",
+      "browser_image_id": "sha256:3479849f8a83b4076fae1fe377d683a73722397996e72288533fc9980e8c18d2", "profile_fingerprint_unchanged": true},
+    "baseline_rollback": {"ready": true, "operator_session": true, "browser_started": true, "context_count": 1, "page_count": 1,
+      "control_image_id": "sha256:c6f7f06e88f20a98ac8ef3d959f32e08c3c598c33e2923928b55bce4bc647e92",
+      "browser_image_id": "sha256:e1680f9daac32d492de83754c9e24eaccc284a0e94b55e120ced3d1fef3ca1a7", "profile_fingerprint_unchanged": true},
+    "candidate_redeploy": {"ready": true, "operator_session": true, "browser_started": true, "context_count": 1, "page_count": 1,
+      "control_image_id": "sha256:d38aea106fc8afe0e1521d14f866ab6c3731345e709e120fc22fed4a269f563e",
+      "browser_image_id": "sha256:3479849f8a83b4076fae1fe377d683a73722397996e72288533fc9980e8c18d2", "profile_fingerprint_unchanged": true}
+  },
+  "production_safety": {"preflight_ready": true, "worker_idle": true, "tasks_idle": true,
+    "task_state_unchanged_before_after": true, "isolated_project_containers_removed": true, "production_restored": true},
+  "scope_and_limitations": {
+    "separate_control_and_worker_project_volumes": true,
+    "host_profiles_mounted": false,
+    "control_database_migration_marker_checked": false,
+    "migration_guarantee": false,
+    "early_harness_failure_resolved": "Initial attempt could not inspect running browser containers; fixed invocation and rerun completed the full cycle."
+  }
+}

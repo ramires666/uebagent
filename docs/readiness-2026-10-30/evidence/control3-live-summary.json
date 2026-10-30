@@ -1,5 +1,17 @@
 {
   "schema_version": 1,
+  "additional_live_run": {
+    "status": "PASS",
+    "host_rejected": 403,
+    "origin_rejected": 403,
+    "csrf_missing_rejected": 403,
+    "csrf_rejected": 403,
+    "ui_cookie_not_mcp_auth": 401,
+    "mcp_invalid_bearer_rejected": 401,
+    "mcp_unauth_rejected": 401,
+    "mcp_bearer_positive": 200,
+    "read_only_load": {"requests": 6, "http_200": 6, "p95_ms": 13.58}
+  },
   "status": "PASS",
   "checks": {
     "health_live": {"status": "PASS", "http_status": 200, "latency_ms": 1.52},

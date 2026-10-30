@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "fixture": "local synthetic Chromium page",
+  "model_protocol": "generic local, auto selector",
+  "vision_status_after_image_request": "accepted",
+  "viewport": [1440, 900],
+  "thinking_high_selected": true,
+  "exact_input_match": true,
+  "steps": 4,
+  "wall_seconds": 17.82,
+  "stop_reason": "goal_reached",
+  "submit_attempts": 0,
+  "wrong_clicks": 0,
+  "invalid_outputs": 0,
+  "raw_model_output_recorded": false,
+  "private_browser_used": false,
+  "external_network_allowed": false,
+  "limitation": "Does not test Camoufox, full control/worker/MCP integration, or real websites."
+}

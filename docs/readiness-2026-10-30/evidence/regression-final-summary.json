@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "source_revision": "b8c319a",
+  "command": "python -m pytest -q --basetemp=runtime/pytest-final-release --junitxml=runtime/readiness-2026-10-30/pytest-final.xml",
+  "tests": 424,
+  "passed": 418,
+  "skipped": 6,
+  "failures": 0,
+  "errors": 0,
+  "duration_seconds": 82.605,
+  "source_artifact": "runtime/readiness-2026-10-30/pytest-final.xml"
+}
