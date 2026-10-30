@@ -1,0 +1,72 @@
+﻿{
+    "schema":  "antibot-eff/v1",
+    "site":  "eff",
+    "profile_id":  "p2",
+    "run":  2,
+    "run_type":  "corrective_gate_hold",
+    "verdict":  "PARTIAL",
+    "challenge_detected":  false,
+    "lease":  {
+                  "human_gate_acquired":  true,
+                  "manual_cross_origin_enabled":  true,
+                  "released":  true,
+                  "owner_during_wait":  "human",
+                  "lease_lost":  false
+              },
+    "cta_visible_verified":  true,
+    "anonymous_data_notice_visible":  true,
+    "preflight":  {
+                      "no_active_task":  true,
+                      "active_task_count":  0,
+                      "url_is_eff_home":  true,
+                      "owner_none":  true,
+                      "context_count":  1,
+                      "page_count":  1
+                  },
+    "click_outcome":  "applied",
+    "blocked_resource_reason_counts":  {
+
+                                       },
+    "result_page":  {
+                        "origin":  "https://coveryourtracks.eff.org",
+                        "path":  "/",
+                        "summary_predicates":  {
+                                                   "results_heading_exact":  false,
+                                                   "results_heading_alternative":  false,
+                                                   "Blocking tracking ads?":  false,
+                                                   "Blocking invisible trackers?":  false,
+                                                   "Protecting you from fingerprinting?":  false
+                                               },
+                        "summary_values_retained":  false,
+                        "summary_labels_complete":  false
+                    },
+    "observed_at_utc":  "2026-10-30T20:57:34.451711+00:00",
+    "started_at_utc":  "2026-10-30T20:56:49.223884+00:00",
+    "scope":  "one public EFF CTA with human route lease held through bounded wait and verifier",
+    "guest_profile":  {
+                          "provenance":  "dedicated fresh p2 worker_state volume",
+                          "cookies_imported":  false,
+                          "authentication":  "no account credentials or login submitted"
+                      },
+    "runtime":  {
+                    "application_image":  "browser-mcp-antibot-control:prompt-3184fb4",
+                    "browser_backend":  "camoufox",
+                    "viewport":  [
+                                     1440,
+                                     900
+                                 ],
+                    "network_route":  "antibot-2026-10-31-direct",
+                    "route_generation":  1
+                },
+    "evidence_scope":  "challenge booleans, summary label booleans, blocked reason counts only; no URLs beyond origin, raw page, cookies, IP, fingerprint values, or screenshots",
+    "cta_visual_confirmation":  {
+                                    "confirmed_before_click":  true,
+                                    "coordinates":  [
+                                                        278,
+                                                        564
+                                                    ],
+                                    "screenshot_temporary_reviewed_and_deleted":  true
+                                },
+    "post_deadline_observation_path":  "post-deadline-observation.json",
+    "completion_note":  "At the bounded 45-second check the page remained at / with no result labels; two later read-only observations found /kcarter and origin_not_allowed:1. The cause/timing relationship remains unresolved; this run is PARTIAL."
+}

@@ -1,0 +1,61 @@
+{
+  "schema": "antibot-eff-post-deadline/v1",
+  "profile_id": "p2",
+  "run": 2,
+  "action_taken": false,
+  "navigation_performed": false,
+  "observations": [
+    {
+      "observed_at_utc": "2026-10-30T20:59:00.335916+00:00",
+      "path": "/kcarter",
+      "control_owner": "none",
+      "context_count": 1,
+      "page_count": 1,
+      "challenge_indicators": {
+        "Verify you are human": false,
+        "Access denied": false,
+        "Robot Check": false,
+        "unusual traffic": false,
+        "Request blocked": false,
+        "Security Measure": false
+      },
+      "summary_predicates": {
+        "results_heading_exact": false,
+        "results_heading_alternative": false,
+        "Blocking tracking ads?": false,
+        "Blocking invisible trackers?": false,
+        "Protecting you from fingerprinting?": false
+      },
+      "blocked_resource_reason_counts": {
+        "origin_not_allowed": 1
+      }
+    },
+    {
+      "observed_at_utc": "2026-10-30T20:59:15.381004+00:00",
+      "path": "/kcarter",
+      "control_owner": "none",
+      "context_count": 1,
+      "page_count": 1,
+      "challenge_indicators": {
+        "Verify you are human": false,
+        "Access denied": false,
+        "Robot Check": false,
+        "unusual traffic": false,
+        "Request blocked": false,
+        "Security Measure": false
+      },
+      "summary_predicates": {
+        "results_heading_exact": false,
+        "results_heading_alternative": false,
+        "Blocking tracking ads?": false,
+        "Blocking invisible trackers?": false,
+        "Protecting you from fingerprinting?": false
+      },
+      "blocked_resource_reason_counts": {
+        "origin_not_allowed": 1
+      }
+    }
+  ],
+  "verdict": "PARTIAL",
+  "evidence_scope": "two bounded read-only URL/summary/challenge/resource-reason observations; no page text, query string, IP, cookies, or fingerprint values"
+}

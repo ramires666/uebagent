@@ -1,66 +1,91 @@
 # Антибот-тесты — 31 октября 2026
 
-**Состояние отчёта: RUNNING · итог по production: NOT CONFIRMED**
+**Состояние отчёта: завершён с ограничениями · production readiness: NOT CONFIRMED**
 
-Это текущий журнал ограниченных публичных гостевых сценариев и браузерных диагностик. Результаты ниже заполняются только после проверки соответствующих evidence. По Sannysoft Profile A подтверждена загрузка страницы и получены частичные диагностические признаки; статус предварительный `PARTIAL`. Для Profile A страницы всех шести сайтов были доступны; DemoQA ограниченный путь завершён PASS, Amazon остановлен на interstitial с BLOCKED, остальные строки остаются PARTIAL. Profile B — `NOT_RUN`. Общего PASS нет.
+## Краткий вывод
 
-## Среда прогона
+Проведены ограниченные проверки в двух чистых профилях Camoufox и отдельная модельная проверка публичного DemoQA. В 12 фиксированных ячейках «сайт × профиль» получено **3 PASS, 7 PARTIAL, 1 BLOCKED и 1 SKIPPED**. Это итог именно этих сценариев, а не общий антибот PASS и не подтверждение готовности production.
 
-- Изолированный кандидат: `browser-mcp-antibot-2026-10-31`; browser 2816 MiB, maintenance включён, headed; control 768 MiB.
-- Созданы отдельный volume профиля, tmpfs control и новый test key. Viewport 1440×900.
-- Тестовый viewer: `http://localhost:18081/desktop` — HTTP 200; `ready=true`, 1 context, 1 page, `owner=none`. Независимый GET state на момент проверки подтвердил `available=true`, ожидаемый Sannysoft URL.
-- Production `:8090` наблюдался отдельно: `ready=true`, 1 human context, 1 page. Это только снимок состояния; production не является тестовой средой и его готовность к выпуску не подтверждена.
+| Профиль | PASS | PARTIAL | BLOCKED | SKIPPED |
+|---|---:|---:|---:|---:|
+| P1 | 1 | 4 | 1 | 0 |
+| P2 | 2 | 3 | 0 | 1 |
+| **Всего, 12 ячеек** | **3** | **7** | **1** | **1** |
 
-```text
-PRODUCTION :8090                         ИЗОЛИРОВАННЫЙ TEST :18081
-ready=true · human 1 context / 1 page    viewer HTTP 200 · ready=true
-НЕ ИСПОЛЬЗУЕТСЯ ДЛЯ ПРОГОНА              candidate · browser 2816 MiB
-                                         maintenance on · headed
-                                         control 768 MiB
-                                         отдельные profile volume / tmpfs control / test key
-                                         1 context · 1 page · owner none · 1440×900
+Отдельный model-driven DemoQA task завершился статусом **PASS**: модель выполнила три read-only действия — `navigate → click → history_back`; независимые проверки подтвердили содержимое страницы Elements, возврат на главную и верификацию результата. Эта проверка **не входит** в 12 ячеек site-матрицы и ограничена одним сценарием на DemoQA.
+
+Корректирующий EFF прогон завершён отдельно от 12 ячеек и получил `PARTIAL`. Human/manual lease удерживался 45 секунд и был подтверждённо освобождён; на дедлайне сводка не появилась, challenge не наблюдался, заблокированных ресурсов не зарегистрировано. Два последующих read-only наблюдения зафиксировали `/kcarter`, все пять summary predicates false и по одному заблокированному ресурсу с причиной `origin_not_allowed`. Это подтверждает запоздалый заблокированный cross-origin запрос, но не полную причинную цепочку: взаимодействие тайминга и политики маршрутизации не разрешено. Удержание lease 45 секунд не обеспечило завершение EFF диагностики; по этим данным нельзя оценивать защиту от трекеров. Исходные P1/P2 EFF остаются `PARTIAL`. Отчёт завершает именно описанную ограниченную серию, с указанными ограничениями.
+
+## Среда и границы
+
+- Созданы два отдельных чистых профиля P1/P2; для P2 зафиксированы новый volume и проверенный SHA образа. Cookies между профилями не импортировались.
+- Изолированный test viewer: `http://localhost:18081/desktop`; headed Camoufox, viewport 1440×900, browser container 2816 MiB, maintenance включён; control container 768 MiB.
+- Production viewer `:8090` не изменялся и не использовался для тестов. Финальная health-проверка: оба viewer `ready=true`, `owner=none`, по одному context/page. Production readiness — **NOT CONFIRMED**.
+- Выполнялись заранее заданные ограниченные шаги и bounded проверки видимых URL/текста/состояния. Это не широкое исследование WAF. CAPTCHA и challenge не обходились.
+- Финальная сверка среды подтвердила для обоих viewer `available=true`; production control image остаётся `browser-mcp-readiness-control:candidate`, а overlay `browser-mcp-antibot-control:prompt-3184fb4` установлен только на test viewer. Production prompt overlay не обновлялся.
+- В проверенных test/runtime temp-путях raw PNG не осталось; сохраняется только безопасный санитизированный Sannysoft banner. Отдельная проверка исполнения сообщила: 8 script checks passed, все 20 JSON evidence успешно разобраны.
+
+```mermaid
+flowchart LR
+  P1[Чистый профиль P1] --> C[6 фиксированных site-проверок]
+  P2[Чистый профиль P2] --> C
+  C --> S[12 ячеек: 3 PASS · 7 PARTIAL · 1 BLOCKED · 1 SKIPPED]
+  M[Модельный task DemoQA] --> R[Отдельно: PASS, 3 read-only действия]
+  S -. не означает .-> G[Общий антибот PASS / готовность production]
+  R -. не входит в .-> C
 ```
 
-## Матрица сайтов и профилей
+## Матрица site/profile
 
-Статус каждой ячейки отражает результат именно указанного теста. `Доступна` означает лишь подтверждённую загрузку страницы; это не равно завершённой диагностике или полному гостевому сценарию.
+`PARTIAL` означает, что подтверждена только часть заранее заданных условий. `SKIPPED` означает, что ячейка не запускалась. Диагностические страницы не оценивают прохождение WAF.
 
-| Сайт / тип | Profile A | Profile B | Что требуется для PASS |
+| Сайт / тип | P1 | P2 | Что подтверждено и чего не хватает |
 |---|---|---|---|
-| Sannysoft · диагностика | PARTIAL — страница загружена, сигналы неполны | NOT_RUN | WebDriver: missing (passed); Chrome: missing (failed); permissions: prompt. WebDriver Advanced outcome не подтверждён; plugins label есть, outcome не подтверждён; languages label есть, значение не сохранялось. Challenge text не обнаружен. Это не общий PASS. |
-| BrowserLeaks · диагностика | PARTIAL — JavaScript и WebGL проверены, обязательный брендовый элемент отсутствует | NOT_RUN | Expected URL true; exact `BrowserLeaks.com` label false; JavaScript и WebGL labels true; challenge strings false. Диагностика частичная, не PASS. |
-| EFF Cover Your Tracks · диагностика | PARTIAL — landing page доступна, тест не запускался | NOT_RUN | Один CTA `Test Your Browser` нажат; пять aggregate heading checks false. Страница результата `/kcarter` открыта; завершённый aggregate результат пока не подтверждён. Challenge не обнаружен. Статус `PARTIAL`; не оценка WAF. |
-| Amazon · гостевой путь | BLOCKED — interstitial до поиска; причина неизвестна | SKIPPED — после P1 blocker, без повтора | Fresh profile; cookies не импортированы. Ни один видимый signed-out marker не подтверждён, signed-out guest status unknown. Home URL проверен; на странице показаны “Click the button below to continue shopping” и “Continue shopping”; поиск не пробовали, кнопку не нажимали, повторов не было. Причина interstitial неизвестна; не утверждать CAPTCHA или подтверждённое bot detection. |
-| eBay · гостевой путь | PARTIAL — поиск, карточка и возврат подтверждены; signed-out proof появился только после поиска | P2 готовится в свежем профиле | Home/search URL, notebook/results, product title/card path и history back подтверждены; challenge false. Точный `Sign in or register` marker зафиксирован после поиска, но до поиска signed-out check false из-за невалидных generic markers. Поэтому guest-flow критерий не PASS. Прокрутка упомянута исполнителем, но verifier receipt не сохранён — не считать независимо подтверждённой. |
-| DemoQA · гостевой путь | PASS — ограниченный read-only путь | NOT_RUN | Home → Elements → history back; expected URL и ожидаемые headings подтверждены, challenge false. DemoQA brand marker на home отсутствовал, но не входит в критерий пути; первая PARTIAL была из-за лишнего harness predicate. Это не антибот-тест само по себе. |
+| Sannysoft · диагностика | PARTIAL | PARTIAL | Ожидаемый URL и фиксированные строки доступны; WebDriver missing (passed), Chrome missing (failed), permissions prompt. Advanced не проверен; plugins/languages — только наличие подписей. Не общий PASS. |
+| BrowserLeaks · диагностика | PARTIAL | PARTIAL | Ожидаемые URL и JavaScript/WebGL подписи обнаружены; точная подпись `BrowserLeaks.com` отсутствует. Challenge-текст не обнаружен. |
+| EFF Cover Your Tracks · диагностика | PARTIAL | PARTIAL | По одному CTA на профиль; итог и summary не подтверждены, challenge не обнаружен. Дополнительный P2 прогон: lease удержан 45 секунд и отпущен; на дедлайне summary нет, blocked counts пусты. Два post-deadline read-only снимка: `/kcarter`, summary predicates false, `origin_not_allowed: 1`. Диагностика не завершена; причина тайминга/политики полностью не установлена. |
+| Amazon · гостевой путь | BLOCKED | SKIPPED | P1 остановлен на странице с текстом `Click the button below to continue shopping` / `Continue shopping`, до поиска. Причина неизвестна; это не доказательство CAPTCHA или конкретного bot detection. Ничего не нажимали и не повторяли. P2 пропущен после P1 blocker. |
+| eBay · гостевой путь | PARTIAL | PASS | P1: поиск, карточка и history back проверены; точный signed-out marker подтверждён только после поиска, scroll не имеет отдельного receipt. P2: marker проверен до поиска; поиск, результаты, карточка, возврат и scroll подтверждены. Ограниченный публичный guest flow. |
+| DemoQA · гостевой путь | PASS | PASS | Ограниченный read-only путь: главная → Elements → history back, с проверкой URL и видимых заголовков; challenge не обнаружен. Brand marker `DemoQA` не входил в критерий пути; ранняя P1 попытка была ошибочно остановлена лишним предикатом harness. |
 
-**Временные метки и среда P1:** время начала не записано; время наблюдения после перехода — 2026-10-30 20:12:06 UTC. Часовой пояс браузера не измерялся. Браузерная версия API не раскрыта. Не выводить TZ браузера из системного timezone.
+### Отдельная модельная проверка DemoQA
 
-**Текущий учёт:** BrowserLeaks Profile A — предварительный `PARTIAL`: expected URL true; exact `BrowserLeaks.com` label false; JavaScript и WebGL labels true; challenge strings false. Sannysoft Profile A — предварительный `PARTIAL`: независимый GET test viewer подтвердил `available=true`, ожидаемый URL, `owner=none`, 1 context и 1 page. Выполнен один переход без challenge. Получены только перечисленные выше частичные predicates; дополнительные результаты ещё не проверены. **Сводка P1:** 1 PASS (DemoQA ограниченный read-only путь), 4 PARTIAL (Sannysoft, BrowserLeaks, EFF, eBay), 1 BLOCKED (Amazon), 0 UNAVAILABLE/FAIL. Все шесть страниц Profile A были доступны на момент соответствующих проверок, но Amazon показал interstitial до поиска. EFF aggregate result остаётся непроверенным. eBay guest steps поиска/карточки/back подтверждены, но статус `PARTIAL` из-за отсутствия pre-search signed-out proof и неподтверждённого scroll receipt. P2 подготавливается в свежем профиле; Amazon P2 `SKIPPED` после P1 blocker. Production — `NOT CONFIRMED`.
+```mermaid
+sequenceDiagram
+  participant U as Ограниченная задача
+  participant M as Model client (P2)
+  participant V as Независимая проверка
+  U->>M: DemoQA: открыть Elements и вернуться
+  M->>M: navigate → click → history_back
+  M->>V: Завершение task, 3 действия
+  V->>V: Elements URL + content; home URL; read-only=true
+  V-->>U: PASS · phase verified · verified=true
+```
 
-## Как читать выводы
+Task `ca2d93cb-3156-4b11-a5e9-58722f91d789` завершился с `status=succeeded`, `phase=verified`, `step_count=3`, `verified=true`. В сохранённом evidence указаны три действия `navigate`, `click`, `history_back`, независимое наблюдение URL и содержимого Elements, возврат на домашний URL и только read-only действия. Независимая проверка живого UI/API подтвердила `succeeded`, `verified`, `result.verified=true`; helper подтвердил Elements URL/content, финальную главную страницу и read-only scope. Это единичный DemoQA task, не оценка общей надёжности модели и не дополнительная ячейка матрицы.
 
-- **Доступность страницы** подтверждает загрузку и ожидаемый origin. Она не подтверждает, что диагностический тест завершился, что весь путь выполнен, или что сайт допускает более широкий сценарий.
-- **Диагностика** описывает только перечисленные свойства браузера/приватности. Её оценки не доказывают прохождение WAF и не объединяются с гостевыми путями в «антибот PASS».
-- **Гостевой путь** считается PASS только после всех заданных шагов и независимой проверки ожидаемого состояния. Любой challenge, CAPTCHA, требование входа, rate limit или запрет останавливает тест; статус `BLOCKED`, без повторов.
-- **Детерминированный проход** и **модельный read-only проход** — отдельные сценарии. Модельный сценарий не заменяет verifier; пока его результат `NOT_RUN`/не представлен.
-- **Production:** состояние сервиса на `:8090` не означает, что этот тестовый кандидат установлен там или что релиз готов. Итоговый production статус: **NOT CONFIRMED**.
+## Изменение prompt и проверки клиента
 
-## Ограничения и следующие шаги
+Commit `3184fb4` поправил обработку действий моделью: ждать загрузки и свежего скриншота; не повторять действие с неопределённым результатом; при блокировке обращаться к пользователю; объявлять завершение только после видимой проверки результата. В P2, только в изолированной тестовой среде, установлен control overlay `browser-mcp-antibot-control:prompt-3184fb4`; согласно provenance, source hash совпадает с тестовым control. **46 model-client unit tests passed.** Production `:8090` этот overlay не получал. Тесты и prompt fix проверяют клиентскую обработку, но не доказывают общий антибот PASS и сами по себе не подтверждают production readiness.
 
-Проверенное evidence по Sannysoft P1 подтверждает частичную доступность страницы и ограниченный набор диагностических признаков. Независимый raw-verify proof не сохранён, поэтому воспроизводимость row predicates ограничена сообщением исполнителя и metadata; статус остаётся `PARTIAL`. Временный full-page PNG `/tmp/antibot-artifacts/full-page-temporary.png` удалён исполнителем; проверка `test ! -e` прошла. Сохранённый row-level raw-verify proof отсутствует, поэтому воспроизводимость конкретных predicate ограничена. На опубликованном безопасном banner проблема приватности не обнаружена. BrowserLeaks JS+WebGL, EFF aggregate result не подтверждён; Amazon остановлен на interstitial неизвестной причины без нажатия/повтора; eBay flow не завершён. DemoQA PASS ограничен указанным read-only путем. Доступность шести страниц не означает завершение шести тестов. Evidence links для всех полученных P1 metadata добавлены ниже. Никаких общих выводов делать нельзя. Сохранить для отчёта только безопасные сводки и скриншоты: не публиковать IP, полные fingerprint-значения, cookies, токены, заголовки авторизации или личные данные.
+## Что остаётся проверить
 
-1. P2: продолжить незаблокированные проверки в свежих профилях; Amazon остаётся SKIPPED после blocker.
-2. Продолжить незаблокированные P2 проверки, затем интеграцию prompt fix в browser flow; модельный task остаётся `NOT_RUN`.
-3. Отдельно отметить ручной headed-контроль, если он выполнен, и ограничения сравнения.
-4. Модельный read-only проход учитывать отдельно и только при наличии независимого verifier evidence.
-
-## Изменения и границы проверки
-
-Commit `3184fb4` исправляет prompt handling: дождаться загрузки страницы и проверить свежий скриншот; не повторять действие с неизвестным результатом; при блокировке использовать ask_user; объявлять успех только по видимому результату. Overlay image `browser-mcp-antibot-control:prompt-3184fb4` собран. Пройдены 46 model-client unit tests; интеграция browser flow запланирована, но ещё не выполнена; model task — `NOT_RUN`. Изменения harness, включая исправление лишнего DemoQA brand-marker predicate, относятся к тестовой проверке и не являются исправлением production-кода.
+1. **P0 — EFF:** реализовать ограниченную event-driven маршрутизацию для явно известных разрешённых origin и получение summary; не вводить постоянный публичный cross-origin bypass. Затем подтвердить завершение диагностики свежим evidence. Тайминг и политика пока не разведены.
+2. **P0 — baseline:** провести отдельное сравнение в обычном headed browser, если нужна сравнительная оценка; такого baseline в этой серии нет.
+3. **P1 — диагностика:** расширить безопасный сбор санитизированных результатов Sannysoft/BrowserLeaks и проверить недостающие bounded predicates; отсутствие challenge не считать успешной диагностикой.
+4. **P1 — модель:** расширить покрытие отдельными read-only задачами; текущий model PASS относится только к одному DemoQA task.
+5. Amazon P1 остаётся остановленным, P2 — пропущенным. Не нажимать Continue shopping и не повторять сценарий в рамках этого отчёта.
+6. Production readiness остаётся `NOT CONFIRMED`: тестовый overlay не установлен в production. На момент финальной сверки временные raw PNG в проверенных путях отсутствовали; при новых запусках сохранять только санитизированные artifacts.
 
 ## Evidence
 
-EFF metadata timestamp относится к post-click helper состоянию, не интерпретировать как точное время начала. DemoQA: первая PARTIAL была вызвана лишней проверкой brand marker; исправленные критерии дали ограниченный PASS.
+Все ссылки относительны к `docs/antibot-2026-10-31/`.
 
-Sannysoft P1: [metadata](evidence/sannysoft/p1/metadata.json) и [page-banner.png](evidence/sannysoft/p1/page-banner.png). BrowserLeaks: [JavaScript](evidence/browserleaks/p1/javascript-p1.json), [WebGL](evidence/browserleaks/p1/webgl-p1.json). [EFF](evidence/eff/p1-metadata.json) (CTA один раз; summary completion не подтверждён), [Amazon guest-flow](evidence/amazon/p1-metadata.json) и [interstitial capture](evidence/amazon/verified-interstitial.json), [eBay homepage](evidence/ebay/p1-metadata.json), [eBay guest flow](evidence/ebay/p1-guest-flow.json), [DemoQA](evidence/demoqa/p1-metadata.json). EFF metadata `started_at_utc` содержит post-click timestamp, не точное время начала. DemoQA PASS ограничен URL/headings/history-back и не включает clicklink или modeltest. Amazon metadata показывает, что guest/signed-out статус не подтверждён; на Amazon flow остановлен до поиска. eBay metadata фиксирует signed-out после поиска, но не до; guest flow — PARTIAL.
+- Профили: [P2 provenance](evidence/p2-profile-provenance.json); [P1 Sannysoft metadata](evidence/sannysoft/p1/metadata.json), [safe banner](evidence/sannysoft/p1/page-banner.png); [P2 Sannysoft metadata](evidence/sannysoft/p2/metadata.json), [bounded outcomes](evidence/sannysoft/p2/outcomes.json).
+- BrowserLeaks: [P1 JavaScript](evidence/browserleaks/p1/javascript-p1.json), [P1 WebGL](evidence/browserleaks/p1/webgl-p1.json), [P2 JavaScript](evidence/browserleaks/p2-javascript.json), [P2 WebGL](evidence/browserleaks/p2-webgl.json).
+- EFF: [P1](evidence/eff/p1-metadata.json), [P2](evidence/eff/p2/metadata.json), [корректирующий прогон P2](evidence/eff/corrective-gate-hold/metadata.json), [два post-deadline read-only наблюдения](evidence/eff/corrective-gate-hold/post-deadline-observation.json). Корректирующий прогон остаётся PARTIAL: summary нет, поздний путь `/kcarter`, в каждом снимке `origin_not_allowed: 1`; полная причинная цепочка не установлена. Временная метка исходного P2 относится к post-click состоянию, не к точному времени начала.
+- Amazon: [P1 guest flow](evidence/amazon/p1-metadata.json), [проверенный interstitial](evidence/amazon/verified-interstitial.json).
+- eBay: [P1 home](evidence/ebay/p1-metadata.json), [P1 guest flow](evidence/ebay/p1-guest-flow.json), [P2 guest flow](evidence/ebay/p2/guest-flow.json).
+- DemoQA: [P1](evidence/demoqa/p1-metadata.json), [P2 deterministic path](evidence/demoqa/p2/metadata.json), [P2 model task](evidence/demoqa/p2/model-task.json).
+
+В evidence оставлены только bounded проверки и безопасные сводки; raw fingerprints, cookies, IP и авторизационные данные не публикуются. План сценариев: [`docs/15-antibot-compatibility-test-plan.md`](../15-antibot-compatibility-test-plan.md). Подробности prompt/client test принадлежат [RUNBOOK.md](RUNBOOK.md).
