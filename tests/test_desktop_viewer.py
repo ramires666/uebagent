@@ -78,6 +78,16 @@ async def test_viewer_task_progress_and_explicit_control():
 
         await page.route("**/api/v1/**", api)
         await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html")
+        assert await page.locator(".manual-controls").get_attribute("open") is None
+        assert await page.get_by_text("Дополнительное управление", exact=True).is_visible()
+        assert not await page.locator("#navigate-form").is_visible()
+        for control_id in ("navigate-form", "navigate-url", "text-form", "text-input"):
+            assert await page.locator(f"#{control_id}").count() == 1
+        assert await page.locator("[data-key='Tab']").count() == 1
+        assert await page.locator("[data-scroll='480']").count() == 1
+        await page.get_by_text("Дополнительное управление", exact=True).click()
+        assert await page.locator("#navigate-form").is_visible()
+        await page.get_by_text("Дополнительное управление", exact=True).click()
         await page.wait_for_function("document.getElementById(\x27task-status\x27).textContent === \x27Выполняется\x27")
         assert await page.locator("#task-goal").inner_text() == "<img src=x onerror=alert(1)>"
         assert await page.locator("#task-goal img").count() == 0
@@ -100,6 +110,10 @@ async def test_viewer_task_progress_and_explicit_control():
         await page.wait_for_function("!document.getElementById('takeover').disabled")
         posts = [(path, csrf) for method, path, csrf in calls if method == "POST"]
         assert posts == [("/profiles/default/takeover", "fixture-csrf"), ("/profiles/default/release-control", "fixture-csrf")]
+        await page.evaluate("document.documentElement.classList.add('desktop-embed')")
+        assert not await page.locator(".manual-controls").is_visible()
+        assert not await page.locator("header").is_visible()
+        assert await page.locator(".viewport").is_visible()
         await asyncio.sleep(2.2)
         assert 1 <= sum(path == "/tasks" for _, path, _ in calls) <= 2
         assert "busy" not in await page.locator("#notice").inner_text()
@@ -507,7 +521,7 @@ async def test_viewer_drops_queued_input_safely(scenario):
             await page.wait_for_function("document.getElementById('notice').textContent.includes('переполнена')")
         elif scenario == 'composition':
             await page.evaluate("""() => { const el = document.getElementById('remote-keyboard'); el.value = 'composition-fixture'; el.dispatchEvent(new InputEvent('input', {bubbles: true, isComposing: true})); }""")
-            await page.locator('#navigate-url').focus()
+            await page.locator('#refresh').focus()
             await page.wait_for_function("document.getElementById('notice').textContent.includes('удалён')")
         else:
             await page.keyboard.insert_text('queued-fixture')
@@ -515,7 +529,7 @@ async def test_viewer_drops_queued_input_safely(scenario):
                 owner = 'none'; epoch += 1
                 await page.wait_for_function("document.getElementById('remote-keyboard').disabled")
             elif scenario == 'blur':
-                await page.locator('#navigate-url').focus()
+                await page.locator('#refresh').focus()
                 await page.wait_for_function("document.getElementById('notice').textContent.includes('удалён')")
         gate.set()
         await page.wait_for_timeout(500)

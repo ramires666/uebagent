@@ -34,7 +34,7 @@
     html, body { min-height: 100%; }
     html.desktop-embed, html.desktop-embed body { width: 100%; height: 100%; min-height: 0; margin: 0; overflow: hidden; background: #080b0e; }
     html.desktop-embed .shell { width: 100%; max-width: none; height: 100%; margin: 0; padding: 0; }
-    html.desktop-embed header, html.desktop-embed #notice, html.desktop-embed .progress-panels, html.desktop-embed .screen-head, html.desktop-embed .controls, html.desktop-embed footer { display: none !important; }
+    html.desktop-embed header, html.desktop-embed #notice, html.desktop-embed .progress-panels, html.desktop-embed .screen-head, html.desktop-embed .manual-controls, html.desktop-embed .controls, html.desktop-embed footer { display: none !important; }
     html.desktop-embed .screen-card { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; display: flex; }
     html.desktop-embed .viewport { width: 100%; height: 100%; min-height: 0; max-height: none; flex: 1; overflow: hidden; }
     html.desktop-embed #browser-image { max-width: 100%; max-height: 100%; }
@@ -62,6 +62,10 @@
     .empty { padding: 48px 20px; text-align: center; color: #879391; font-size: 13px; }
     .empty strong { display: block; margin-bottom: 7px; color: #c3ceca; font-size: 15px; }
     .controls { display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(240px, 1fr) minmax(280px, 1.4fr); gap: 12px; margin-top: 12px; }
+    .manual-controls { margin-top: 12px; }
+    .manual-controls > summary { width: fit-content; color: #94a19e; font-size: 11px; cursor: pointer; }
+    .manual-controls[open] > summary { margin-bottom: 2px; }
+    .manual-controls .controls { margin-top: 7px; }
     .control-card { min-width: 0; padding: 13px; border: 1px solid #2d393e; border-radius: 10px; background: #161e23; }
     .control-card h2 { margin: 0 0 10px; color: #acbbb5; font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
     .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
@@ -144,6 +148,8 @@
       </div>
     </section>
 
+    <details class="manual-controls">
+      <summary>Дополнительное управление</summary>
     <section class="controls" aria-label="Ручные действия">
       <div class="control-card">
         <h2>Навигация</h2>
@@ -177,6 +183,7 @@
       </div>
     </section>
     <footer><span>Картинка показывает содержимое браузера. Это не удалённый рабочий стол ОС.</span><span>Управление включается только после передачи контроля оператору.</span></footer>
+    </details>
   </main>
 </body>
 </html>
