@@ -23,6 +23,7 @@ param(
     [switch]$SoakChecks,
     [ValidateRange(1, 1200)][int]$SoakSeconds = 900,
     [switch]$MemoryProbeChecks,
+    [ValidateSet('components', 'mixed')][string]$MemoryProbePhaseSet = 'components',
     [ValidateRange(180, 300)][int]$MemoryProbeSeconds = 210,
     [switch]$ObservationHints,
     [string[]]$P0Scenarios = @('checkbox', 'web_table'),
@@ -401,11 +402,11 @@ function Get-SanitizedProcessRss {
     if ($result.ExitCode -ne 0) { return [pscustomobject]@{ status='unavailable'; processes=@() } }
     $processes = [System.Collections.Generic.List[object]]::new()
     foreach ($line in $result.Output) {
-        $parts = ([string]$line).Trim() -split '\s+'
-        if ($parts.Count -lt 2 -or $parts[-1] -notmatch '^\d+$') { continue }
-        $comm = ($parts[0] -replace '[^A-Za-z0-9_.+-]', '')
+        $trimmed = ([string]$line).Trim()
+        if ($trimmed -notmatch '^(?<comm>.+?)\s+(?<rss>\d+)$') { continue }
+        $comm = ($Matches.comm -replace '[^A-Za-z0-9_.+ -]', '').Trim()
         if (-not $comm -or $comm.Length -gt 64) { continue }
-        $processes.Add([pscustomobject]@{ comm=$comm; rss_kib=[long]$parts[-1] })
+        $processes.Add([pscustomobject]@{ comm=$comm; rss_kib=[long]$Matches.rss })
         if ($processes.Count -ge 10) { break }
     }
     return [pscustomobject]@{ status=$(if ($processes.Count) { 'available' } else { 'unavailable' }); processes=@($processes) }
@@ -440,14 +441,24 @@ function Start-BoundedHostMetricSampler {
                     } else { $cgOk = $false }
                 } catch { $cgOk = $false }
             }
+            $memoryStat = @(& docker exec $containerId cat /sys/fs/cgroup/memory.stat 2>$null)
+            $memoryStatFields = @{}
+            if ($LASTEXITCODE -eq 0) {
+                foreach ($statLine in $memoryStat) {
+                    $statParts = ([string]$statLine).Trim() -split '\s+'
+                    if ($statParts.Count -eq 2 -and $statParts[0] -in @('anon','file','shmem','kernel') -and $statParts[1] -match '^\d+$') {
+                        $memoryStatFields[$statParts[0]] = [long]$statParts[1]
+                    }
+                }
+            }
             $processRss = @()
             $psLines = @(& docker exec $containerId ps -eo 'comm=,rss=' --sort=-rss 2>$null)
             if ($LASTEXITCODE -eq 0) {
                 foreach ($psLine in ($psLines | Select-Object -First 10)) {
-                    $parts = ([string]$psLine).Trim() -split '\s+'
-                    if ($parts.Count -ge 2 -and $parts[-1] -match '^\d+$') {
-                        $comm = ($parts[0] -replace '[^A-Za-z0-9_.+-]', '')
-                        if ($comm -and $comm.Length -le 64) { $processRss += [pscustomobject]@{ comm=$comm; rss_kib=[long]$parts[-1] } }
+                    $trimmed = ([string]$psLine).Trim()
+                    if ($trimmed -match '^(?<comm>.+?)\s+(?<rss>\d+)$') {
+                        $comm = ($Matches.comm -replace '[^A-Za-z0-9_.+ -]', '').Trim()
+                        if ($comm -and $comm.Length -le 64) { $processRss += [pscustomobject]@{ comm=$comm; rss_kib=[long]$Matches.rss } }
                     }
                 }
             }
@@ -459,7 +470,7 @@ function Start-BoundedHostMetricSampler {
                 at_utc=[DateTime]::UtcNow.ToString('o'); complete=$complete; docker_stats=$statsObj
                 memory_current_bytes=$cgObj.memory_current_bytes; memory_limit_bytes=$cgObj.memory_limit_bytes
                 pids_current=$cgObj.pids_current; pids_limit=$cgObj.pids_limit; memory_events=$cgObj.memory_events
-                top_process_rss=$processRss
+                top_process_rss=$processRss; memory_stat=[pscustomobject]@{ anon=$memoryStatFields.anon; file=$memoryStatFields.file; shmem=$memoryStatFields.shmem; kernel=$memoryStatFields.kernel }
             })
             Start-Sleep -Seconds 5
         }
@@ -885,6 +896,7 @@ try {
             'control', 'python', '-m', 'scripts.readiness_memory_probe',
             '--url', 'http://browser:7070', '--control-url', 'http://localhost:8080',
             '--key-file', '/run/demoqa-secrets/key', '--duration-seconds', [string]$MemoryProbeSeconds,
+            '--phase-set', $MemoryProbePhaseSet,
             '--output', '/app/runtime/control-data/readiness-memory-probe.json', '--i-confirm-disposable'
         )
         $browserIdRows = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'browser'))
