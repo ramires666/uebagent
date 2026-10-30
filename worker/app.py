@@ -2693,6 +2693,81 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
         if not ReadinessActionTrace.enabled():
             raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
 
+    @app.post("/diagnostics/readiness-memory-gc", dependencies=[Depends(require_bearer)])
+    async def readiness_memory_gc(body: dict[str, Any]) -> dict[str, bool]:
+        readiness_trace_allowed()
+        if body != {}:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST"})
+        if (not getattr(runtime, "_started", False) or getattr(runtime, "_page", None) is None
+                or getattr(runtime, "_adapter", None) is None or getattr(runtime, "_main_page_closed", False)
+                or getattr(runtime, "_resource_violation", False)):
+            raise HTTPException(status_code=503, detail={"code": "BROWSER_UNAVAILABLE"})
+        lock = getattr(runtime, "_capture_lock", None)
+        if (getattr(runtime, "control_owner", "none") != "none"
+                or getattr(runtime, "_action_in_progress", False)
+                or getattr(runtime, "_import_in_progress", False)
+                or getattr(runtime, "_observation_pending", False)
+                or lock is None or lock.locked()):
+            raise HTTPException(status_code=409, detail={"code": "CONTROL_BUSY"})
+        context = getattr(runtime, "_context", None)
+        try:
+            pages = list(context.pages) if context is not None else []
+            if len(pages) != 1 or pages[0] is not runtime._page:
+                raise HTTPException(status_code=409, detail={"code": "PAGE_CONTEXT_UNSAFE"})
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from None
+        try:
+            if await runtime._adapter.url() != "https://readiness-fixture.test/tree":
+                raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from None
+        request_gc = getattr(runtime._page, "request_gc", None)
+        if not callable(request_gc):
+            raise HTTPException(status_code=503, detail={"code": "GC_UNSUPPORTED"})
+        # URL inspection yielded control; revalidate the complete idle state
+        # before claiming the action slot. No await may occur between this
+        # check and setting the flag.
+        context = getattr(runtime, "_context", None)
+        try:
+            pages = list(context.pages) if context is not None else []
+        except Exception:
+            raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from None
+        if (not getattr(runtime, "_started", False) or getattr(runtime, "_page", None) is None
+                or getattr(runtime, "_main_page_closed", False)
+                or getattr(runtime, "_resource_violation", False)
+                or getattr(runtime, "control_owner", "none") != "none"
+                or getattr(runtime, "_action_in_progress", False)
+                or getattr(runtime, "_import_in_progress", False)
+                or getattr(runtime, "_observation_pending", False)
+                or lock is None or lock.locked() or len(pages) != 1
+                or pages[0] is not runtime._page):
+            raise HTTPException(status_code=409, detail={"code": "CONTROL_BUSY"})
+        runtime._action_in_progress = True
+        acquired = False
+        deadline = asyncio.get_running_loop().time() + 5.0
+        try:
+            await asyncio.wait_for(lock.acquire(), timeout=max(0.0, deadline - asyncio.get_running_loop().time()))
+            acquired = True
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError
+            await asyncio.wait_for(request_gc(), timeout=remaining)
+        except TimeoutError:
+            raise HTTPException(status_code=503, detail={"code": "GC_REQUEST_TIMEOUT"}) from None
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=503, detail={"code": "GC_REQUEST_FAILED"}) from None
+        finally:
+            if acquired:
+                lock.release()
+            runtime._action_in_progress = False
+        return {"requested": True}
+
     @app.get("/diagnostics/readiness-actions", dependencies=[Depends(require_bearer)])
     async def readiness_actions() -> dict[str, Any]:
         readiness_trace_allowed()

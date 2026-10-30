@@ -22,7 +22,9 @@ param(
     [switch]$CookieBridgeChecks,
     [switch]$SoakChecks,
     [ValidateRange(1, 1200)][int]$SoakSeconds = 900,
+    [ValidateSet(2816, 4096)][int]$BrowserMemoryMiB = 2816,
     [switch]$MemoryProbeChecks,
+    [switch]$MemoryProbeGcContrast,
     [ValidateSet('components', 'mixed')][string]$MemoryProbePhaseSet = 'components',
     [ValidateRange(180, 300)][int]$MemoryProbeSeconds = 210,
     [switch]$ObservationHints,
@@ -546,11 +548,17 @@ try {
             throw 'MemoryProbeChecks must run standalone without soak, model cases, P0, or other integration modes.'
         }
     }
+    if ($MemoryProbeGcContrast -and (-not $MemoryProbeChecks -or $MemoryProbePhaseSet -ne 'mixed')) {
+        throw 'MemoryProbeGcContrast requires MemoryProbeChecks with MemoryProbePhaseSet mixed.'
+    }
     if ($SoakChecks) {
         if (-not $SkipCases) { throw 'SoakChecks requires SkipCases to avoid model-driven cases.' }
         if ($P0Diagnostics -or $ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or $RuntimeIntegrationChecks -or $TaskControlChecks -or $ReadinessChecks) {
             throw 'SoakChecks cannot be combined with model cases, probes, diagnostics, readiness, or integration checks.'
         }
+    }
+    if ($BrowserMemoryMiB -eq 4096 -and (-not $SkipCases -or -not ($SoakChecks -or $MemoryProbeChecks))) {
+        throw 'BrowserMemoryMiB 4096 requires SkipCases and either SoakChecks or MemoryProbeChecks.'
     }
     Assert-ObservationHintsMode -Enabled $ObservationHints -Protocol $ModelProtocol -ProbeOnly $ProbeOnly `
         -DiagnosticGate $DiagnosticGate -SkipCases $SkipCases -P0Diagnostics $P0Diagnostics `
@@ -572,7 +580,7 @@ try {
     $env:DEMOQA_MODEL_BASE_URL = $ModelBaseUrl
     $env:DEMOQA_MODEL_ALIAS = $ModelAlias
     $env:DEMOQA_MODEL_PROTOCOL = $ModelProtocol
-    $env:DEMOQA_BROWSER_MEMORY_LIMIT = '2816m'
+    $env:DEMOQA_BROWSER_MEMORY_LIMIT = ([string]$BrowserMemoryMiB + 'm')
     $modelPreflight = Invoke-NativeCaptured -FilePath 'python' -Arguments @((Join-Path $PSScriptRoot 'demoqa_model_preflight.py'), '--base-url', $ModelBaseUrl, '--alias', $ModelAlias)
     if ($modelPreflight.ExitCode -ne 0) { throw 'Configured model endpoint is unavailable or does not serve the required alias; production was left running.' }
 
@@ -899,6 +907,7 @@ try {
             '--phase-set', $MemoryProbePhaseSet,
             '--output', '/app/runtime/control-data/readiness-memory-probe.json', '--i-confirm-disposable'
         )
+        if ($MemoryProbeGcContrast) { $probeArgs += '--gc-contrast' }
         $browserIdRows = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'browser'))
         $browserIds = @($browserIdRows.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
         if ($browserIdRows.ExitCode -ne 0 -or $browserIds.Count -ne 1) { throw 'Could not identify the single disposable browser for memory-probe metrics.' }

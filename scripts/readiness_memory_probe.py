@@ -25,11 +25,15 @@ PHASES = PHASE_SETS["components"]
 PHASE_SECONDS = 60
 IDLE_SECONDS = 5
 OPERATION_INTERVAL_SECONDS = 1 / 7
+GC_IDLE_BEFORE_SECONDS = 2
+GC_IDLE_AFTER_SECONDS = 8
+GC_REQUEST_TIMEOUT_SECONDS = 5.0
 
 
 class Probe:
     def __init__(self, client, key, phase_seconds=PHASE_SECONDS, idle_seconds=IDLE_SECONDS,
-                 clock=time.monotonic, sleep=time.sleep, progress=print, phase_set="components"):
+                 clock=time.monotonic, sleep=time.sleep, progress=print, phase_set="components",
+                 gc_contrast=False):
         if phase_set not in PHASE_SETS:
             raise ValueError("invalid_phase_set")
         self.client, self.key = client, key
@@ -38,12 +42,15 @@ class Probe:
         self.progress = progress
         self.phase_set = phase_set
         self.phases = PHASE_SETS[phase_set]
+        if gc_contrast and phase_set != "mixed":
+            raise ValueError("gc_contrast_requires_mixed_phase_set")
+        self.gc_contrast_enabled = gc_contrast
         self.headers = {"Authorization": f"Bearer {key}"}
 
-    def request(self, method, path, *, json_body=None):
+    def request(self, method, path, *, json_body=None, timeout=10.0):
         try:
             response = self.client.request(method, WORKER_URL + path, headers=self.headers,
-                                           json=json_body, timeout=10.0)
+                                           json=json_body, timeout=timeout)
         except httpx.HTTPError:
             raise SoakError("request_failed") from None
         if response.status_code != 200:
@@ -147,6 +154,33 @@ class Probe:
             raise SoakError("observation_invalid")
         return len(image)
 
+    def gc_contrast(self):
+        started_at = datetime.now(timezone.utc).isoformat()
+        self.progress(json.dumps({"event": "gc_start", "phase_set": self.phase_set,
+                                  "started_at_utc": started_at}, separators=(",", ":")))
+        result = {"requested": False, "started_at_utc": started_at,
+                  "ended_at_utc": None, "error_code": None}
+        self.sleep(GC_IDLE_BEFORE_SECONDS)
+        try:
+            response = self.request("POST", "/diagnostics/readiness-memory-gc",
+                                    json_body={}, timeout=GC_REQUEST_TIMEOUT_SECONDS)
+            try:
+                payload = response.json()
+            except ValueError:
+                raise SoakError("gc_contrast_invalid_receipt") from None
+            if not isinstance(payload, dict) or payload != {"requested": True}:
+                raise SoakError("gc_contrast_invalid_receipt")
+            result["requested"] = True
+        except SoakError:
+            result["error_code"] = "gc_contrast_failed"
+        self.sleep(GC_IDLE_AFTER_SECONDS)
+        result["ended_at_utc"] = datetime.now(timezone.utc).isoformat()
+        self.progress(json.dumps({"event": "gc_end", "phase_set": self.phase_set,
+                                  "ended_at_utc": result["ended_at_utc"],
+                                  "requested": result["requested"],
+                                  "error_code": result["error_code"]}, separators=(",", ":")))
+        return result
+
     def phase(self, name):
         started_at = datetime.now(timezone.utc).isoformat()
         started = self.clock()
@@ -198,6 +232,7 @@ class Probe:
         started_at = datetime.now(timezone.utc).isoformat()
         started = self.clock()
         phases, errors = [], []
+        gc_result = None
         try:
             self.setup()
             for index, name in enumerate(self.phases):
@@ -209,6 +244,11 @@ class Probe:
                 self.idle_status()
                 if index < len(self.phases) - 1:
                     self.sleep(self.idle_seconds)
+            if (self.phase_set == "mixed" and self.gc_contrast_enabled
+                    and len(phases) == len(self.phases) and not errors):
+                gc_result = self.gc_contrast()
+                if gc_result["error_code"]:
+                    errors.append(gc_result["error_code"])
             final_status = self.idle_status()
         except SoakError as exc:
             errors.append(str(exc))
@@ -219,7 +259,7 @@ class Probe:
                 "phase_set": self.phase_set,
                 "started_at_utc": started_at, "ended_at_utc": datetime.now(timezone.utc).isoformat(),
                 "duration_seconds": round(self.clock() - started, 2),
-                "phases": phases, "error_codes": errors[:10],
+                "phases": phases, "gc_contrast": gc_result, "error_codes": errors[:10],
                 "invariants": {"context_count": 1, "page_count": 1,
                                "control_owner_after_phase": "none" if final_status else "unknown"}}
 
@@ -231,6 +271,7 @@ def parse_args(argv=None):
     parser.add_argument("--key-file", type=Path, default=os.environ.get("WORKER_API_KEY_FILE"))
     parser.add_argument("--duration-seconds", type=int, default=210)
     parser.add_argument("--phase-set", choices=tuple(PHASE_SETS), default="components")
+    parser.add_argument("--gc-contrast", action="store_true")
     parser.add_argument("--output", type=Path, default=Path("/app/runtime/control-data/readiness-memory-probe.json"))
     parser.add_argument("--i-confirm-disposable", action="store_true", required=True)
     return parser.parse_args(argv)
@@ -238,7 +279,8 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    if args.duration_seconds != 210 or args.key_file is None:
+    if (args.duration_seconds != 210 or args.key_file is None
+            or args.gc_contrast and args.phase_set != "mixed"):
         print(json.dumps({"status": "BLOCKED", "error_code": "INVALID_BOUNDED_CONFIGURATION"}))
         return 2
     try:
@@ -248,7 +290,8 @@ def main(argv=None):
         print(json.dumps({"status": "BLOCKED", "error_code": "DISPOSABLE_GUARD_REJECTED"}))
         return 2
     with httpx.Client(trust_env=False, follow_redirects=False) as client:
-        report = Probe(client, key, phase_set=args.phase_set).run()
+        report = Probe(client, key, phase_set=args.phase_set,
+                       gc_contrast=args.gc_contrast).run()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"status": report["status"], "report": str(args.output)}, separators=(",", ":")))
