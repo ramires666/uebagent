@@ -1,0 +1,26 @@
+{
+  "checkpoint_id": "remediation-20261031-b437221",
+  "checkpoint_path": "/app/runtime/control-data/remediation-backups/remediation-20261031-b437221/tasks.sqlite3.checkpoint",
+  "created_at_utc": "2026-10-30T22:05:40.577989+00:00",
+  "database_file": "tasks.sqlite3.checkpoint",
+  "directory_mode_octal": "0700",
+  "file_mode_octal": "0600",
+  "role": "control",
+  "source_summary": {
+    "integrity_check": "ok",
+    "table_counts": {
+      "task_capabilities": 13,
+      "task_events": 671,
+      "tasks": 30
+    },
+    "task_count": 30,
+    "task_id_status_sha256": "d3622c36105002a82bb9c7212b552d3d554c6bc4305e7d6f4547a35b58a38694",
+    "task_status_counts": {
+      "cancelled": 14,
+      "expired": 5,
+      "succeeded": 11
+    }
+  },
+  "status": "CREATED",
+  "summary_matches_at_creation": true
+}

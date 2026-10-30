@@ -1,0 +1,19 @@
+{
+  "checkpoint_id": "remediation-20261031-b437221",
+  "checkpoint_path": "/app/runtime/worker-state/remediation-backups/remediation-20261031-b437221/worker.sqlite3.checkpoint",
+  "created_at_utc": "2026-10-30T22:05:40.777414+00:00",
+  "database_file": "worker.sqlite3.checkpoint",
+  "directory_mode_octal": "0700",
+  "file_mode_octal": "0600",
+  "role": "worker",
+  "source_summary": {
+    "integrity_check": "ok",
+    "table_counts": {
+      "action_ledger": 159,
+      "capability_uses": 5,
+      "cookie_imports": 13
+    }
+  },
+  "status": "CREATED",
+  "summary_matches_at_creation": true
+}

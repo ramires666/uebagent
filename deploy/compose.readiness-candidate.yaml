@@ -3,11 +3,11 @@
 # volumes, ports, aliases, and direct-egress overlay from the base files.
 services:
   control:
-    image: browser-mcp-readiness-control:candidate
+    image: browser-mcp-antibot-control:prompt-3184fb4
     pull_policy: never
 
   browser:
-    image: browser-mcp-readiness-browser:candidate
+    image: browser-mcp-remediation-browser:ebay-assets-b437221
     pull_policy: never
     mem_limit: 4096m
     memswap_limit: 4096m
