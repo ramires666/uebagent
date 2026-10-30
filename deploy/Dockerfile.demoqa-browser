@@ -1,3 +1,6 @@
 FROM browser-mcp-browser-verified-candidate:latest
 COPY worker /app/worker
 COPY src /app/src
+COPY scripts/readiness_browser_audit.py /app/audit/readiness_browser_audit.py
+COPY tests/test_runtime_audit.py /app/audit/test_runtime_audit.py
+COPY tests/smoke_browser_recovery.py /app/audit/smoke_browser_recovery.py

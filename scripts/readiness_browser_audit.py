@@ -283,35 +283,44 @@ def _guard() -> bool:
     )
 
 
-async def _main(output: Path) -> int:
+async def _main(output: Path, *, stdout_report: bool = False) -> int:
+    report = None
     if not _guard():
-        print(json.dumps({"overall_status": "BLOCKED", "error_code": "ISOLATED_RUNTIME_GUARD"}))
-        return 2
-    try:
-        report = await run_audit()
-    except Exception as exc:
-        # Exception type only; never serialize page text, URLs, or runtime values.
-        report = {
-            "schema_version": 1,
-            "run_id": str(uuid.uuid4()),
-            "started_at_utc": datetime.now(timezone.utc).isoformat(),
-            "overall_status": "FAIL",
-            "error_type": type(exc).__name__,
-            "limitations": ["Audit aborted; no exception message or browser content was recorded."],
-        }
+        report = {"schema_version": 1, "overall_status": "BLOCKED",
+                  "error_code": "ISOLATED_RUNTIME_GUARD"}
+    else:
+        try:
+            report = await run_audit()
+        except Exception as exc:
+            # Exception type only; never serialize page text, URLs, or runtime values.
+            report = {
+                "schema_version": 1,
+                "run_id": str(uuid.uuid4()),
+                "started_at_utc": datetime.now(timezone.utc).isoformat(),
+                "overall_status": "FAIL",
+                "error_type": type(exc).__name__,
+                "limitations": ["Audit aborted; no exception message or browser content was recorded."],
+            }
+    report["report_path"] = str(output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    summary = {"overall_status": report["overall_status"], "report": str(output)}
-    summary.update(report.get("scenario_counts", {}))
-    print(json.dumps(summary, ensure_ascii=False))
-    return 0 if report["overall_status"] == "PASS" else 1
+    serialized = json.dumps(report, ensure_ascii=False, indent=2)
+    output.write_text(serialized + "\n", encoding="utf-8")
+    if stdout_report:
+        print(serialized)
+    else:
+        summary = {"overall_status": report["overall_status"], "report": str(output)}
+        summary.update(report.get("scenario_counts", {}))
+        print(json.dumps(summary, ensure_ascii=False))
+    return 0 if report["overall_status"] == "PASS" else 1 if report["overall_status"] == "FAIL" else 2
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("readiness-browser-audit.json"))
+    parser.add_argument("--stdout-report", action="store_true",
+                        help="print the full sanitized report JSON instead of a compact summary")
     args = parser.parse_args()
-    return asyncio.run(_main(args.output))
+    return asyncio.run(_main(args.output, stdout_report=args.stdout_report))
 
 
 if __name__ == "__main__":

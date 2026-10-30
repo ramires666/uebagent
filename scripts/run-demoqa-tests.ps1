@@ -83,6 +83,20 @@ function Get-ComposeArgs {
     return @('compose', '-p', $Project, '-f', $ComposeFile)
 }
 
+function Wait-TestProjectContainersRemoved {
+    param([ValidateRange(1, 90)][int]$TimeoutSeconds = 30)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $remaining = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project")
+        if ($remaining.ExitCode -eq 0) {
+            $ids = @($remaining.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+            if ($ids.Count -eq 0) { return $true }
+        }
+        Start-Sleep -Seconds 1
+    }
+    return $false
+}
+
 function Wait-ProductionReady {
     $null = Get-Command Invoke-RestMethod -ErrorAction Stop
     $deadline = [DateTime]::UtcNow.AddSeconds(90)
@@ -192,7 +206,7 @@ function Copy-DemoqaScreenshots {
         $copiedScreen = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', $source, $target)
         if ($copiedScreen.ExitCode -ne 0) {
             $readerCode = 'import base64,pathlib,sys; p=pathlib.Path(sys.argv[1]); print(base64.b64encode(p.read_bytes()).decode("ascii"))'
-            $readArgs = @('exec', '-T', $controlIds[0], 'python', '-c', $readerCode, $sourcePath)
+            $readArgs = @('exec', $controlIds[0], 'python', '-c', $readerCode, $sourcePath)
             $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments $readArgs
             if ($encoded.ExitCode -ne 0) { throw "Could not export screenshot $name before test-stack cleanup." }
             try { $bytes = [Convert]::FromBase64String(($encoded.Output -join '').Trim()) }
@@ -218,8 +232,8 @@ function Export-ReadinessReport {
     $sourcePath = '/app/runtime/control-data/readiness-live-report.json'
     $copy = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', "$($controlIds[0]):$sourcePath", $target)
     if ($copy.ExitCode -ne 0) {
-        $readerCode = 'import base64,pathlib; print(base64.b64encode(pathlib.Path("/app/runtime/control-data/readiness-live-report.json").read_bytes()).decode("ascii"))'
-        $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', '-T', $controlIds[0], 'python', '-c', $readerCode)
+        $readerCode = "import base64,pathlib; print(base64.b64encode(pathlib.Path('/app/runtime/control-data/readiness-live-report.json').read_bytes()).decode('ascii'))"
+        $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', $controlIds[0], 'python', '-c', $readerCode)
         if ($encoded.ExitCode -ne 0) { throw 'Could not export readiness evidence before disposable stack cleanup.' }
         $encodedText = (($encoded.Output | ForEach-Object { [string]$_ }) -join '').Trim()
         if ($encodedText.Length -gt 2MB) { throw 'Readiness evidence exceeded the export size limit.' }
@@ -429,26 +443,21 @@ finally {
         $down = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
         if ($down.ExitCode -ne 0) {
             $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
-            if ($retryDown.ExitCode -ne 0) { $cleanupError = 'Could not remove the disposable DemoQA containers and network.' }
         }
-        $testWorkersResult = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project")
-        $testWorkers = $testWorkersResult.Output
-        if ($testWorkersResult.ExitCode -ne 0) { $cleanupError = 'Could not verify that the test containers were removed.' }
-        else {
-            $testWorkers = @($testWorkers | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
-            if ($testWorkers.Count -gt 0) {
-                # Retry only the disposable project; do not use global prune or volume removal.
-                $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
-                $remainingTest = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project")
-                if ($remainingTest.ExitCode -ne 0 -or @($remainingTest.Output | Where-Object { [string]$_ }).Count -gt 0) {
-                    $testBrowserResult = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project", '--filter', 'label=com.docker.compose.service=browser')
-                    $testBrowserIds = $testBrowserResult.Output
-                    if ($testBrowserResult.ExitCode -eq 0 -and $testBrowserIds.Count -gt 0) {
-                        $stopTest = Invoke-NativeCaptured -FilePath 'docker' -Arguments (@('stop') + $testBrowserIds)
-                    }
-                    $cleanupError = 'Test container cleanup did not fully succeed; production restore is allowed only after no test browser is running.'
-                }
+        $containersRemoved = Wait-TestProjectContainersRemoved -TimeoutSeconds 30
+        if (-not $containersRemoved) {
+            # Retry only this disposable compose project, then allow Docker time to
+            # finish asynchronous stops before deciding whether production may resume.
+            $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
+            $containersRemoved = Wait-TestProjectContainersRemoved -TimeoutSeconds 15
+        }
+        if (-not $containersRemoved) {
+            $testBrowserResult = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project", '--filter', 'label=com.docker.compose.service=browser')
+            $testBrowserIds = @($testBrowserResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+            if ($testBrowserResult.ExitCode -eq 0 -and $testBrowserIds.Count -gt 0) {
+                $stopTest = Invoke-NativeCaptured -FilePath 'docker' -Arguments (@('stop') + $testBrowserIds)
             }
+            $cleanupError = 'Could not verify removal of disposable DemoQA containers; production restore is blocked until cleanup is confirmed.'
         }
     }
     if ($productionWasRunning -and $productionStopAttempted) {

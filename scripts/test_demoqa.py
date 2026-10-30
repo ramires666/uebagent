@@ -14,6 +14,7 @@ from collections import Counter
 from pathlib import Path
 
 import httpx
+from demoqa_task_spec import browser_task_start_payload, result_exit_code
 
 ORIGIN = "https://demoqa.com"
 CONTROL = os.environ.get("DEMOQA_CONTROL_URL", "http://localhost:8080")
@@ -167,7 +168,14 @@ def main():
                         checked["selector"] = '[role="checkbox"][aria-label="Select Desktop"]'
                 baseline = worker("POST", "/verify", {"conditions": scenario_conditions})
                 item["baseline_verified"] = baseline.get("verified") is True
-                record = mcp("browser_task_start", {"goal": f"Open {ORIGIN + path} if needed. {goal}", "allowed_origins": [ORIGIN], "execution_mode": "autonomous", "idempotency_key": "demoqa-" + uuid.uuid4().hex, "limits": {"timeout_s": timeout_s, "max_steps": max_steps}, "success_conditions": scenario_conditions})
+                record = mcp("browser_task_start", browser_task_start_payload(
+                    goal=f"Open {ORIGIN + path} if needed. {goal}",
+                    origin=ORIGIN,
+                    idempotency_key="demoqa-" + uuid.uuid4().hex,
+                    timeout_s=timeout_s,
+                    max_steps=max_steps,
+                    success_conditions=scenario_conditions,
+                ))
                 task_id = record["task_id"]
                 deadline = time.monotonic() + timeout_s + 15
                 while time.monotonic() < deadline:
@@ -264,7 +272,8 @@ def main():
                 if item.get("cleanup") in {"cancel_unconfirmed", "resource_limit_violation"}:
                     break
         print(json.dumps({"results": results, "unsupported_not_run": ["upload", "browser_dialog", "frame_targeting", "multiple_windows"]}, ensure_ascii=False), flush=True)
+        return result_exit_code(results)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
