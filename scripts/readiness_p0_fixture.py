@@ -30,6 +30,19 @@ button{margin-top:20px;padding:10px 18px;font:15px Arial}#result{min-height:25px
 window.__fixtureSubmitCount=0;document.querySelector('#entry').onsubmit=e=>{e.preventDefault();window.__fixtureSubmitCount++;const vals=['first','last','email','age','salary','department'].map(id=>document.getElementById(id).value);document.querySelector('#result').textContent=vals.join(' | ')};
 </script></body></html>"""
 
+OVERLAY_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><title>Readiness overlay fixture</title><style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;font:16px Arial,sans-serif;background:#f4f6fa;color:#202124}
+main{position:relative;width:100%;height:100%}#target{position:fixed;left:500px;top:300px;width:220px;height:64px;z-index:1}
+#overlay{position:fixed;left:500px;top:300px;width:220px;height:64px;z-index:2;background:rgba(30,70,120,.18);border:2px solid #315f91}
+</style></head><body><main>
+<button id="target">Target action</button><div id="overlay" aria-label="Covering overlay"></div>
+<p>Target effects: <span id="target-count">0</span></p><p>Overlay effects: <span id="overlay-count">0</span></p>
+<script>
+window.__targetEffectCount=0;window.__overlayEffectCount=0;
+document.querySelector('#target').onclick=()=>{window.__targetEffectCount++;document.querySelector('#target-count').textContent=String(window.__targetEffectCount)};
+document.querySelector('#overlay').onclick=()=>{window.__overlayEffectCount++;document.querySelector('#overlay-count').textContent=String(window.__overlayEffectCount)};
+</script></main></body></html>"""
+
 
 def fixture_html(scenario: str) -> str:
     """Return fixed content for an allowlisted synthetic scenario."""
@@ -37,4 +50,6 @@ def fixture_html(scenario: str) -> str:
         return TREE_HTML
     if scenario == "form":
         return FORM_HTML
+    if scenario == "overlay":
+        return OVERLAY_HTML
     raise ValueError("unsupported P0 fixture scenario")

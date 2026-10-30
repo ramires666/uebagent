@@ -9,3 +9,5 @@ COPY scripts/readiness_live.py /app/scripts/readiness_live.py
 COPY scripts/readiness_task_control.py /app/scripts/readiness_task_control.py
 COPY scripts/readiness_p0.py /app/scripts/readiness_p0.py
 COPY scripts/readiness_p0_fixture.py /app/scripts/readiness_p0_fixture.py
+COPY scripts/readiness_runtime_integration.py /app/scripts/readiness_runtime_integration.py
+COPY scripts/readiness_overlay_integration.py /app/scripts/readiness_overlay_integration.py

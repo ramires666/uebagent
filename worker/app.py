@@ -1791,7 +1791,7 @@ class BrowserRuntime:
                 expected_epoch=expected_epoch, site_capability=site_capability, action_id=action_id)
         try:
             current = urlsplit(await self._adapter.url())
-            trace_paths = {"/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties", "/tree", "/form"}
+            trace_paths = {"/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties", "/tree", "/form", "/overlay"}
             trace_page = current.scheme == "https" and current.path.rstrip("/") in trace_paths and current.hostname in {"demoqa.com", "readiness-fixture.test"}
         except Exception:
             trace_page = False
@@ -2704,7 +2704,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
             permitted = parsed.scheme == "https" and ((parsed.hostname == "demoqa.com" and path in {
                 "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}) or
                 (parsed.hostname == "readiness-fixture.test" and path in {
-                "/tree", "/form", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}))
+                "/tree", "/form", "/overlay", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}))
             if not permitted:
                 raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
             return {"records": runtime._readiness_trace.snapshot()}
@@ -2719,7 +2719,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
         try:
             parsed = urlsplit(await runtime._adapter.url())
             if parsed.scheme != "https" or parsed.hostname not in {"demoqa.com", "readiness-fixture.test"} or parsed.path.rstrip("/") not in {
-                    "/tree", "/form", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}:
+                    "/tree", "/form", "/overlay", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}:
                 raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
         except HTTPException: raise
         except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
@@ -2730,7 +2730,7 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
     async def install_readiness_fixture(body: dict[str, Any]) -> dict[str, Any]:
         readiness_trace_allowed()
         if (set(body) != {"scenario"} or not isinstance(body.get("scenario"), str)
-                or body["scenario"] not in {"tree", "form"}):
+                or body["scenario"] not in {"tree", "form", "overlay"}):
             raise HTTPException(status_code=422, detail={"code": "INVALID_FIXTURE_SCENARIO"})
         if not getattr(runtime, "_started", False) or getattr(runtime, "_page", None) is None:
             raise HTTPException(status_code=503, detail={"code": "BROWSER_UNAVAILABLE"})

@@ -17,6 +17,7 @@ param(
     [switch]$RemoveTestVolume,
     [switch]$DiagnosticGate,
     [switch]$P0Diagnostics,
+    [switch]$RuntimeIntegrationChecks,
     [switch]$ObservationHints,
     [string[]]$P0Scenarios = @('checkbox', 'web_table'),
     [ValidateRange(0, 600)][int]$DiagnosticHoldSeconds = 120,
@@ -340,6 +341,14 @@ try {
     if ($P0Diagnostics -and ($ProbeOnly -or $DiagnosticGate -or $ReadinessChecks -or $TaskControlChecks -or $RunCasesAfterReadableCandidate)) {
         throw 'P0Diagnostics cannot be combined with probe, gate, readiness, task-control, or readability-gated modes.'
     }
+    if ($RuntimeIntegrationChecks) {
+        if (-not $SkipCases) {
+            throw 'RuntimeIntegrationChecks requires SkipCases to avoid mixing integration checks with model-driven cases.'
+        }
+        if ($P0Diagnostics -or $ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate) {
+            throw 'RuntimeIntegrationChecks cannot be combined with P0, probe, diagnostic-gate, or readability-gated modes.'
+        }
+    }
     Assert-ObservationHintsMode -Enabled $ObservationHints -Protocol $ModelProtocol -ProbeOnly $ProbeOnly `
         -DiagnosticGate $DiagnosticGate -SkipCases $SkipCases -P0Diagnostics $P0Diagnostics `
         -RunCasesAfterReadableCandidate $RunCasesAfterReadableCandidate
@@ -373,6 +382,7 @@ try {
         $env:READINESS_ACTION_TRACE = '1'
         $env:READINESS_P0_SCENARIOS = ($P0Scenarios -join ',')
     }
+    if ($RuntimeIntegrationChecks) { $env:READINESS_ACTION_TRACE = '1' }
     if ($ObservationHints) { $env:BROWSER_OBSERVATION_HINTS = '1' }
     else { $env:BROWSER_OBSERVATION_HINTS = '0' }
     if ($ExtendedComplex) { $env:DEMOQA_EXTENDED_COMPLEX = '1' } else { Remove-Item Env:DEMOQA_EXTENDED_COMPLEX -ErrorAction SilentlyContinue }
@@ -545,6 +555,27 @@ try {
         )
         $taskControlExit = Invoke-RunnerStream -RunnerArgs $taskControlArgs
         if ($taskControlExit -ne 0) { throw "Disposable task control checks failed (exit $taskControlExit)." }
+    }
+
+    if ($RuntimeIntegrationChecks) {
+        $runtimeIntegrationArgs = (Get-ComposeArgs) + @(
+            'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+            '-e', 'READINESS_RUNTIME_INTEGRATION=1', '-e', 'READINESS_ACTION_TRACE=1',
+            '-e', 'BROWSER_WORKER_URL=http://browser:7070',
+            'control', 'python', '/app/scripts/readiness_runtime_integration.py', '--i-confirm-disposable'
+        )
+        $runtimeIntegrationExit = Invoke-RunnerStream -RunnerArgs $runtimeIntegrationArgs
+
+        $overlayIntegrationArgs = (Get-ComposeArgs) + @(
+            'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+            '-e', 'READINESS_RUNTIME_INTEGRATION=1', '-e', 'READINESS_ACTION_TRACE=1',
+            '-e', 'BROWSER_WORKER_URL=http://browser:7070',
+            'control', 'python', '/app/scripts/readiness_overlay_integration.py'
+        )
+        $overlayIntegrationExit = Invoke-RunnerStream -RunnerArgs $overlayIntegrationArgs
+        if ($runtimeIntegrationExit -ne 0 -or $overlayIntegrationExit -ne 0) {
+            throw "Disposable runtime integration checks failed (runtime $runtimeIntegrationExit, overlay $overlayIntegrationExit)."
+        }
     }
 
     $profileDigestAfter = Get-TestProfileDigest

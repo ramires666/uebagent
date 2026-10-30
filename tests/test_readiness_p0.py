@@ -120,6 +120,17 @@ def test_fixture_behavior_in_offline_headless_chromium():
             assert await page.evaluate("window.__fixtureSubmitCount") == 1
             assert page.url == "about:blank"
             assert requested == []
+
+            await page.set_content(fixture_html("overlay"), wait_until="load")
+            assert await page.locator("#target").bounding_box() == {
+                "x": 500, "y": 300, "width": 220, "height": 64,
+            }
+            await page.mouse.click(610, 332)
+            assert await page.locator("#target-count").inner_text() == "0"
+            assert await page.locator("#overlay-count").inner_text() == "1"
+            assert await page.evaluate("window.__targetEffectCount") == 0
+            assert await page.evaluate("window.__overlayEffectCount") == 1
+            assert requested == []
             await context.close()
             await browser.close()
         finally:
