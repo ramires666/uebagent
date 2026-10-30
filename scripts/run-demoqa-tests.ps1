@@ -134,6 +134,29 @@ function Get-ValidatedAttributionFingerprintSeed {
     return [pscustomobject]@{ Version=[string]$result.version; Digest=[string]$result.file_sha256 }
 }
 
+function Save-AttributionWorkerStartupDiagnostic {
+    if (-not $MemoryAttributionChecks) { return }
+    try {
+        $directory = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $target = Join-Path $directory ('private-worker-startup-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '.log')
+        $browserRows = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'browser'))
+        $browserIds = @($browserRows.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+        if ($browserRows.ExitCode -ne 0 -or $browserIds.Count -ne 1) {
+            $content = 'Private diagnostic: disposable browser container logs unavailable.'
+        }
+        else {
+            $logs = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('logs', '--tail', '200', $browserIds[0])
+            $content = (($logs.Output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine)
+            if (-not $content) { $content = 'Private diagnostic: browser emitted no startup log lines.' }
+            if ($content.Length -gt 65536) { $content = $content.Substring($content.Length - 65536) }
+        }
+        [System.IO.File]::WriteAllText($target, $content + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Saved private disposable worker startup diagnostic: $target"
+    }
+    catch { Write-Warning 'Could not preserve the private disposable worker startup diagnostic.' }
+}
+
 function Get-ComposeArgs {
     return @('compose', '-p', $Project, '-f', $ComposeFile)
 }
@@ -791,6 +814,12 @@ try {
             New-Item -ItemType Directory -Path $stageProfiles -Force | Out-Null
             Copy-Item -LiteralPath $AttributionSeedPath -Destination (Join-Path $stageProfiles 'default.camoufox-fingerprint.json')
             Invoke-DockerChecked -Arguments @('cp', $stageProfiles, "$($stoppedBrowserIds[0]):/app/runtime/worker-state/") -FailureMessage 'Could not inject the validated shared fingerprint into the stopped disposable browser' | Out-Null
+            $fixModeCode = "import hashlib,os,stat,sys; from pathlib import Path; root=Path('/seed').resolve(strict=True); p=Path('/seed/profiles/default.camoufox-fingerprint.json'); before=p.lstat(); ok=stat.S_ISREG(before.st_mode) and not stat.S_ISLNK(before.st_mode) and p.resolve(strict=True).is_relative_to(root); digest=hashlib.sha256(p.read_bytes()).hexdigest(); ok=ok and digest==sys.argv[1]; os.chmod(p,0o600,follow_symlinks=False) if ok else None; after=p.lstat(); ok=ok and stat.S_ISREG(after.st_mode) and stat.S_IMODE(after.st_mode)==0o600 and hashlib.sha256(p.read_bytes()).hexdigest()==sys.argv[1]; print('SEED_MODE_OK' if ok else 'SEED_MODE_REJECTED'); raise SystemExit(0 if ok else 1)"
+            $mountSpec = 'type=volume,source=' + $volumeName + ',target=/seed'
+            $modeFix = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('run', '--rm', '--network', 'none', '--read-only', '--mount', $mountSpec, '--entrypoint', 'python', 'browser-mcp-demoqa-browser:test', '-c', $fixModeCode, $attributionSeedDigest)
+            if ($modeFix.ExitCode -ne 0 -or (($modeFix.Output -join '').Trim() -ne 'SEED_MODE_OK')) {
+                throw 'Could not apply and verify the required private mode on the shared fingerprint in the disposable volume.'
+            }
         }
     }
     # Mark cleanup before `up`: compose can partially create the browser even when it fails.
@@ -808,7 +837,10 @@ try {
             if ($session.authenticated -eq $true) { $uiReady = $true; break }
         } catch { Start-Sleep -Seconds 2 }
     }
-    if (-not $uiReady) { throw 'Disposable local UI session did not become ready within 90 seconds.' }
+    if (-not $uiReady) {
+        Save-AttributionWorkerStartupDiagnostic
+        throw 'Disposable local UI session did not become ready within 90 seconds.'
+    }
     $script:DemoqaWebSession = $web
 
     $healthReady = $false
@@ -819,7 +851,10 @@ try {
             if ($health.status -eq 'ok' -or $health.ready -eq $true) { $healthReady = $true; break }
         } catch { Start-Sleep -Seconds 2 }
     }
-    if (-not $healthReady) { throw 'Disposable control service health did not become ready within 60 seconds.' }
+    if (-not $healthReady) {
+        Save-AttributionWorkerStartupDiagnostic
+        throw 'Disposable control service health did not become ready within 60 seconds.'
+    }
 
     if ($ReadinessChecks) {
         $readinessArgs = (Get-ComposeArgs) + @(
