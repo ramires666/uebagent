@@ -1,0 +1,16 @@
+{
+  "schema": "eff-remediation-state/v1",
+  "page_origin": "https://coveryourtracks.eff.org",
+  "page_path": "/results",
+  "control_owner": "none",
+  "manual_cross_origin_navigation": false,
+  "context_count": 1,
+  "page_count": 1,
+  "action_in_progress": false,
+  "resource_violation": false,
+  "recovery_needed": false,
+  "viewport": [1440, 900],
+  "route_generation": 1,
+  "blocked_reason_counts": {},
+  "blocked_origin_class_counts": {}
+}

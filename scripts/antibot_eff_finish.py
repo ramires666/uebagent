@@ -50,8 +50,9 @@ def eff_summary_complete(url: str, predicates: list[bool]) -> bool:
             and len(predicates) >= 9 and any(predicates[:2]) and all(predicates[2:9]))
 
 
-def verify(client: httpx.Client, headers: dict, conditions: list[dict]) -> list[bool]:
-    response = client.post(WORKER + "/verify", headers=headers, json={"conditions": conditions})
+def verify(client: httpx.Client, headers: dict, conditions: list[dict], *, timeout_s: float | None = None) -> list[bool]:
+    request_options = {} if timeout_s is None else {"timeout": timeout_s}
+    response = client.post(WORKER + "/verify", headers=headers, json={"conditions": conditions}, **request_options)
     response.raise_for_status()
     checks = response.json().get("checks")
     if not isinstance(checks, list) or len(checks) != len(conditions):
@@ -169,6 +170,8 @@ def main() -> int:
     if not 5 <= wait_s <= 180:
         raise SystemExit("bounded_wait_out_of_range")
     started_at = datetime.now(timezone.utc).isoformat()
+    run_started_monotonic = time.monotonic()
+    cta_started_monotonic: float | None = None
     report: dict = {"schema": "antibot-eff-remediation/v1", "site": "eff", "profile_id": "p2",
                     "run": 3, "run_type": "explicit_eff_origin_allowlist", "verdict": "PARTIAL",
                     "challenge_detected": False, "lease": {"human_gate_acquired": False,
@@ -217,7 +220,10 @@ def main() -> int:
             elif not (cta_checks[0] and cta_checks[1]):
                 report["verdict"] = "PARTIAL"
             else:
-                gate = client.post(WORKER + "/gate", headers=headers, json={"owner": "human"})
+                cta_started_monotonic = time.monotonic()
+                deadline = cta_started_monotonic + wait_s
+                gate = client.post(WORKER + "/gate", headers=headers, json={"owner": "human"},
+                                   timeout=max(0.1, min(10, deadline - time.monotonic())))
                 gate.raise_for_status()
                 if gate.json().get("control_owner") != "human":
                     raise RuntimeError("human_gate_not_acquired")
@@ -231,7 +237,7 @@ def main() -> int:
                         "control_epoch": epoch, "allowed_origins": list(EFF_ALLOWED_ORIGINS),
                         "allow_cross_origin_navigation": False,
                         "action": {"kind": "click", "x": click_x, "y": click_y},
-                    })
+                    }, timeout=max(0.1, min(15, deadline - time.monotonic())))
                     click.raise_for_status()
                     receipt = click.json()
                     if receipt.get("outcome") != "applied":
@@ -239,7 +245,6 @@ def main() -> int:
                     report["click_outcome"] = "applied"
                     report["cta_visual_confirmation"] = {"confirmed_before_click": True,
                                                           "coordinates": [click_x, click_y]}
-                    deadline = time.monotonic() + wait_s
                     result_checks = ([{"kind": "text_present", "text": "Here are your Cover Your Tracks results"},
                                       {"kind": "text_present", "text": "Our tests indicate that"}]
                                      + [{"kind": "text_present", "text": label} for label in RESULT_LABELS]
@@ -254,9 +259,18 @@ def main() -> int:
                                      + [{"kind": "text_present", "text": label} for label in CHALLENGES])
                     final_url: str | None = None
                     while time.monotonic() < deadline:
-                        current_response = client.get(WORKER + "/status", headers=headers)
-                        current_response.raise_for_status()
-                        current = current_response.json()
+                        remaining_s = deadline - time.monotonic()
+                        if remaining_s <= 0.05:
+                            report["stop_reason"] = "predicate_deadline_elapsed"
+                            break
+                        try:
+                            current_response = client.get(WORKER + "/status", headers=headers,
+                                                          timeout=max(0.05, min(10, remaining_s)))
+                            current_response.raise_for_status()
+                            current = current_response.json()
+                        except httpx.TimeoutException:
+                            report["stop_reason"] = "predicate_deadline_elapsed"
+                            break
                         blocked_counts = safe_blocked_reason_counts(current)
                         if (current.get("control_owner") != "human"
                                 or current.get("manual_cross_origin_navigation") is not False):
@@ -268,7 +282,15 @@ def main() -> int:
                             report["stop_reason"] = "unexpected_origin"
                             report["verdict"] = "PARTIAL"
                             break
-                        values = verify(client, headers, result_checks)
+                        remaining_s = deadline - time.monotonic()
+                        if remaining_s <= 0.05:
+                            report["stop_reason"] = "predicate_deadline_elapsed"
+                            break
+                        try:
+                            values = verify(client, headers, result_checks, timeout_s=max(0.05, remaining_s))
+                        except httpx.TimeoutException:
+                            report["stop_reason"] = "predicate_deadline_elapsed"
+                            break
                         challenge_now = any(values[-len(CHALLENGES):])
                         report["challenge_detected"] = challenge_now
                         answer_options_start = 6
@@ -331,8 +353,11 @@ def main() -> int:
                                                "summary_predicates": aggregate, "summary_values_retained": False})
             report["observed_at_utc"] = datetime.now(timezone.utc).isoformat()
             report["started_at_utc"] = started_at
-            report["scope"] = f"one public EFF CTA; exact EFF diagnostic origins only; {wait_s}-second predicate deadline"
-            report["guest_profile"] = {"provenance": "dedicated fresh p2 worker_state volume",
+            report["elapsed_seconds"] = round(time.monotonic() - run_started_monotonic, 3)
+            report["cta_phase_elapsed_seconds"] = (round(time.monotonic() - cta_started_monotonic, 3)
+                                                    if cta_started_monotonic is not None else None)
+            report["scope"] = f"one public EFF CTA; exact EFF diagnostic origins only; {wait_s}-second gate + click + predicate deadline"
+            report["guest_profile"] = {"provenance": "dedicated p2 worker_state volume retained from prior P2 run; no cookies imported",
                                         "cookies_imported": False,
                                         "authentication": "no account credentials or login submitted"}
             report["runtime"] = {"application_image": "browser-mcp-antibot-control:prompt-3184fb4",

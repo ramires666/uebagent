@@ -1,0 +1,106 @@
+{
+  "schema": "readiness-model-coverage/v1",
+  "status": "FAIL",
+  "scenarios": [
+    {
+      "scenario": "demoqa_checkbox_readonly",
+      "status": "PASS",
+      "task_id": "3946ec25-9de0-4bd6-8c34-f9f17df7d52d",
+      "started_at": "2026-10-30T21:35:47+00:00",
+      "finished_at": "2026-10-30T21:36:12+00:00",
+      "limits": {
+        "max_steps": 16,
+        "timeout_s": 420
+      },
+      "control_origin": "http://localhost:18081",
+      "runtime_profile_hint": "p2",
+      "prompt_provenance": "scripts/readiness_model_coverage.py:SCENARIOS",
+      "task_status": "succeeded",
+      "phase": "verified",
+      "verified": true,
+      "milestone_independently_verified": true,
+      "final_conditions_independently_verified": true,
+      "signed_out_verified_before_search": true,
+      "item_independently_verified": false,
+      "history_back_to_results_verified": false,
+      "action_kinds": [
+        "navigate",
+        "click",
+        "click"
+      ],
+      "read_only_actions_only": true,
+      "challenge_detected": false,
+      "error_code": null
+    },
+    {
+      "scenario": "ebay_guest_search",
+      "status": "PARTIAL",
+      "task_id": "14ad22d4-98a0-4bd5-a8f6-a895c882345a",
+      "started_at": "2026-10-30T21:36:12+00:00",
+      "finished_at": "2026-10-30T21:39:00+00:00",
+      "limits": {
+        "max_steps": 16,
+        "timeout_s": 420
+      },
+      "control_origin": "http://localhost:18081",
+      "runtime_profile_hint": "p2",
+      "prompt_provenance": "scripts/readiness_model_coverage.py:SCENARIOS",
+      "task_status": "waiting_human",
+      "phase": "model_output_invalid",
+      "verified": false,
+      "milestone_independently_verified": true,
+      "final_conditions_independently_verified": true,
+      "signed_out_verified_before_search": true,
+      "item_independently_verified": false,
+      "history_back_to_results_verified": false,
+      "action_kinds": [
+        "navigate",
+        "navigate",
+        "wait",
+        "scroll",
+        "wait",
+        "wait",
+        "wait",
+        "wait",
+        "scroll",
+        "scroll",
+        "wait",
+        "wait",
+        "scroll",
+        "scroll"
+      ],
+      "read_only_actions_only": true,
+      "challenge_detected": false,
+      "error_code": "MODEL_OUTPUT_INVALID"
+    }
+  ],
+  "worker_observation": {
+    "url_host": "www.ebay.com",
+    "control_owner": "none",
+    "context_count": 1,
+    "page_count": 1,
+    "blocked_resources": [
+      {
+        "host": "ir.ebaystatic.com",
+        "resource_type": "stylesheet",
+        "reason": "origin_not_allowed",
+        "method": "GET",
+        "count": 4
+      },
+      {
+        "host": "ir.ebaystatic.com",
+        "resource_type": "script",
+        "reason": "origin_not_allowed",
+        "method": "GET",
+        "count": 16
+      },
+      {
+        "host": "i.ebayimg.com",
+        "resource_type": "image",
+        "reason": "origin_not_allowed",
+        "method": "GET",
+        "count": 32
+      }
+    ]
+  }
+}

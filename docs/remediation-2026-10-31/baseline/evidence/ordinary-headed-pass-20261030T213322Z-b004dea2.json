@@ -1,0 +1,45 @@
+﻿{
+    "status":  "PASS",
+    "run_id":  "20261030T213322Z-b004dea2",
+    "browser":  "Microsoft Edge",
+    "browser_version":  "156.0.4314.50",
+    "profile_initially_empty":  true,
+    "profile_source":  "new unique empty workspace runtime directory; no existing profile attached",
+    "control_mode":  "automated ordinary headed",
+    "human_manual":  false,
+    "user_profile_or_cookies_read_or_imported":  false,
+    "context_count":  1,
+    "page_count":  1,
+    "functional_steps_verified":  true,
+    "dwell_seconds_per_page":  5,
+    "owned_context_closed":  true,
+    "elapsed_seconds":  12.078,
+    "steps":  [
+                  {
+                      "action":  "navigate",
+                      "url":  "https://demoqa.com/",
+                      "home_elements_card_visible":  true,
+                      "read_only":  true
+                  },
+                  {
+                      "action":  "click",
+                      "url":  "https://demoqa.com/elements",
+                      "elements_content_markers_present":  [
+                                                               "Elements",
+                                                               "Text Box",
+                                                               "Check Box",
+                                                               "Web Tables"
+                                                           ],
+                      "read_only":  true
+                  },
+                  {
+                      "action":  "history_back",
+                      "url":  "https://demoqa.com/",
+                      "home_elements_card_visible":  true,
+                      "read_only":  true
+                  }
+              ],
+    "finished_at_utc":  "2026-10-30T21:33:34.753752+00:00",
+    "profile_path":  "runtime/remediation-2026-10-31/baseline/20261030T213322Z-b004dea2/profile",
+    "source_metadata_path":  "runtime/remediation-2026-10-31/baseline/20261030T213322Z-b004dea2/metadata.json"
+}

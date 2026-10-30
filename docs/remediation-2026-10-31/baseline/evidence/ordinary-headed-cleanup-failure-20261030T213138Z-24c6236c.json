@@ -1,0 +1,25 @@
+﻿{
+    "status":  "FAIL",
+    "run_id":  "20261030T213138Z-24c6236c",
+    "browser":  "Microsoft Edge",
+    "browser_version":  "unknown",
+    "profile_initially_empty":  true,
+    "control_mode":  "automated ordinary headed",
+    "human_manual":  false,
+    "context_count":  1,
+    "page_count":  1,
+    "functional_steps_verified":  true,
+    "functional_steps_source":  "derived from three successful step receipts in original metadata; runner did not yet emit this field",
+    "owned_context_closed":  true,
+    "failure_code":  "playwright_stop_failed",
+    "failure_phase":  "cleanup",
+    "elapsed_seconds":  2.091,
+    "step_actions":  [
+                         "navigate",
+                         "click",
+                         "history_back"
+                     ],
+    "finished_at_utc":  "2026-10-30T21:31:40.931649+00:00",
+    "profile_path":  "runtime/remediation-2026-10-31/baseline/20261030T213138Z-24c6236c/profile",
+    "source_metadata_path":  "runtime/remediation-2026-10-31/baseline/20261030T213138Z-24c6236c/metadata.json"
+}

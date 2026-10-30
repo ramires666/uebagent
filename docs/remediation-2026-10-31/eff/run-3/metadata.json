@@ -1,0 +1,87 @@
+{
+    "schema":  "antibot-eff-remediation/v1",
+    "site":  "eff",
+    "profile_id":  "p2",
+    "run":  3,
+    "run_type":  "explicit_eff_origin_allowlist",
+    "verdict":  "PASS",
+    "challenge_detected":  false,
+    "lease":  {
+                  "human_gate_acquired":  true,
+                  "manual_cross_origin_enabled":  false,
+                  "explicit_eff_origin_allowlist":  [
+                                                        "https://coveryourtracks.eff.org",
+                                                        "https://firstpartysimulator.net",
+                                                        "https://firstpartysimulator.org",
+                                                        "https://trackersimulator.org",
+                                                        "https://eviltracker.net",
+                                                        "https://do-not-tracker.org",
+                                                        "https://media.net"
+                                                    ],
+                  "released":  true,
+                  "owner_during_wait":  "human",
+                  "explicit_origin_policy_held":  true,
+                  "lease_lost":  false
+              },
+    "cta_visible_verified":  true,
+    "anonymous_data_notice_visible":  true,
+    "preflight":  {
+                      "no_active_task":  true,
+                      "active_task_count":  0,
+                      "url_is_eff_home":  true,
+                      "owner_none":  true,
+                      "context_count":  1,
+                      "page_count":  1
+                  },
+    "click_outcome":  "applied",
+    "cta_visual_confirmation":  {
+                                    "confirmed_before_click":  true,
+                                    "coordinates":  [
+                                                        278,
+                                                        564
+                                                    ]
+                                },
+    "completion_event":  "eff_results_heading_labels_and_answer_nodes_visible",
+    "blocked_resource_reason_counts":  {
+
+                                       },
+    "result_page":  {
+                        "origin":  "https://coveryourtracks.eff.org",
+                        "path":  "/results",
+                        "summary_predicates":  {
+                                                   "results_heading_exact":  true,
+                                                   "results_heading_alternative":  true,
+                                                   "Blocking tracking ads?":  true,
+                                                   "Blocking invisible trackers?":  true,
+                                                   "Protecting you from fingerprinting?":  true,
+                                                   "summary_sentence_populated":  true,
+                                                   "ad_answer_present":  true,
+                                                   "tracker_answer_present":  true,
+                                                   "fingerprinting_answer_present":  true
+                                               },
+                        "summary_values_retained":  false,
+                        "summary_labels_complete":  true,
+                        "summary_answers_complete":  true
+                    },
+    "observed_at_utc":  "2026-10-30T21:31:46.055942+00:00",
+    "started_at_utc":  "2026-10-30T21:31:21.008155+00:00",
+    "scope":  "one public EFF CTA; exact EFF diagnostic origins only; 120-second predicate deadline",
+    "guest_profile":  {
+                          "provenance":  "Dedicated P2 worker_state volume already in use for the prior P2 EFF run; this corrective run reused it, with no imported cookies or submitted account credentials.",
+                          "cookies_imported":  false,
+                          "authentication":  "no account credentials or login submitted"
+                      },
+    "runtime":  {
+                    "application_image":  "browser-mcp-antibot-control:prompt-3184fb4",
+                    "browser_backend":  "camoufox",
+                    "viewport":  [
+                                     1440,
+                                     900
+                                 ],
+                    "network_route":  "antibot-2026-10-31-direct",
+                    "route_generation":  1
+                },
+    "diagnostic_policy":  "EFF first-party flow, its three configured tracker endpoints, and media.net for the aat=1 results path are allowed for functional completion; this is not a network tracker-blocking verdict",
+    "evidence_scope":  "summary labels/answer-node booleans and blocked reason counts only; no query string, raw page, cookies, IP, fingerprint values, or screenshots",
+    "elapsed_seconds":  25.048
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "eff-remediation-preparation/v1",
+  "initial_path": "/kcarter",
+  "challenge_seen_before": false,
+  "navigation_performed": true,
+  "page_origin": "https://coveryourtracks.eff.org",
+  "page_path": "/",
+  "context_count": 1,
+  "page_count": 1,
+  "gate_released": true,
+  "cta_visual_confirmation": {
+    "confirmed_before_click": true,
+    "coordinates": [278, 564],
+    "viewport": [1440, 900],
+    "screenshot_temporary_reviewed_and_deleted": true
+  },
+  "operator_session": "local_ui_authenticated",
+  "account_login_or_credentials_submitted": false
+}
