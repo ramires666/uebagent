@@ -229,6 +229,44 @@ def _generic_client(handler, *, alias="auto") -> ModelClient:
                        httpx.MockTransport(handler))
 
 
+@pytest.mark.asyncio
+async def test_managed_generic_verbatim_scrub_keeps_generic_action_json_for_next_turn() -> None:
+    secret = "private exact text that must not remain in model history"
+    requests: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return _models("vision")
+        body = json.loads(request.content)
+        requests.append(body)
+        action = {"kind": "type_text", "text": secret} if len(requests) == 1 else {"kind": "wait", "seconds": 1}
+        return httpx.Response(200, json={"choices": [{"message": {"tool_calls": [
+            {"type": "function", "function": {"name": "browser_action", "arguments": action}}
+        ]}}]})
+
+    model = _generic_client(handler)
+    model.begin_task("managed-verbatim")
+    assert await model.next_action("Enter the supplied exact text", PNG) == {
+        "kind": "type_text", "text": secret,
+    }
+    model.record_verbatim_text_action()
+    model.record_outcome("applied")
+    assert await model.next_action("Enter the supplied exact text", PNG) == {
+        "kind": "wait", "seconds": 1.0,
+    }
+
+    messages = requests[1]["messages"]
+    assistant_contents = [message["content"] for message in messages if message["role"] == "assistant"]
+    assert assistant_contents == ['{"kind":"type_text","text":"__VERBATIM_TEXT__"}']
+    assert json.loads(assistant_contents[0]) == {
+        "kind": "type_text", "text": "__VERBATIM_TEXT__",
+    }
+    serialized = json.dumps(messages)
+    assert secret not in serialized
+    assert "<tool_call>" not in serialized
+    assert '"name":"computer_use"' not in serialized
+
+
 def test_settings_reject_unknown_model_protocol_before_creating_state(tmp_path) -> None:
     settings = Settings(data_dir=tmp_path / "data", model_protocol="guess", operator_auth_mode="local")
     with pytest.raises(ValueError, match="MODEL_PROTOCOL"):

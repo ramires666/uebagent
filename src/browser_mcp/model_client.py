@@ -640,6 +640,12 @@ class ModelClient:
         """Replace the latest managed type action with a payload-free placeholder."""
         if not self._conversation or self._conversation[-1].get("role") != "assistant":
             return
+        if self.settings.protocol == "generic":
+            self._conversation[-1]["content"] = json.dumps(
+                {"kind": "type_text", "text": "__VERBATIM_TEXT__"},
+                ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+            )
+            return
         arguments = {"action": "type", "text": "__VERBATIM_TEXT__"}
         encoded = json.dumps({"name": "computer_use", "arguments": arguments},
                              ensure_ascii=False, separators=(",", ":"), allow_nan=False)
