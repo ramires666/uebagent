@@ -176,7 +176,7 @@ async def test_viewer_task_composer_posts_exact_goal_once_and_reuses_key_after_u
         await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html")
         await page.wait_for_function("document.getElementById('task-site-hint').textContent === 'Сайт: https://example.test'")
         assert "private" not in await page.locator("#task-site-hint").inner_text()
-        command = "  Open the account and summarize its status.\n"
+        command = "  \u0418\u0432\u0430\u043d: \u00ab\u0441\u0440\u0430\u0432\u043d\u0438 \u0446\u0435\u043d\u044b\u00bb.\n"
         await page.locator("#task-command").fill(command)
         await page.evaluate("""() => {
           const button = document.getElementById('task-command-submit');
