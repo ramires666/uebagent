@@ -1,6 +1,6 @@
 # Инженерный отчёт о готовности к выпуску
 
-**Снимок состояния:** 30 октября 2026; bounded lifecycle/cookie bridge run PASS. soak15m1 завершился FAIL через 359,75 с из запрошенных 900 с.
+**Снимок состояния:** 30 октября 2026; bounded lifecycle/cookie bridge run PASS. Docker Desktop VM memory cap увеличен с 4096 до 8192 MiB и postflight пройден; повторный soak при browser-container 4 GiB сейчас выполняется, результата пока нет. soak15m1 завершился FAIL через 359,75 с из запрошенных 900 с.
 
 **Решение:** **NO-GO для production release**, пока обязательные release gates не закрыты фактическими результатами.
 
@@ -25,7 +25,7 @@
 
 Cookie bridge прошёл через scripts/readiness_cookie_bridge.py:_run: synthetic extension-protocol source маршрутизирован через ChromeBroker, TaskCookieImporter и WorkerClient. Отсутствующий и неоднозначный source блокируются до import. Проверены baseline MISSING → READY, импорт одного cookie для fixture и исключение unrelated origin; cookie value не записывается в task events. Это synthetic protocol integration, **не реальный Chrome extension или Chrome E2E**.
 
-Агрегат содержит только allowlisted статусы, Boolean и counts; токены, URL, profile data и cookie values исключены. Lifecycle/cookie PASS не меняет release verdict: soak15m1 остаётся FAIL при 99,88% RAM peak и 359,75/900 с, поэтому production release остаётся **NO-GO**. memoryprobe1 и memorymixed1 завершены как диагностика; mixed run выявил фазовый рост anon memory при стабильной file memory, но не определил причину и не является PASS или исправлением. Готовится контролируемое 15-минутное сравнение RAM-бюджетов. [Сводка mixed run](evidence/memorymixed1-summary.json).
+Агрегат содержит только allowlisted статусы, Boolean и counts; токены, URL, profile data и cookie values исключены. Lifecycle/cookie PASS не меняет release verdict: soak15m1 остаётся FAIL при 99,88% RAM peak и 359,75/900 с, поэтому production release остаётся **NO-GO**. memoryprobe1 и memorymixed1 завершены как диагностика; mixed run выявил фазовый рост anon memory при стабильной file memory, но не определил причину и не является PASS или исправлением. VM cap 8 GiB применён; отдельный soak при временном browser cgroup 4 GiB выполняется, его итоговых метрик пока нет. Production browser limit остаётся 2816 MiB. [Сводка mixed run](evidence/memorymixed1-summary.json) · [Docker RAM change и статус soak](evidence/docker-memory-change-summary.json).
 
 ### Диагностика памяти: изолированные и смешанный режимы
 
@@ -43,14 +43,14 @@ RAM и RSS указаны как изменение от первого к по�
 
 #### Среда и ограничения причинного вывода
 
-Docker сообщает MemTotal 4 163 104 768 B (3,88 GiB), настройки указывают 4096 MiB, а лимит browser cgroup в пробе — 2 952 790 016 B (2,75 GiB). Активный Docker backend работает в LinuxKit VM; параметр 48 GB из .wslconfig на него не распространяется. У хоста на момент замера было около 17,3 GiB свободной RAM — достаточно для контролируемой проверки VM cap 8 GiB; точный остаток после изменения не рассчитывался. GUI-изменение RAM не применилось: native pipe недоступен, настройка осталась прежней.
+Docker сообщает MemTotal 8 384 647 168 B после увеличения VM cap с 4096 до 8192 MiB. Изменена только настройка MemoryMiB; Docker Desktop был остановлен/запущен штатной CLI-командой, а исходные байты файла настроек сохранены в backup. Прямое редактирование этого файла не документировано как публичный интерфейс Docker, поэтому изменение подтверждено фактическим MemTotal и postflight, а не только записью настройки. Исходные production containers восстановлены; DemoQA worker/tasks и model preflight готовы, 29 задач, из них одна suspended/waiting_human. Browser cgroup limit остался 2 952 790 016 B (2,75 GiB): 4 GiB ещё не применялись. [Санитизированная сводка изменения и postflight](evidence/docker-memory-change-summary.json).
 
 Счётчик cgroup OOM равен нулю; Docker OOM не установлен, давление памяти всей VM не измерялось. Наблюдения не указывают на единственную причину роста.
 
 #### Следующие проверки
 
 1. Изолировать удержание anon memory по фазам и после idle/cleanup; сравнить process RSS внутри каждой фазы, чтобы проверить, сохраняется ли рост после освобождения.
-2. Выполнить одинаковый 15-минутный смешанный workload при текущем бюджете 4 GiB VM / 2,75 GiB browser cgroup и в кандидатной конфигурации 8 GiB VM / 4 GiB browser cgroup. Рост бюджета — mitigation-эксперимент, не fix; сохранить одинаковые workload, sampling и критерии.
+2. Дождаться результата уже выполняемого одинакового 15-минутного смешанного workload при VM cap 8 GiB / browser cgroup 4 GiB. Прежний soak был при VM 4 GiB / browser 2,75 GiB; различие условий требует повторной проверки. Рост бюджета — mitigation-эксперимент, не fix; сохранить одинаковые workload, sampling и критерии.
 
 ### G5 · фактический неуспешный capacity run
 

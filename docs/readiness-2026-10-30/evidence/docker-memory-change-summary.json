@@ -1,0 +1,33 @@
+{
+  "schema": "docker-memory-change-summary/v1",
+  "status": "APPLIED",
+  "change": {
+    "scope": "Docker Desktop VM memory cap",
+    "before_mib": 4096,
+    "after_mib": 8192,
+    "docker_mem_total_bytes_before": 4163104768,
+    "docker_mem_total_bytes_after": 8384647168,
+    "method": "Targeted MemoryMiB update with original-byte backup; Docker Desktop stop/start CLI",
+    "direct_setting_file_edit_officially_documented": false,
+    "backup_created": true,
+    "browser_container_limit_mib_before": 2816,
+    "browser_container_limit_mib_after": 2816
+  },
+  "postflight": {
+    "original_production_containers_restored": true,
+    "demoqa_ready": true,
+    "worker_idle": true,
+    "tasks_idle": true,
+    "task_count": 29,
+    "suspended_waiting_human_task_count": 1,
+    "model_preflight_ready": true
+  },
+  "candidate_browser_experiment": {
+    "status": "RUNNING",
+    "vm_cap_mib": 8192,
+    "browser_container_limit_mib": 4096,
+    "control_container_limit_mib": 768,
+    "duration_seconds": 900,
+    "same_workload_sampling_and_predeclared_metrics": true
+  }
+}

@@ -4,6 +4,8 @@
 
 **Итог остаётся NO-GO для production.** Предыдущие значения 6/8 live UI PASS и два P0 FAIL ниже — исторический снимок до opt-in observation hints; текущие результаты их заменяют для ограниченного disposable набора:
 
+- Docker Desktop VM memory cap изменён 4096 → 8192 MiB; фактический Docker MemTotal вырос 4 163 104 768 → 8 384 647 168 B. Production containers восстановлены и postflight готов: DemoQA worker/tasks idle (29 задач, 1 suspended/waiting_human), model preflight ready. Повторный 900-секундный soak сейчас идёт с временным browser cgroup 4096 MiB; итоговых метрик пока нет. Production browser limit остаётся 2816 MiB. [Сводка RAM change и статуса](evidence/docker-memory-change-summary.json).
+
 - Checkbox: 3/3 свежих PASS; web_table: 3/3 свежих PASS.
 - Полный hints-enabled G3: 8/8 PASS с независимой проверкой, лимит 120 секунд / 30 шагов.
 - Полный pytest на коммите 7bc09cf: 475 passed, 8 skipped, 0 failed за 88,30 с; 6 focused тестов memory probe harness прошли на a0cc278. Полный suite на a0cc278 не запускался. [Сводка](evidence/unit-cookie-probe-summary.json).
