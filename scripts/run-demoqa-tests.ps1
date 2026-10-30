@@ -537,7 +537,7 @@ function Export-PublicWebReport {
         $copy = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', "$($controlIds[0]):$sourceScreen", $targetScreen)
         if ($copy.ExitCode -ne 0) {
             Remove-Item -LiteralPath $targetScreen -Force -ErrorAction SilentlyContinue
-            $readerCode = 'import base64,pathlib,sys; p=pathlib.Path("/app/runtime/control-data/public-web-screenshots")/sys.argv[1]; print(base64.b64encode(p.read_bytes()).decode("ascii"))'
+            $readerCode = "import base64,pathlib,sys; p=pathlib.Path('/app/runtime/control-data/public-web-screenshots')/sys.argv[1]; print(base64.b64encode(p.read_bytes()).decode('ascii'))"
             $script:publicWebExportStage = "fallback_$($name.Replace('.png',''))"
             $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', $controlIds[0], 'python', '-c', $readerCode, $name)
             if ($encoded.ExitCode -ne 0) { throw "Could not export fixed public-web screenshot $name before cleanup." }
