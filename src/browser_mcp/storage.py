@@ -15,7 +15,7 @@ from typing import Any, Iterator
 from .domain import DomainError, TASK_TRANSITIONS, TaskRecord, TaskSpec, TaskStatus
 
 
-_REDACT_KEY = re.compile(r"secret|password|passwd|token|cookie|authorization|credential|api[_-]?key", re.I)
+_REDACT_KEY = re.compile(r"secret|password|passwd|token|cookie|authorization|credential|api[_-]?key|(?<![a-z0-9])otp(?![a-z0-9])", re.I)
 _REDACT_INLINE = re.compile(r'\b(?:secret|password|passwd|token|cookie|authorization|credential|api[_-]?key)\s*[:=]\s*\S+', re.I)
 
 

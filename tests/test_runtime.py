@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from datetime import UTC, datetime, timedelta
@@ -126,6 +127,93 @@ async def test_approval_and_unknown_outcome_do_not_auto_resume(tmp_path):
         assert len(worker.executes) == 1 and worker.executes[0]['site_capability'] == grant
         assert runner.jobs == {}
         await runner.close(); repo.close()
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_dispatched_action_requires_recovery_review(tmp_path):
+    runner, repo, worker, record, _ = make_runner(
+        tmp_path, [{"kind": "click", "x": 100, "y": 100}], ["https://shop.example"])
+    entered = asyncio.Event()
+    never_finishes = asyncio.Event()
+    original_call = worker.call
+
+    async def deferred_execute(method, path, data=None, raw=False):
+        if path == "/execute":
+            worker.executes.append(data)
+            entered.set()
+            await never_finishes.wait()
+        return await original_call(method, path, data, raw)
+
+    worker.call = deferred_execute
+    job = asyncio.create_task(runner._run(record.task_id))
+    runner.jobs[record.task_id] = job
+    await asyncio.wait_for(entered.wait(), timeout=2)
+
+    cancelled = await runner.control(record.task_id, "cancel")
+    assert cancelled.status == TaskStatus.RECOVERING
+    assert cancelled.phase == "cancel_outcome_unknown"
+    assert cancelled.error["code"] == "ACTION_OUTCOME_UNKNOWN"
+    assert len(worker.executes) == 1
+    with pytest.raises(DomainError) as exc:
+        await runner.control(record.task_id, "resume", cancelled.version)
+    assert exc.value.code == "RECOVERY_REVIEW_REQUIRED"
+    assert len(worker.executes) == 1
+    await runner.close()
+    repo.close()
+
+
+@pytest.mark.asyncio
+async def test_cancel_rechecks_dispatch_started_while_worker_gate_yields(tmp_path):
+    runner, repo, worker, record, _ = make_runner(
+        tmp_path, [], ["https://shop.example"])
+    expiry_entered = asyncio.Event()
+    continue_expiry = asyncio.Event()
+    gate_entered = asyncio.Event()
+    continue_gate = asyncio.Event()
+    execute_entered = asyncio.Event()
+    never_finishes = asyncio.Event()
+    original_gate, original_call = worker.gate, worker.call
+
+    async def deferred_gate(owner):
+        if owner == "none":
+            gate_entered.set()
+            await continue_gate.wait()
+        return await original_gate(owner)
+
+    async def deferred_execute(method, path, data=None, raw=False):
+        if path == "/execute":
+            worker.executes.append(data)
+            execute_entered.set()
+            await never_finishes.wait()
+        return await original_call(method, path, data, raw)
+
+    async def deferred_expiry(*_args, **_kwargs):
+        expiry_entered.set()
+        await continue_expiry.wait()
+        return False
+
+    worker.gate = deferred_gate
+    worker.call = deferred_execute
+    runner._gemini_expire_if_needed = deferred_expiry
+    dispatch = asyncio.create_task(runner._gemini_fast_dispatch(
+        record.task_id, {"control_epoch": 1, "observation_id": "obs-race"},
+        {"kind": "navigate", "url": "https://gemini.google.com/app"}))
+    runner.jobs[record.task_id] = dispatch
+    await asyncio.wait_for(expiry_entered.wait(), timeout=2)
+
+    cancel = asyncio.create_task(runner.control(record.task_id, "cancel"))
+    await asyncio.wait_for(gate_entered.wait(), timeout=2)
+    continue_expiry.set()
+    await asyncio.wait_for(execute_entered.wait(), timeout=2)
+    continue_gate.set()
+    cancelled = await cancel
+
+    assert cancelled.status == TaskStatus.RECOVERING
+    assert cancelled.error["code"] == "ACTION_OUTCOME_UNKNOWN"
+    assert len(worker.executes) == 1
+    assert not [event for event in repo.events(record.task_id) if event["event_type"] == "action.applied"]
+    await runner.close()
+    repo.close()
 
 
 @pytest.mark.asyncio

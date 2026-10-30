@@ -1596,6 +1596,9 @@ class TaskRunner:
                     if (record.spec.execution_mode == 'autonomous' and action['kind'] == 'type_text'
                             and exc.code == 'CAPABILITY_UNAVAILABLE'
                             and exc.message == 'text input requires a focused editable field'):
+                        self.repository.add_event(task_id, "action.failed", {
+                            "action_id": command["action_id"], "kind": action["kind"], "code": exc.code,
+                        })
                         count = self.repository.record_editable_focus_rejection(task_id)
                         if count >= 3:
                             await self.worker.gate('none')
@@ -1608,6 +1611,10 @@ class TaskRunner:
                         continue
                     if exc.code == "WORKER_UNAVAILABLE":
                         raise DomainError("ACTION_OUTCOME_UNKNOWN", "Связь потеряна после отправки действия; сначала проверьте его результат") from exc
+                    if exc.code != "ACTION_OUTCOME_UNKNOWN":
+                        self.repository.add_event(task_id, "action.failed", {
+                            "action_id": command["action_id"], "kind": action["kind"], "code": exc.code,
+                        })
                     raise
                 if receipt.get("outcome") != "applied":
                     record_outcome = getattr(self.model, "record_outcome", None)
@@ -1661,11 +1668,34 @@ class TaskRunner:
         created = datetime.fromisoformat(record.created_at.replace("Z", "+00:00"))
         return (datetime.now(UTC) - created).total_seconds() >= record.spec.limits.timeout_s
 
+    def _has_unresolved_action_dispatch(self, task_id: str) -> bool:
+        cursor = 0
+        planned: set[str] = set()
+        resolved: set[str] = set()
+        while True:
+            page = self.repository.events(task_id, after_event_id=cursor, limit=1000)
+            if not page:
+                break
+            for event in page:
+                payload = event.get("payload") or {}
+                action_id = payload.get("action_id") if isinstance(payload, dict) else None
+                if not isinstance(action_id, str):
+                    continue
+                if event.get("event_type") == "action.planned":
+                    planned.add(action_id)
+                elif event.get("event_type") in {"action.applied", "action.failed"}:
+                    resolved.add(action_id)
+            cursor = page[-1]["event_id"]
+            if len(page) < 1000:
+                break
+        return bool(planned - resolved)
+
     async def control(self, task_id: str, operation: str, expected_version: int | None = None):
         allowed_operations = {"pause", "resume", "cancel", "takeover", "release-control", "review-recovery"}
         if operation not in allowed_operations:
             raise DomainError("INVALID_OPERATION", "unsupported task control operation")
         record = self.repository.get(task_id)
+        dispatch_was_inflight = operation == "cancel" and self._has_unresolved_action_dispatch(task_id)
         if expected_version is not None and expected_version != record.version:
             raise DomainError("VERSION_CONFLICT", "task version does not match expected_version")
         if (operation == "resume" and record.status in {
@@ -1733,10 +1763,20 @@ class TaskRunner:
         if previous and not previous.done():
             previous.cancel()
             await asyncio.gather(previous, return_exceptions=True)
-        target = TaskStatus.CANCELLED if operation == "cancel" else TaskStatus.WAITING_HUMAN if operation == "takeover" else TaskStatus.PAUSED
+        if operation == "cancel":
+            # A dispatch may have begun while the gate request yielded. The
+            # persisted planned/applied/failed events decide whether its result
+            # is still uncertain after the worker has been fenced.
+            dispatch_was_inflight = dispatch_was_inflight or self._has_unresolved_action_dispatch(task_id)
+        target = (TaskStatus.RECOVERING if dispatch_was_inflight else TaskStatus.CANCELLED) if operation == "cancel" else TaskStatus.WAITING_HUMAN if operation == "takeover" else TaskStatus.PAUSED
         if record.status == target:
             return record
-        result = self.repository.transition(task_id, target)
+        if target == TaskStatus.RECOVERING:
+            result = self.repository.transition(task_id, target, phase="cancel_outcome_unknown",
+                error={"code": "ACTION_OUTCOME_UNKNOWN",
+                       "message": "Cancel interrupted an already dispatched browser action; inspect browser state before deciding whether to resume."})
+        else:
+            result = self.repository.transition(task_id, target)
         if target == TaskStatus.CANCELLED:
             self._discard_task_memory(task_id)
         return result

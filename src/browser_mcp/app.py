@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -80,8 +81,33 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
                   transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=True,
                       allowed_hosts=["localhost:*", "127.0.0.1:*", "testserver"], allowed_origins=list(allowed_origins)))
 
+    def redact_user_inputs(value):
+        if isinstance(value, dict):
+            result = {}
+            for key, item in value.items():
+                words = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(key)).casefold()
+                words = [part for part in re.split(r"[^a-z0-9]+", words) if part]
+                sensitive = bool(set(words) & {
+                    "password", "passwd", "secret", "token", "cookie", "authorization",
+                    "credential", "auth", "otp", "totp", "mfa", "pin", "passcode",
+                }) or (("api" in words or "access" in words or "private" in words) and "key" in words) or (
+                    "session" in words and "id" in words) or (
+                    "verification" in words and bool(set(words) & {"code", "token", "otp"}))
+                result[key] = "[REDACTED]" if sensitive else redact_user_inputs(item)
+            return result
+        if isinstance(value, list):
+            return [redact_user_inputs(item) for item in value]
+        return value
+
+    def record_response(record) -> dict:
+        data = record.model_dump(mode="json")
+        # Keep the source values in the repository for task execution and
+        # repeat-task editing, but never echo fields marked sensitive by name.
+        data["spec"]["user_inputs"] = redact_user_inputs(data["spec"].get("user_inputs", {}))
+        return data
+
     def record_data(task_id: str) -> dict:
-        return repository.get(task_id).model_dump(mode="json")
+        return record_response(repository.get(task_id))
 
     async def object_body(request: Request) -> dict:
         body = await request.json()
@@ -106,7 +132,7 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
                         sync_cookies=sync_cookies,
                         execution_mode=execution_mode, site_capabilities=site_capabilities or [], workflow=workflow,
                         **({"limits": limits} if limits else {}))
-        return runner.create(spec).model_dump(mode="json")
+        return record_response(runner.create(spec))
 
     @mcp.tool()
     async def browser_task_status(task_id: str) -> dict:
@@ -125,15 +151,15 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
 
     @mcp.tool()
     async def browser_task_pause(task_id: str) -> dict:
-        return (await runner.control(task_id, "pause")).model_dump(mode="json")
+        return record_response(await runner.control(task_id, "pause"))
 
     @mcp.tool()
     async def browser_task_resume(task_id: str, expected_version: int | None = None) -> dict:
-        return (await runner.control(task_id, "resume", expected_version)).model_dump(mode="json")
+        return record_response(await runner.control(task_id, "resume", expected_version))
 
     @mcp.tool()
     async def browser_task_cancel(task_id: str) -> dict:
-        return (await runner.control(task_id, "cancel")).model_dump(mode="json")
+        return record_response(await runner.control(task_id, "cancel"))
 
     mcp_app = mcp.streamable_http_app()
 
@@ -201,7 +227,20 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
                             renewed_session = auth.create_session(local=True)
                         else:
                             raise
-            response = await call_next(request)
+            body = bytearray()
+            body_too_large = False
+            async for chunk in request.stream():
+                if len(body) + len(chunk) > settings.max_message_bytes:
+                    body_too_large = True
+                    break
+                body.extend(chunk)
+            if body_too_large:
+                response = JSONResponse({"error": {"code": "REQUEST_TOO_LARGE", "message": "Запрос слишком велик"}}, status_code=413)
+            else:
+                # BaseHTTPMiddleware's downstream request reuses this cached
+                # body, so parsing never has to read an unbounded stream again.
+                request._body = bytes(body)
+                response = await call_next(request)
         except DomainError as exc:
             response = await domain_error(request, exc)
         if renewed_session:
@@ -267,11 +306,11 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
 
     @app.get("/api/v1/tasks")
     async def tasks():
-        return {"tasks": [x.model_dump(mode="json") for x in repository.list()]}
+        return {"tasks": [record_response(x) for x in repository.list()]}
 
     @app.post("/api/v1/tasks")
     async def start_task(spec: TaskSpec):
-        return runner.create(spec).model_dump(mode="json")
+        return record_response(runner.create(spec))
 
     @app.get("/api/v1/tasks/{task_id}")
     async def task(task_id: str):
@@ -293,7 +332,7 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
         if operation not in {"pause", "resume", "cancel", "takeover", "release-control", "review-recovery"}:
             raise DomainError("CAPABILITY_UNAVAILABLE", "Неизвестное действие")
         body = await object_body(request)
-        return (await runner.control(task_id, operation, body.get("expected_version"))).model_dump(mode="json")
+        return record_response(await runner.control(task_id, operation, body.get("expected_version")))
 
     @app.post("/api/v1/extension/pairing-codes")
     async def pairing_code():
@@ -454,7 +493,7 @@ def create_app(settings: Settings | None = None, worker=None, model=None) -> Fas
             raise DomainError("PROFILE_NOT_FOUND", "Неизвестный профиль")
         active = next((r for r in repository.list() if r.status.value not in {"cancelled", "expired", "failed", "succeeded"}), None)
         if active:
-            return (await runner.control(active.task_id, "takeover")).model_dump(mode="json")
+            return record_response(await runner.control(active.task_id, "takeover"))
         return await runner.worker.gate("human")
 
     @app.post("/api/v1/profiles/{profile_id}/release-control")

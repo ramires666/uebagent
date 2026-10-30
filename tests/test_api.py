@@ -300,6 +300,57 @@ def test_mcp_browser_task_start_exposes_and_preserves_verbatim_text(tmp_path):
         assert record.spec.execution_mode == "autonomous"
 
 
+def test_task_responses_redact_sensitive_user_inputs_but_keep_exact_prompt(tmp_path):
+    client, _ = make_client(tmp_path)
+    with client:
+        headers = login(client)
+        created = client.post("/api/v1/tasks", json={
+            "goal": "Use supplied data", "allowed_origins": ["https://shop.test"],
+            "idempotency_key": "redact-inputs-0001", "sync_cookies": False,
+            "verbatim_text": "public prompt readback",
+            "user_inputs": {"name": "Alice", "author": "Ada", "verification_status": "verified",
+                "nested": {"password": "hidden", "otp": "also-hidden", "city": "Astana"}},
+        }, headers=headers)
+        assert created.status_code == 200
+        data = created.json()
+        assert data["spec"]["user_inputs"] == {
+            "name": "Alice", "author": "Ada", "verification_status": "verified",
+            "nested": {"password": "[REDACTED]", "otp": "[REDACTED]", "city": "Astana"}}
+        assert data["spec"]["verbatim_text"] == "public prompt readback"
+        task_id = data["task_id"]
+        status = client.get(f"/api/v1/tasks/{task_id}", headers=headers).json()
+        assert status["spec"]["user_inputs"]["nested"]["password"] == "[REDACTED]"
+        assert status["spec"]["verbatim_text"] == "public prompt readback"
+        assert client.app.state.repository.get(task_id).spec.user_inputs["nested"]["password"] == "hidden"
+
+        mcp_headers = {"Accept": "application/json, text/event-stream", "Authorization": "Bearer test-mcp-token"}
+        result = client.post("/mcp", json={"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": {"name": "browser_task_status", "arguments": {"task_id": task_id}}}, headers=mcp_headers)
+        assert result.status_code == 200
+        payload = result.json()["result"]["content"][0]["text"]
+        assert "hidden" not in payload and "also-hidden" not in payload
+        assert "[REDACTED]" in payload and "public prompt readback" in payload
+
+
+def test_chunked_json_body_without_content_length_is_bounded(tmp_path):
+    settings = Settings(data_dir=tmp_path, ui_dir=tmp_path / "no-ui", test_mode=True,
+                        operator_token="test-operator-token", mcp_token="test-mcp-token",
+                        max_message_bytes=512)
+    client = TestClient(create_app(settings, worker=FakeWorker(), model=FakeModel()))
+    with client:
+        headers = login(client)
+        body = json.dumps({
+            "goal": "Use supplied data", "allowed_origins": ["https://shop.test"],
+            "idempotency_key": "chunked-body-0001", "sync_cookies": False,
+            "user_inputs": {"notes": "x" * 2048},
+        }).encode()
+        chunks = (body[offset:offset + 128] for offset in range(0, len(body), 128))
+        response = client.post("/api/v1/tasks", content=chunks,
+                               headers={**headers, "Content-Type": "application/json"})
+        assert response.status_code == 413
+        assert client.app.state.repository.list() == []
+
+
 def test_malformed_json_objects_are_rejected_and_logout_revokes_session(tmp_path):
     client, _ = make_client(tmp_path)
     with client:
