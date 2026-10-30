@@ -33,6 +33,18 @@ SETTLE_SECONDS = 15
 CONTRAST_SECONDS = GC_IDLE_BEFORE_SECONDS + GC_IDLE_AFTER_SECONDS
 HARD_DEADLINE_SECONDS = 240
 PROGRESS_EVERY = 100
+MEMORY_REPORT_PATH = "/diagnostics/readiness-memory-report"
+MEMORY_REPORT_TIMEOUT_SECONDS = 25.0
+MEMORY_REPORT_SCHEMA = "readiness-memory-report/v1"
+MEMORY_REPORT_PROCESS_KINDS = {"main", "web_content", "web_extensions", "other"}
+MEMORY_REPORT_METRICS = {
+    "explicit", "window_objects", "js_non_window", "images", "heap_unclassified",
+    "heap_overhead", "resident", "heap_allocated",
+}
+MEMORY_REPORT_MAX_VALUE = 1024**4
+PERIODIC_GC_PATH = "/diagnostics/readiness-memory-gc"
+PERIODIC_GC_TIMEOUT_SECONDS = 5.0
+PERIODIC_GC_INTERVAL_CYCLES = 100
 
 
 def utc_now() -> str:
@@ -45,7 +57,9 @@ def safe_error(exc: Exception) -> str:
         value = str(exc)
         if value in {"idle_invariant_failed", "variant_mismatch", "configuration_invalid",
                      "identity_missing", "identity_changed", "deadline_exceeded",
-                     "configuration_unavailable", "gc_contrast_failed"}:
+                     "configuration_unavailable", "gc_contrast_failed",
+                     "memory_report_invalid", "memory_report_request_failed",
+                     "periodic_gc_request_failed", "periodic_gc_invalid_receipt"}:
             return value
         if value.startswith("http_status_"):
             return "http_status_error"
@@ -71,8 +85,10 @@ class DeadlineClient:
 
 class Attribution:
     def __init__(self, client: httpx.Client, key: str, variant: str, *, gc_contrast=False,
+                 memory_report=False, periodic_gc=False,
                  clock=time.monotonic, sleep=time.sleep, progress=print,
                  _cycle_count=CYCLE_COUNT, _operation_interval=OPERATION_INTERVAL_SECONDS,
+                 _periodic_gc_interval=PERIODIC_GC_INTERVAL_CYCLES,
                  _warmup_seconds=WARMUP_SECONDS, _settle_seconds=SETTLE_SECONDS,
                  _contrast_seconds=CONTRAST_SECONDS,
                  _deadline_seconds=HARD_DEADLINE_SECONDS):
@@ -82,14 +98,24 @@ class Attribution:
             raise ValueError("invalid_internal_cycle_count")
         if gc_contrast and variant != "baseline":
             raise ValueError("gc_contrast_requires_baseline_variant")
+        if memory_report and (variant != "baseline" or gc_contrast):
+            raise ValueError("memory_report_requires_baseline_without_gc")
+        if periodic_gc and (variant != "baseline" or gc_contrast or memory_report):
+            raise ValueError("periodic_gc_requires_baseline_without_other_diagnostics")
+        if type(_periodic_gc_interval) is not int or _periodic_gc_interval <= 0:
+            raise ValueError("invalid_internal_periodic_gc_interval")
         self.client, self.key, self.variant = client, key, variant
         self.gc_contrast_enabled = bool(gc_contrast)
+        self.memory_report_enabled = bool(memory_report)
+        self.periodic_gc_enabled = bool(periodic_gc)
         self.clock, self.sleep, self.progress = clock, sleep, progress
         self.cycle_count = _cycle_count
         self.operation_interval = _operation_interval
+        self.periodic_gc_interval = _periodic_gc_interval
         self.warmup_seconds = _warmup_seconds
         self.settle_seconds, self.contrast_seconds = _settle_seconds, _contrast_seconds
         self.deadline_seconds = _deadline_seconds
+        self.periodic_gc_requests: list[dict] = []
 
     def _emit(self, event, **fields):
         self.progress(json.dumps({"event": event, **fields}, separators=(",", ":")))
@@ -117,17 +143,91 @@ class Attribution:
             raise SoakError("identity_missing")
         return values
 
+    @staticmethod
+    def _validate_memory_report(payload: object) -> dict:
+        if (not isinstance(payload, dict)
+                or set(payload) != {"schema", "intrusive", "processes", "page_restored"}
+                or payload.get("schema") != MEMORY_REPORT_SCHEMA
+                or payload.get("intrusive") is not True
+                or payload.get("page_restored") is not True
+                or not isinstance(payload.get("processes"), list)
+                or not 1 <= len(payload["processes"]) <= 128):
+            raise SoakError("memory_report_invalid")
+        clean_processes = []
+        for process in payload["processes"]:
+            if (not isinstance(process, dict) or set(process) != {"kind", "metrics"}
+                    or process.get("kind") not in MEMORY_REPORT_PROCESS_KINDS
+                    or not isinstance(process.get("metrics"), dict)
+                    or not process["metrics"]
+                    or not set(process["metrics"]).issubset(MEMORY_REPORT_METRICS)):
+                raise SoakError("memory_report_invalid")
+            metrics = process["metrics"]
+            if any(type(value) is not int or value < 0 or value > MEMORY_REPORT_MAX_VALUE
+                   for value in metrics.values()):
+                raise SoakError("memory_report_invalid")
+            clean_processes.append({"kind": process["kind"], "metrics": dict(metrics)})
+        return {"schema": MEMORY_REPORT_SCHEMA, "intrusive": True,
+                "page_restored": True, "processes": clean_processes}
+
+    def _request_memory_report(self, probe: Probe) -> dict:
+        try:
+            response = probe.request("POST", MEMORY_REPORT_PATH, json_body={},
+                                     timeout=MEMORY_REPORT_TIMEOUT_SECONDS)
+        except Exception:
+            raise SoakError("memory_report_request_failed") from None
+        try:
+            payload = response.json()
+        except ValueError:
+            raise SoakError("memory_report_invalid") from None
+        return self._validate_memory_report(payload)
+
+    def _request_periodic_gc(self, probe: Probe, after_cycle: int) -> None:
+        started_at = utc_now()
+        started = self.clock()
+        request = {"after_cycle": after_cycle, "started_at_utc": started_at,
+                   "ended_at_utc": None, "elapsed_ms": None,
+                   "requested": False, "error_code": None}
+        self._emit("periodic_gc_start", after_cycle=after_cycle, at_utc=started_at)
+        try:
+            response = probe.request("POST", PERIODIC_GC_PATH, json_body={},
+                                     timeout=PERIODIC_GC_TIMEOUT_SECONDS)
+            try:
+                payload = response.json()
+            except ValueError:
+                request["error_code"] = "periodic_gc_invalid_receipt"
+            else:
+                if (isinstance(payload, dict) and set(payload) == {"requested"}
+                        and payload.get("requested") is True):
+                    request["requested"] = True
+                else:
+                    request["error_code"] = "periodic_gc_invalid_receipt"
+        except Exception:
+            request["error_code"] = "periodic_gc_request_failed"
+        finally:
+            request["ended_at_utc"] = utc_now()
+            request["elapsed_ms"] = round(max(0.0, self.clock() - started) * 1000, 3)
+            self.periodic_gc_requests.append(request)
+            self._emit("periodic_gc_end", after_cycle=after_cycle,
+                       requested=request["requested"], error_code=request["error_code"],
+                       at_utc=request["ended_at_utc"])
+        if request["error_code"]:
+            raise SoakError(request["error_code"])
+
     def run(self) -> dict:
         started_at = utc_now()
         started = self.clock()
         deadline = started + self.deadline_seconds
         errors: list[str] = []
+        failed_stage = None
+        stage = "configuration"
         samples: list[dict] = []
         configuration_matches = False
         identity_before = identity_after = None
         cycles_completed = 0
         settle_seconds = contrast_seconds = 0
         gc_result = None
+        memory_report_data = None
+        memory_report_started_at = memory_report_ended_at = None
         probe = Probe(self.client, self.key, clock=self.clock, sleep=self.sleep,
                       progress=lambda _event: None)
         probe.client = DeadlineClient(self.client, deadline, self.clock)
@@ -136,12 +236,14 @@ class Attribution:
                        total_cycles=self.cycle_count, at_utc=utc_now())
             self._config(probe)
             configuration_matches = True
+            stage = "fixture_setup"
             probe.setup()
             self.sleep(self.warmup_seconds)
             before_status = probe.idle_status()
             identity_before = self._identity(before_status)
             next_start = self.clock()
 
+            stage = "cycles"
             for cycle in range(1, self.cycle_count + 1):
                 if self.clock() >= deadline:
                     raise SoakError("deadline_exceeded")
@@ -157,13 +259,30 @@ class Attribution:
                 if cycle % PROGRESS_EVERY == 0 or cycle == self.cycle_count:
                     self._emit("progress", variant=self.variant, completed_cycles=cycle,
                                total_cycles=self.cycle_count, at_utc=utc_now())
+                if (self.periodic_gc_enabled and cycle % self.periodic_gc_interval == 0):
+                    stage = "periodic_gc"
+                    self._request_periodic_gc(probe, cycle)
+                    stage = "cycles"
                 if cycle < self.cycle_count:
                     next_start = max(next_start + self.operation_interval,
                                      self.clock())
 
             workload_end = utc_now()
+            stage = "memory_report" if self.memory_report_enabled else "settle"
             self._emit("workload_end", variant=self.variant, completed_cycles=cycles_completed,
                        at_utc=workload_end)
+            if self.memory_report_enabled:
+                memory_report_started_at = utc_now()
+                self._emit("memory_report_start", variant=self.variant, intrusive=True,
+                           at_utc=memory_report_started_at)
+                try:
+                    memory_report_data = self._request_memory_report(probe)
+                finally:
+                    memory_report_ended_at = utc_now()
+                    self._emit("memory_report_end", variant=self.variant,
+                               intrusive=memory_report_data is not None,
+                               at_utc=memory_report_ended_at)
+            stage = "settle"
             settle_start = self.clock()
             self.sleep(self.settle_seconds)
             settle_seconds = round(self.clock() - settle_start, 3)
@@ -186,12 +305,15 @@ class Attribution:
             contrast_end = utc_now()
             self._emit("contrast_end", variant=self.variant, gc_contrast=self.gc_contrast_enabled,
                        at_utc=contrast_end)
+            stage = "postflight"
             after_status = probe.idle_status()
             identity_after = self._identity(after_status)
             if identity_before != identity_after:
                 raise SoakError("identity_changed")
         except Exception as exc:
-            code = "deadline_exceeded" if self.clock() >= deadline else safe_error(exc)
+            failed_stage = stage
+            code = ("deadline_exceeded" if self.clock() >= deadline and stage != "memory_report"
+                    else safe_error(exc))
             errors.append(code)
 
         status = "DIAGNOSTIC" if not errors and cycles_completed == self.cycle_count and configuration_matches else "FAIL"
@@ -215,6 +337,18 @@ class Attribution:
             "contrast_seconds": contrast_seconds,
             "gc_contrast": gc_result,
             "gc_control": not self.gc_contrast_enabled,
+            "failed_stage": failed_stage,
+            "memory_report_enabled": self.memory_report_enabled,
+            "memory_report_requested": self.memory_report_enabled,
+            "memory_report_intrusive": (memory_report_data["intrusive"]
+                                         if memory_report_data is not None else None),
+            "memory_report_started_at_utc": memory_report_started_at,
+            "memory_report_ended_at_utc": memory_report_ended_at,
+            "memory_report": memory_report_data,
+            "periodic_gc": {"enabled": self.periodic_gc_enabled,
+                            "interval_cycles": self.periodic_gc_interval,
+                            "request_count": len(self.periodic_gc_requests),
+                            "requests": self.periodic_gc_requests},
             "error_codes": errors,
             "invariants": {
                 "configuration_matches": configuration_matches,
@@ -244,13 +378,18 @@ def parse_args(argv=None):
                         default=Path("/app/runtime/control-data/readiness-memory-attribution.json"))
     parser.add_argument("--variant", choices=VARIANTS, required=True)
     parser.add_argument("--gc-contrast", action="store_true")
+    parser.add_argument("--memory-report", action="store_true")
+    parser.add_argument("--periodic-gc", action="store_true")
     parser.add_argument("--i-confirm-disposable", action="store_true", required=True)
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
-    if args.key_file is None or (args.gc_contrast and args.variant != "baseline"):
+    if (args.key_file is None or (args.gc_contrast and args.variant != "baseline")
+            or (args.memory_report and (args.variant != "baseline" or args.gc_contrast))
+            or (args.periodic_gc and (args.variant != "baseline" or args.gc_contrast
+                                      or args.memory_report))):
         print(json.dumps({"status": "BLOCKED", "error_code": "INVALID_BOUNDED_CONFIGURATION"}))
         return 2
     try:
@@ -260,7 +399,9 @@ def main(argv=None):
         print(json.dumps({"status": "BLOCKED", "error_code": "DISPOSABLE_GUARD_REJECTED"}))
         return 2
     with httpx.Client(trust_env=False, follow_redirects=False) as client:
-        report = Attribution(client, key, args.variant, gc_contrast=args.gc_contrast).run()
+        report = Attribution(client, key, args.variant, gc_contrast=args.gc_contrast,
+                             memory_report=args.memory_report,
+                             periodic_gc=args.periodic_gc).run()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"status": report["status"], "cycles": report["cycles_completed"],

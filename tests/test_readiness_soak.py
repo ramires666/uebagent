@@ -42,6 +42,37 @@ def test_latency_summary_uses_p50_p95_and_max_in_milliseconds():
     assert latency_summary([]) == {"count": 0}
 
 
+def test_memory_maintenance_failure_is_allowlisted_and_rejected():
+    worker, control, _calls = _clients()
+    soak = Soak(worker, control, "key", duration=1, progress=lambda _line: None)
+    status = {"enabled": True, "supported": True, "state": "disabled_after_failure",
+              "completed_actions_since_attempt": 0, "attempts": 1, "successes": 0,
+              "failures": 1, "last_duration_ms": 2.5, "last_error_code": "gc_timeout",
+              "ignored_sensitive_field": "must_not_be_exported"}
+    with pytest.raises(SoakError, match="memory_maintenance_initial_state_failed"):
+        soak._record_memory_maintenance({"memory_maintenance": status})
+    assert soak._memory_maintenance_report() == {
+        "enabled_at_start": True, "enabled_at_end": True, "attempts": 1,
+        "successes": 0, "failures": 1, "last_error_code": "gc_timeout",
+        "last_duration_ms": 2.5, "max_last_duration_ms": 2.5,
+    }
+    worker.close()
+    control.close()
+
+
+def test_memory_maintenance_disappearing_after_enable_fails():
+    worker, control, _calls = _clients()
+    soak = Soak(worker, control, "key", duration=1, progress=lambda _line: None)
+    state = {"enabled": True, "supported": True, "state": "enabled",
+             "completed_actions_since_attempt": 0, "attempts": 0, "successes": 0,
+             "failures": 0, "last_duration_ms": None, "last_error_code": None}
+    soak._record_memory_maintenance({"memory_maintenance": state})
+    with pytest.raises(SoakError, match="memory_maintenance_status_missing"):
+        soak._record_memory_maintenance({})
+    worker.close()
+    control.close()
+
+
 def _clients(*, bad_control_poll=False, barrier=None):
     calls = {"fixture": 0}
 

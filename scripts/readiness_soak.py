@@ -6,6 +6,7 @@ import base64
 import binascii
 import concurrent.futures
 import json
+import math
 import os
 import re
 import threading
@@ -87,6 +88,11 @@ class Soak:
         self.hint_observation_count = 0
         self.generation_start = None
         self.generation_end = None
+        self.memory_maintenance_initial = None
+        self.memory_maintenance_current = None
+        self.memory_maintenance_max_duration_ms = 0.0
+        self.memory_maintenance_required = False
+        self.memory_maintenance_status_seen = False
         self.poll_active = 0
         self.poll_max_active = 0
         self.poll_lock = threading.Lock()
@@ -150,6 +156,7 @@ class Soak:
 
     def status(self):
         state = self.json("GET", "/status")
+        self._record_memory_maintenance(state)
         if (state.get("context_count") != 1 or state.get("page_count") != 1
                 or state.get("browser_started") is not True or state.get("control_owner") != "none"
                 or state.get("action_in_progress") is not False or state.get("import_in_progress") is not False
@@ -165,6 +172,77 @@ class Soak:
             raise SoakError("worker_recovery_generation_changed")
         self.invariant_samples += 1
         return state
+
+    def _record_memory_maintenance(self, worker_status):
+        """Read only the bounded memory-maintenance allowlist from worker status."""
+        if not isinstance(worker_status, dict):
+            raise SoakError("worker_status_malformed")
+        raw = worker_status.get("memory_maintenance")
+        if raw is None:
+            if self.memory_maintenance_required:
+                raise SoakError("memory_maintenance_status_missing")
+            if self.memory_maintenance_status_seen and self.memory_maintenance_initial is not None:
+                raise SoakError("memory_maintenance_status_missing")
+            self.memory_maintenance_status_seen = True
+            return
+        if not isinstance(raw, dict):
+            raise SoakError("memory_maintenance_status_malformed")
+        enabled = raw.get("enabled")
+        supported = raw.get("supported")
+        state = raw.get("state")
+        integer_fields = ("completed_actions_since_attempt", "attempts", "successes", "failures")
+        if type(enabled) is not bool or (supported is not None and type(supported) is not bool):
+            raise SoakError("memory_maintenance_status_malformed")
+        if not isinstance(state, str) or not state or len(state) > 64 or not state.replace("_", "").isalnum():
+            raise SoakError("memory_maintenance_status_malformed")
+        values = {}
+        for name in integer_fields:
+            value = raw.get(name)
+            if type(value) is not int or value < 0:
+                raise SoakError("memory_maintenance_status_malformed")
+            values[name] = value
+        duration = raw.get("last_duration_ms")
+        if duration is not None:
+            if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration < 0:
+                raise SoakError("memory_maintenance_status_malformed")
+            duration = float(duration)
+            self.memory_maintenance_max_duration_ms = max(self.memory_maintenance_max_duration_ms, duration)
+        error_code = raw.get("last_error_code")
+        if error_code is not None and (not isinstance(error_code, str) or not error_code or len(error_code) > 64
+                                       or not error_code.replace("_", "").isalnum()):
+            raise SoakError("memory_maintenance_status_malformed")
+        safe = {"enabled": enabled, "supported": supported, "state": state,
+                **values, "last_duration_ms": duration, "last_error_code": error_code}
+        if not self.memory_maintenance_status_seen:
+            self.memory_maintenance_initial = safe
+            self.memory_maintenance_required = enabled
+            self.memory_maintenance_current = safe
+            if enabled and (supported is False or values["failures"] != 0):
+                raise SoakError("memory_maintenance_initial_state_failed")
+        elif self.memory_maintenance_required:
+            if not enabled:
+                raise SoakError("memory_maintenance_disabled_during_soak")
+            if supported is False or values["failures"] != 0:
+                raise SoakError("memory_maintenance_failed_during_soak")
+        self.memory_maintenance_current = safe
+        self.memory_maintenance_status_seen = True
+
+    def _memory_maintenance_report(self):
+        initial = self.memory_maintenance_initial
+        current = self.memory_maintenance_current
+        enabled_at_start = initial.get("enabled") if initial else None
+        enabled_at_end = current.get("enabled") if current else None
+        return {
+            "enabled_at_start": enabled_at_start,
+            "enabled_at_end": enabled_at_end,
+            "attempts": current.get("attempts") if current else None,
+            "successes": current.get("successes") if current else None,
+            "failures": current.get("failures") if current else None,
+            "last_error_code": current.get("last_error_code") if current else None,
+            "last_duration_ms": current.get("last_duration_ms") if current else None,
+            "max_last_duration_ms": round(self.memory_maintenance_max_duration_ms, 3)
+                if self.memory_maintenance_max_duration_ms else None,
+        }
 
     def action(self, epoch: int, payload: dict) -> int:
         kind = payload.get("kind") if payload.get("kind") in {"navigate", "click"} else "action"
@@ -293,6 +371,11 @@ class Soak:
                       and action_summary.get("p95_ms", 0) <= ACTION_TIMEOUT_SECONDS * 1000)
         status = ("PASS" if self.cycles >= required_cycles and self.hint_observation_count == self.cycles
                   and not errors and self.api_failures == 0 and self.action_failures == 0 else "FAIL")
+        if self.memory_maintenance_required:
+            maintenance = self._memory_maintenance_report()
+            if maintenance["successes"] is None or maintenance["successes"] < 1 or maintenance["failures"] != 0:
+                errors.append("memory_maintenance_acceptance_failed")
+                status = "FAIL"
         if not latency_ok:
             status = "FAIL"
         return {"schema": "readiness-soak/v1", "status": status,
@@ -310,6 +393,7 @@ class Soak:
                                "generation_stable": self.generation_start == self.generation_end},
                 "screenshot_max_bytes": self.screenshot_max_bytes,
                 "hint_observation_count": self.hint_observation_count,
+                "memory_maintenance": self._memory_maintenance_report(),
                 "candidate_hints_flag": True,
                 "resource_metrics": {"worker_memory": "unavailable_from_worker_API; collect Docker/cgroup externally"},
                 "polling": {"configured_pair_size": 2,

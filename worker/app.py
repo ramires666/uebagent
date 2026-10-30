@@ -28,6 +28,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from worker.readiness_trace import ReadinessActionTrace
 from worker.observation_hints import collect_interaction_hints, enabled as observation_hints_enabled
+from worker.memory_maintenance import MemoryMaintenance
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -509,6 +510,7 @@ class BrowserRuntime:
         self._capture_lock = asyncio.Lock()
         self._readiness_trace = ReadinessActionTrace()
         self._observation_pending = False
+        self._memory_maintenance = MemoryMaintenance(backend=backend)
         self._page_event_handler: Any = None
         self._context_page_handler: Any = None
         self._context_close_handler: Any = None
@@ -1172,6 +1174,7 @@ class BrowserRuntime:
                 "control_epoch": self.control_epoch, "control_owner": self.control_owner,
                 **self._resource_status(),
                 **self._recovery_status(),
+                "memory_maintenance": self._memory_maintenance.status(),
                 "blocked_resources": [{"origin": origin, "resource_type": resource_type, "reason": reason,
                                         "path_family": path_family, "frame": frame, "method": method, "count": count}
                                       for (origin, resource_type, reason, path_family, frame, method), count in self._blocked_resources.items()]}
@@ -1430,6 +1433,20 @@ class BrowserRuntime:
                 acquired = True
             except TimeoutError as exc:
                 raise WorkerError("CAPTURE_BUSY", "viewer capture did not finish in time for observation") from exc
+            if (self._memory_maintenance.due() and not self._action_in_progress
+                    and not self._import_in_progress and not self._input_lock.locked()
+                    and self._page is not None and self._context is not None):
+                try:
+                    pages = list(self._context.pages)
+                except Exception:
+                    pages = []
+                if len(pages) == 1 and pages[0] is self._page:
+                    self._action_in_progress = True
+                    try:
+                        await self._memory_maintenance.attempt(
+                            getattr(self._page, "request_gc", None))
+                    finally:
+                        self._action_in_progress = False
             screenshot = await self._capture_screenshot()
             if len(screenshot) > MAX_SCREENSHOT_BYTES:
                 raise WorkerError("SCREENSHOT_TOO_LARGE", "viewport screenshot exceeded 16 MiB", status_code=413)
@@ -2439,6 +2456,8 @@ class BrowserRuntime:
         finally:
             self._action_in_progress = False
         self._ledger_finish(body.action_id, receipt)
+        if receipt.get("outcome") == "applied":
+            self._memory_maintenance.record_completed_action()
         return receipt
 
     async def execute_manual(self, body: ManualExecuteBody) -> dict[str, Any]:
@@ -2484,6 +2503,7 @@ class BrowserRuntime:
             raise WorkerError("STALE_CONTROL_EPOCH", "control changed while the manual action was in progress")
         self.control_epoch += 1
         self._last_observation_id = None
+        self._memory_maintenance.record_completed_action()
         return {"outcome": "applied", "action_id": action_id, "result": result, **self.status_base()}
 
     @staticmethod
@@ -2776,6 +2796,148 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
                 lock.release()
             runtime._action_in_progress = False
         return {"requested": True}
+
+    @app.post("/diagnostics/readiness-memory-report", dependencies=[Depends(require_bearer)])
+    async def readiness_memory_report(body: dict[str, Any]) -> dict[str, Any]:
+        from worker.readiness_memory_report import (
+            ABOUT_MEMORY_URL, CANONICAL_FIXTURE_URL, MEMORY_REPORT_DOM_SNAPSHOT,
+            MEMORY_REPORT_READY, REPORT_MAIN_SECONDS, REPORT_RESTORE_SECONDS,
+            normalize_dom_snapshot,
+        )
+
+        readiness_trace_allowed()
+        if body != {}:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST"})
+        loop = asyncio.get_running_loop()
+        total_deadline = loop.time() + REPORT_MAIN_SECONDS + REPORT_RESTORE_SECONDS
+        work_deadline = total_deadline - REPORT_RESTORE_SECONDS
+        if (not getattr(runtime, "_started", False) or getattr(runtime, "_page", None) is None
+                or getattr(runtime, "_adapter", None) is None or getattr(runtime, "_main_page_closed", False)
+                or getattr(runtime, "_resource_violation", False)):
+            raise HTTPException(status_code=503, detail={"code": "BROWSER_UNAVAILABLE"})
+        lock = getattr(runtime, "_capture_lock", None)
+        if (getattr(runtime, "control_owner", "none") != "none"
+                or getattr(runtime, "_action_in_progress", False)
+                or getattr(runtime, "_import_in_progress", False)
+                or getattr(runtime, "_observation_pending", False)
+                or lock is None or lock.locked()):
+            raise HTTPException(status_code=409, detail={"code": "CONTROL_BUSY"})
+        page, context = runtime._page, getattr(runtime, "_context", None)
+        try:
+            pages = list(context.pages) if context is not None else []
+            if len(pages) != 1 or pages[0] is not page:
+                raise HTTPException(status_code=409, detail={"code": "PAGE_CONTEXT_UNSAFE"})
+            remaining = work_deadline - loop.time()
+            if remaining <= 0:
+                raise HTTPException(status_code=503, detail={"code": "REPORT_TIMEOUT"})
+            if await asyncio.wait_for(runtime._adapter.url(), timeout=remaining) != CANONICAL_FIXTURE_URL:
+                raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+        except HTTPException:
+            raise
+        except TimeoutError:
+            raise HTTPException(status_code=503, detail={"code": "REPORT_TIMEOUT"}) from None
+        except Exception:
+            raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from None
+        # The URL lookup yielded to the event loop. Recheck all shared state
+        # before claiming the action slot, without an intervening await.
+        try:
+            pages = list(context.pages) if context is not None else []
+        except Exception:
+            raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from None
+        if (not getattr(runtime, "_started", False) or runtime._page is not page
+                or runtime._context is not context or getattr(runtime, "_main_page_closed", False)
+                or getattr(runtime, "_resource_violation", False)
+                or getattr(runtime, "control_owner", "none") != "none"
+                or getattr(runtime, "_action_in_progress", False)
+                or getattr(runtime, "_import_in_progress", False)
+                or getattr(runtime, "_observation_pending", False)
+                or lock is None or lock.locked() or len(pages) != 1 or pages[0] is not page):
+            raise HTTPException(status_code=409, detail={"code": "CONTROL_BUSY"})
+
+        runtime._action_in_progress = True
+        acquired = False
+        navigation_attempted = False
+        restored = False
+        report_error = None
+        processes = None
+
+        async def during_work(awaitable: Any) -> Any:
+            remaining = work_deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError
+            return await asyncio.wait_for(awaitable, timeout=remaining)
+
+        try:
+            await during_work(lock.acquire())
+            acquired = True
+            navigation_attempted = True
+            await during_work(page.goto(ABOUT_MEMORY_URL, wait_until="domcontentloaded",
+                                        timeout=max(1, int((work_deadline - loop.time()) * 1000))))
+            if (runtime._page is not page or runtime._context is not context
+                    or len(list(context.pages)) != 1 or list(context.pages)[0] is not page):
+                raise RuntimeError("page_context_changed")
+            verbose = page.locator("#verbose")
+            anonymize = page.get_by_label("anonymize")
+            if not await during_work(verbose.is_checked()):
+                await during_work(verbose.check())
+            if not await during_work(anonymize.is_checked()):
+                await during_work(anonymize.check())
+            if not await during_work(verbose.is_checked()) or not await during_work(anonymize.is_checked()):
+                raise RuntimeError("about_memory_controls_unavailable")
+            await during_work(page.locator("#measureButton").click())
+            remaining = work_deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError
+            await during_work(page.wait_for_function(MEMORY_REPORT_READY, timeout=max(1, int(remaining * 1000))))
+            payload = await during_work(page.evaluate(MEMORY_REPORT_DOM_SNAPSHOT))
+            processes = normalize_dom_snapshot(payload)
+        except TimeoutError:
+            report_error = "REPORT_TIMEOUT"
+        except Exception:
+            report_error = "CAPABILITY_UNAVAILABLE"
+        finally:
+            if navigation_attempted:
+                try:
+                    remaining = total_deadline - loop.time()
+                    if remaining <= 0:
+                        raise TimeoutError
+                    await asyncio.wait_for(page.goto(
+                        CANONICAL_FIXTURE_URL, wait_until="domcontentloaded",
+                        timeout=min(4500, max(1, int(remaining * 1000)))),
+                        timeout=min(4.7, remaining))
+                    remaining = total_deadline - loop.time()
+                    if remaining <= 0 or await asyncio.wait_for(
+                            runtime._adapter.url(), timeout=min(0.25, remaining)) != CANONICAL_FIXTURE_URL:
+                        raise RuntimeError("restore_not_confirmed")
+                    pages = list(context.pages) if context is not None else []
+                    if runtime._page is not page or runtime._context is not context or len(pages) != 1 or pages[0] is not page:
+                        raise RuntimeError("restore_context_changed")
+                    runtime.control_epoch += 1
+                    runtime._last_observation_id = None
+                    restored = True
+                except Exception:
+                    report_error = "PAGE_RESTORE_FAILED"
+                    mark_unavailable = getattr(runtime, "_mark_main_page_unavailable", None)
+                    if callable(mark_unavailable):
+                        mark_unavailable("readiness_memory_report_restore_failed")
+                    else:
+                        runtime._started = False
+                        runtime._main_page_closed = True
+                        runtime._recovery_needed = True
+                        runtime._recovery_state = "backoff"
+                        runtime.control_owner = "none"
+                        runtime.control_epoch += 1
+                        runtime._last_observation_id = None
+            if acquired:
+                lock.release()
+            runtime._action_in_progress = False
+
+        if navigation_attempted and not restored:
+            raise HTTPException(status_code=503, detail={"code": report_error or "PAGE_RESTORE_FAILED"})
+        if report_error:
+            raise HTTPException(status_code=503, detail={"code": report_error})
+        return {"schema": "readiness-memory-report/v1", "intrusive": True,
+                "processes": processes, "page_restored": True}
 
     @app.get("/diagnostics/readiness-actions", dependencies=[Depends(require_bearer)])
     async def readiness_actions() -> dict[str, Any]:

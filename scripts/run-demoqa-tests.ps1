@@ -30,6 +30,9 @@ param(
     [switch]$MemoryAttributionChecks,
     [ValidateSet('baseline', 'no_trace', 'no_addons', 'neither')][string]$MemoryAttributionVariant = 'baseline',
     [switch]$MemoryAttributionGcContrast,
+    [switch]$MemoryAttributionMemoryReport,
+    [switch]$MemoryAttributionPeriodicGc,
+    [switch]$MemoryMaintenance,
     [switch]$ObservationHints,
     [string[]]$P0Scenarios = @('checkbox', 'web_table'),
     [ValidateRange(0, 600)][int]$DiagnosticHoldSeconds = 120,
@@ -40,6 +43,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $AttributionSeedPath = Join-Path $Root 'runtime/demoqa/attribution-shared-fingerprint.json'
+$useAttributionSeed = $MemoryAttributionChecks -or ($SoakChecks -and $MemoryMaintenance)
 $ComposeFile = Join-Path $Root 'deploy/compose.demoqa-test.yaml'
 $Project = 'browser-mcp-demoqa-test'
 $ServiceUrl = 'http://127.0.0.1:18080'
@@ -50,7 +54,7 @@ $managedDemoqaEnv = @(
     'DEMOQA_WORKER_KEY', 'DEMOQA_CASES', 'DEMOQA_EXTENDED_COMPLEX', 'DEMOQA_RUN_LABEL',
     'DEMOQA_FRAME_PREFIX', 'DEMOQA_FONT_VARIANTS', 'DEMOQA_DIAGNOSTIC_HOLD_SECONDS',
     'READINESS_ACTION_TRACE', 'READINESS_P0_SCENARIOS', 'BROWSER_OBSERVATION_HINTS',
-    'READINESS_SKIP_ACTION_SNAPSHOTS', 'READINESS_DISABLE_DEFAULT_ADDONS'
+    'READINESS_SKIP_ACTION_SNAPSHOTS', 'READINESS_DISABLE_DEFAULT_ADDONS', 'BROWSER_MEMORY_MAINTENANCE'
 )
 $priorDemoqaEnv = @{}
 $processEnv = [Environment]::GetEnvironmentVariables('Process')
@@ -396,6 +400,10 @@ function Export-SoakReport {
         Remove-Item -LiteralPath $target -Force
         throw 'Soak report did not match the expected bounded schema.'
     }
+    if ($MemoryMaintenance) {
+        $report | Add-Member -NotePropertyName fingerprint_seed_matched -NotePropertyValue ([bool]$attributionSeedMatched) -Force
+        $report | Add-Member -NotePropertyName memory_maintenance_configured -NotePropertyValue $true -Force
+    }
     [System.IO.File]::WriteAllText($target, ($report | ConvertTo-Json -Depth 20) + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
     Write-Host "Saved sanitized soak report: $target"
 }
@@ -588,13 +596,15 @@ function Assert-ObservationHintsMode {
         [bool]$RunCasesAfterReadableCandidate,
         [bool]$SoakChecks,
         [bool]$MemoryProbeChecks = $false,
-        [bool]$MemoryAttributionChecks = $false
+        [bool]$MemoryAttributionChecks = $false,
+        [bool]$MemoryMaintenance = $false
     )
     if (-not $Enabled) { return }
     if ($Protocol -ne 'generic') { throw 'ObservationHints requires the generic model protocol.' }
     if ($SoakChecks -and -not $SkipCases) { throw 'ObservationHints soak requires SkipCases.' }
     if ($MemoryProbeChecks -and -not $SkipCases) { throw 'ObservationHints memory probe requires SkipCases.' }
     if ($MemoryAttributionChecks -and -not $SkipCases) { throw 'ObservationHints memory attribution requires SkipCases.' }
+    if ($MemoryMaintenance -and -not $SkipCases) { throw 'MemoryMaintenance requires SkipCases.' }
     if ($ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or ($SkipCases -and -not ($SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks))) {
         throw 'ObservationHints requires a supported DemoQA case execution path or an explicitly bounded soak.'
     }
@@ -616,14 +626,17 @@ try {
     $FontMatrixVariants = @($FontMatrixVariants | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $allowedFontVariants = @('baseline', 'arial_normal', 'arial_medium', 'system_normal', 'system_bold', 'monospace', 'system_thin100', 'arial_thin100', 'baseline_normal')
     if (@($FontMatrixVariants | Where-Object { $_ -notin $allowedFontVariants }).Count -gt 0) { throw 'FontMatrixVariants contains an unknown style.' }
-    if ($MemoryAttributionChecks) {
+    if ($useAttributionSeed) {
         if (Test-Path -LiteralPath $AttributionSeedPath -PathType Leaf) {
             $seedInfo = Get-ValidatedAttributionFingerprintSeed -Path $AttributionSeedPath
             $attributionSeedDigest = $seedInfo.Digest
             $attributionSeedVersion = $seedInfo.Version
         }
-        elseif ($MemoryAttributionVariant -ne 'baseline') {
+        elseif ($MemoryAttributionChecks -and $MemoryAttributionVariant -ne 'baseline') {
             throw 'The baseline attribution run must create the shared fingerprint seed before other variants.'
+        }
+        elseif ($SoakChecks -and $MemoryMaintenance) {
+            throw 'MemoryMaintenance soak requires the existing shared attribution fingerprint seed.'
         }
     }
     $Cases = Normalize-DemoqaCases -Cases $Cases
@@ -668,8 +681,29 @@ try {
             throw 'MemoryAttributionChecks must run standalone without soak, other probes, model cases, P0, or integration modes.'
         }
     }
+    if ($MemoryMaintenance) {
+        if (-not $SoakChecks -or -not $SkipCases -or -not $ObservationHints -or $ModelProtocol -ne 'generic') {
+            throw 'MemoryMaintenance requires SoakChecks, SkipCases, ObservationHints, and the generic model protocol.'
+        }
+        if ($MemoryAttributionChecks -or $MemoryAttributionGcContrast -or $MemoryAttributionMemoryReport -or $MemoryAttributionPeriodicGc -or
+            $MemoryAttributionVariant -ne 'baseline' -or $MemoryProbeChecks -or $MemoryProbeGcContrast -or
+            $RuntimeIntegrationChecks -or $LifecycleIntegrationChecks -or $CookieBridgeChecks -or
+            $P0Diagnostics -or $ProbeOnly -or $DiagnosticGate -or $RunCasesAfterReadableCandidate -or
+            $TaskControlChecks -or $ReadinessChecks) {
+            throw 'MemoryMaintenance supports only the baseline generic observation-hints soak.'
+        }
+    }
+    elseif ($SoakChecks -and ($MemoryAttributionChecks -or $MemoryAttributionGcContrast -or $MemoryAttributionMemoryReport -or $MemoryAttributionPeriodicGc)) {
+        throw 'Memory attribution options cannot be combined with a soak.'
+    }
     if ($MemoryAttributionGcContrast -and -not $MemoryAttributionChecks) {
         throw 'MemoryAttributionGcContrast requires MemoryAttributionChecks.'
+    }
+    if ($MemoryAttributionMemoryReport -and (-not $MemoryAttributionChecks -or $MemoryAttributionVariant -ne 'baseline' -or $MemoryAttributionGcContrast)) {
+        throw 'MemoryAttributionMemoryReport requires the baseline attribution variant without GC contrast.'
+    }
+    if ($MemoryAttributionPeriodicGc -and (-not $MemoryAttributionChecks -or $MemoryAttributionVariant -ne 'baseline' -or $MemoryAttributionGcContrast -or $MemoryAttributionMemoryReport)) {
+        throw 'MemoryAttributionPeriodicGc requires the baseline attribution variant without GC contrast or memory report.'
     }
     if ($MemoryProbeGcContrast -and (-not $MemoryProbeChecks -or $MemoryProbePhaseSet -ne 'mixed')) {
         throw 'MemoryProbeGcContrast requires MemoryProbeChecks with MemoryProbePhaseSet mixed.'
@@ -686,7 +720,7 @@ try {
     Assert-ObservationHintsMode -Enabled $ObservationHints -Protocol $ModelProtocol -ProbeOnly $ProbeOnly `
         -DiagnosticGate $DiagnosticGate -SkipCases $SkipCases -P0Diagnostics $P0Diagnostics `
         -RunCasesAfterReadableCandidate $RunCasesAfterReadableCandidate -SoakChecks $SoakChecks `
-        -MemoryProbeChecks $MemoryProbeChecks -MemoryAttributionChecks $MemoryAttributionChecks
+        -MemoryProbeChecks $MemoryProbeChecks -MemoryAttributionChecks $MemoryAttributionChecks -MemoryMaintenance $MemoryMaintenance
     if ($P0Diagnostics -and ($P0Scenarios.Count -eq 0 -or $P0Scenarios.Count -gt 4 -or @($P0Scenarios | Select-Object -Unique).Count -ne $P0Scenarios.Count)) {
         throw 'P0Scenarios must contain one to four unique allowlisted scenarios.'
     }
@@ -720,7 +754,8 @@ try {
         $env:READINESS_P0_SCENARIOS = ($P0Scenarios -join ',')
     }
     if ($RuntimeIntegrationChecks -or $SoakChecks -or $MemoryProbeChecks -or $MemoryAttributionChecks) { $env:READINESS_ACTION_TRACE = '1' }
-    if ($MemoryAttributionChecks) {
+    $env:BROWSER_MEMORY_MAINTENANCE = if ($MemoryMaintenance) { '1' } else { '0' }
+    if ($useAttributionSeed) {
         $env:READINESS_SKIP_ACTION_SNAPSHOTS = if ($MemoryAttributionVariant -in @('no_trace', 'neither')) { '1' } else { '0' }
         $env:READINESS_DISABLE_DEFAULT_ADDONS = if ($MemoryAttributionVariant -in @('no_addons', 'neither')) { '1' } else { '0' }
     }
@@ -748,7 +783,7 @@ try {
     if ($activeTestBrowserQuery.ExitCode -ne 0 -or $activeTestBrowserIds.Count -gt 0) {
         throw 'A disposable DemoQA browser is already running; refusing to start another worker.'
     }
-    if ($MemoryAttributionChecks) {
+    if ($useAttributionSeed) {
         foreach ($existingId in $preexistingTestContainerIds) {
             $existingName = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('inspect', '-f', '{{.Name}}', $existingId)
             if ($existingName.ExitCode -ne 0) { throw 'Could not validate existing disposable project containers before attribution setup.' }
@@ -801,7 +836,7 @@ try {
     # For attribution, create stopped containers first and inject the validated synthetic
     # fingerprint seed into a fresh disposable volume before Camoufox initializes.
     $stackCleanupNeeded = $true
-    if ($MemoryAttributionChecks) {
+    if ($useAttributionSeed) {
         Invoke-DockerChecked -Arguments ((Get-ComposeArgs) + @('create')) -FailureMessage 'Could not create stopped attribution containers' | Out-Null
         if ($attributionSeedDigest) {
             $stoppedBrowserRows = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-aq', 'browser'))
@@ -870,8 +905,9 @@ try {
     }
 
     $profileDigestBefore = Get-TestProfileDigest
-    if ($MemoryAttributionChecks) {
+    if ($useAttributionSeed) {
         if (-not $attributionSeedDigest) {
+            if ($MemoryMaintenance) { throw 'MemoryMaintenance cannot create a new fingerprint seed; expected the existing shared seed.' }
             New-Item -ItemType Directory -Path (Split-Path -Parent $AttributionSeedPath) -Force | Out-Null
             if (Test-Path -LiteralPath $AttributionSeedPath) { throw 'The shared attribution fingerprint seed appeared concurrently; refusing to overwrite it.' }
             $browserRows = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'browser'))
@@ -1172,6 +1208,8 @@ try {
             '--output', '/app/runtime/control-data/readiness-memory-attribution.json', '--i-confirm-disposable'
         )
         if ($MemoryAttributionGcContrast) { $attributionArgs += '--gc-contrast' }
+        if ($MemoryAttributionMemoryReport) { $attributionArgs += '--memory-report' }
+        if ($MemoryAttributionPeriodicGc) { $attributionArgs += '--periodic-gc' }
         $browserIdRows = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'browser'))
         $browserIds = @($browserIdRows.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
         if ($browserIdRows.ExitCode -ne 0 -or $browserIds.Count -ne 1) { throw 'Could not identify the single disposable browser for memory-attribution metrics.' }
@@ -1222,7 +1260,7 @@ try {
         if ($attributionExit -ne 0) { throw "Disposable memory-attribution diagnostic failed (exit $attributionExit); lifecycle and host metrics were preserved." }
     }
     $profileDigestAfter = Get-TestProfileDigest
-    if ($MemoryAttributionChecks) {
+    if ($useAttributionSeed) {
         $attributionSeedMatched = $attributionSeedMatched -and ($profileDigestAfter -eq $attributionSeedDigest)
         $profileDigestRow = [pscustomobject]@{ scenario='attribution_fingerprint_seed'; status='verified_after_workload'; matched=$attributionSeedMatched; version=$attributionSeedVersion }
     }
@@ -1357,6 +1395,7 @@ finally {
     Remove-Item Env:BROWSER_OBSERVATION_HINTS -ErrorAction SilentlyContinue
     Remove-Item Env:READINESS_SKIP_ACTION_SNAPSHOTS -ErrorAction SilentlyContinue
     Remove-Item Env:READINESS_DISABLE_DEFAULT_ADDONS -ErrorAction SilentlyContinue
+    Remove-Item Env:BROWSER_MEMORY_MAINTENANCE -ErrorAction SilentlyContinue
     if ($attributionSeedStage) {
         $stageFullPath = [System.IO.Path]::GetFullPath($attributionSeedStage)
         $demoqaRoot = [System.IO.Path]::GetFullPath((Join-Path $Root 'runtime/demoqa')).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar

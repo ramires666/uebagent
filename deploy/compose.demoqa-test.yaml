@@ -33,6 +33,7 @@ services:
       BROWSER_OBSERVATION_HINTS: ${BROWSER_OBSERVATION_HINTS:-0}
       READINESS_SKIP_ACTION_SNAPSHOTS: ${READINESS_SKIP_ACTION_SNAPSHOTS:-0}
       READINESS_DISABLE_DEFAULT_ADDONS: ${READINESS_DISABLE_DEFAULT_ADDONS:-0}
+      BROWSER_MEMORY_MAINTENANCE: ${BROWSER_MEMORY_MAINTENANCE:-0}
     entrypoint: ["sh", "-c"]
     command:
       - 'printf %s "$$DEMOQA_WORKER_KEY" > /run/demoqa-secrets/key; unset DEMOQA_WORKER_KEY; exec xvfb-run -a -s "-screen 0 1440x1000x24" python -m worker.app --host 0.0.0.0 --port 7070'
