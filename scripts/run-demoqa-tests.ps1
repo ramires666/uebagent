@@ -6,6 +6,7 @@ param(
     [ValidateSet('generic', 'fara')][string]$ModelProtocol = 'fara',
     [string]$ProductionControlUrl = 'http://127.0.0.1:8090',
     [switch]$ReadinessChecks,
+    [switch]$TaskControlChecks,
     [switch]$AllowSuspendedTasks,
     [switch]$ExtendedComplex,
     [string]$RunLabel = 'v4',
@@ -419,6 +420,16 @@ try {
         $testExitCode = Invoke-RunnerStream -RunnerArgs $runnerArgs
         Copy-DemoqaScreenshots
         if ($testExitCode -ne 0) { throw "DemoQA scenario runner failed (exit $testExitCode)." }
+    }
+
+    if ($TaskControlChecks) {
+        $taskControlArgs = (Get-ComposeArgs) + @(
+            'exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_DISPOSABLE=1',
+            'control', 'python', '/app/scripts/readiness_task_control.py',
+            '--i-confirm-disposable', '--output', '/app/runtime/control-data/readiness-task-control.json'
+        )
+        $taskControlExit = Invoke-RunnerStream -RunnerArgs $taskControlArgs
+        if ($taskControlExit -ne 0) { throw "Disposable task control checks failed (exit $taskControlExit)." }
     }
 
     $profileDigestAfter = Get-TestProfileDigest

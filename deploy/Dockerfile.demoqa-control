@@ -6,3 +6,4 @@ COPY config /app/config
 COPY scripts/test_demoqa.py /app/scripts/test_demoqa.py
 COPY scripts/demoqa_task_spec.py /app/scripts/demoqa_task_spec.py
 COPY scripts/readiness_live.py /app/scripts/readiness_live.py
+COPY scripts/readiness_task_control.py /app/scripts/readiness_task_control.py
