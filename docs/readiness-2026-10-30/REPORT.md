@@ -10,7 +10,7 @@
 
 | Gate | Текущий статус | Основание / следующий результат |
 |---|---|---|
-| G0 — tests | **Проверки пройдены в указанном объёме** | Полный suite 475/8/0 на 7bc09cf; 6 сфокусированных тестов harness на a0cc278. Полный suite на a0cc278 не запускался. [Сводка](evidence/unit-cookie-probe-summary.json). |
+| G0 — tests | **Проверки пройдены в указанном объёме** | Свежий полный suite на ffa80c1: 486 passed / 8 skipped / 0 failed за 93,14 с. [JUnit-derived summary](evidence/unit-suite-gc-final.json). Исторический suite 475/8/0 на 7bc09cf: [summary](evidence/unit-cookie-probe-summary.json). |
 | G1 — API/MCP security | **PASS, bounded** | Auth/CSRF: 16/16; worker bearer проверен отдельными task-control checks. |
 | G2 — worker/control integration | **PASS, bounded** | Runtime cancel/overlay и synthetic cookie bridge PASS на disposable stack. Cookie source — synthetic extension protocol; реальный Chrome E2E не выполнялся. |
 | G3 — live browser + model | **PASS, bounded** | P0: checkbox 3/3 и web_table 3/3; full G3: 8/8. Только disposable конфигурация с MODEL_PROTOCOL=generic и BROWSER_OBSERVATION_HINTS=1; production setting остаётся выключенным. |
@@ -70,7 +70,7 @@ Memory event counter max вырос на 319; он не является OOM cou
 ### Текущие bounded результаты и ограничения
 
 - P0: checkbox — 3/3 PASS; web_table — 3/3 PASS. Full G3 — 8/8 PASS с независимой проверкой, 120 с / 30 шагов на сценарий.
-- Полный pytest на коммите 7bc09cf: 475 passed, 8 skipped, 0 failed, 88,30 с. Шесть сфокусированных тестов harness на a0cc278 также прошли; полный suite на a0cc278 не запускался. Сводка: [unit-cookie-probe-summary.json](evidence/unit-cookie-probe-summary.json).
+- Свежий полный suite на source revision ffa80c1: 486 passed, 8 skipped, 0 failed за 93,14 с; группировка тестовых файлов рассчитана из JUnit XML. [Сводка текущего suite](evidence/unit-suite-gc-final.json). Предыдущие 475/8/0 на 7bc09cf остаются историческим baseline: [unit-cookie-probe-summary.json](evidence/unit-cookie-probe-summary.json). Guarded GC diagnostic endpoint покрыт тестами, но live GC contrast не запускался и production memory improvement не доказано.
 - Runtime cancellation, overlay, lifecycle и cookie bridge integration прошли в bounded disposable runs. См. lifecycle-cookie2-summary.json. Cookie bridge использовал synthetic extension protocol через ChromeBroker → TaskCookieImporter → WorkerClient; это не реальный Chrome E2E. Проверены блокировки при отсутствии/неоднозначности source, baseline MISSING → READY, исключение unrelated cookie и отсутствие cookie value в task events.
 - Hints включались только для disposable test worker через BROWSER_OBSERVATION_HINTS=1; в production feature остаётся default-off.
 - Исправления текущей ревизии включают тестовую конфигурацию: MODEL_PROTOCOL передаётся control, BROWSER_OBSERVATION_HINTS передаётся browser только для проверки; эта wiring не активирует hints в production.

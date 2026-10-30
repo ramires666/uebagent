@@ -8,7 +8,7 @@
 
 - Checkbox: 3/3 свежих PASS; web_table: 3/3 свежих PASS.
 - Полный hints-enabled G3: 8/8 PASS с независимой проверкой, лимит 120 секунд / 30 шагов.
-- Полный pytest на коммите 7bc09cf: 475 passed, 8 skipped, 0 failed за 88,30 с; 6 focused тестов memory probe harness прошли на a0cc278. Полный suite на a0cc278 не запускался. [Сводка](evidence/unit-cookie-probe-summary.json).
+- Свежий полный pytest на source revision ffa80c1: 486 passed, 8 skipped, 0 failed за 93,14 с. JUnit-derived группировка файлов: [сводка](evidence/unit-suite-gc-final.json). Предыдущий suite 475/8/0 на 7bc09cf — исторический результат: [архивная сводка](evidence/unit-cookie-probe-summary.json). Guarded GC diagnostic прошёл suite, но live GC contrast и production memory improvement не проверялись.
 - Bounded runtime integration: queued cancel → CANCELLED; in-flight cancel → RECOVERING; overlay → waiting_human/verification_required. Lifecycle restart/uncertain-response rerun PASS в bounded disposable run: recover/review сохраняется, redispatch отсутствует; concurrent create отклонён как PROFILE_BUSY.
 - Hints включались только в test worker; feature default-off и не развёрнута в production. Lifecycle rerun и synthetic cookie-source bridge PASS; cookie source использует synthetic extension protocol и не является реальным Chrome E2E. soak15m1 завершился FAIL: 359,75/900 с, memory peak 99,88%, 59 samples, 2 138 циклов, BROWSER_UNAVAILABLE:api и cleanup/idle failure. Подробный allowlisted evidence и график есть в REPORT.md.
 

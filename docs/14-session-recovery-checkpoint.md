@@ -37,4 +37,10 @@ This checkpoint preserves the current state so work can resume in a fresh Codex 
 
 ## Deployment gate
 
-Deployment is complete and the control service is healthy. The generic-model overlay is active, while the browser container and persistent profile volumes remain untouched. Keep the private browser under human control and do not replay the unknown prior task.
+The control-only deployment completed and its health check passed. This does not establish production readiness or validate the separate RAM test. The generic-model overlay is active, while the browser container and persistent profile volumes remain untouched. Keep the private browser under human control and do not replay the unknown prior task.
+## Runtime и готовность на 2026-10-30
+
+- Текущий Docker Desktop 4.91 предоставляет LinuxKit VM через VMM (`UseLibkrun=true`). `docker info --format '{{.MemTotal}}'` показал 8384647168 байт (около 8 GiB). Активного Docker Desktop WSL-дистрибутива нет; лимит 48 GiB из `.wslconfig` к этой VM не применяется. Это измеренный лимит данной машины, не настройка по умолчанию.
+- Разделяйте память Windows, лимит Linux VM Docker Desktop и лимит cgroup контейнера. Проверка: `docker info --format '{{.MemTotal}}'` и `docker inspect --format '{{.HostConfig.Memory}}' <container-name>` (оба результата в байтах; `0` у inspect означает отсутствие заданного лимита).
+- Production Compose container limit остаётся 2816 MiB. Отдельный RAM-тест с лимитом 4 GiB ещё выполняется и не готов. Production GO не объявлен.
+- Модель Bonsai/llama.cpp на Windows, API `localhost:8080`, alias `auto`, и headed Camoufox в Linux-контейнере с программным рендерингом остаются без изменений; GPU браузеру не нужен.
