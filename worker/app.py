@@ -26,11 +26,49 @@ from urllib.parse import urlsplit
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
+from worker.readiness_trace import ReadinessActionTrace
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ADAPTER_PATH = ROOT / "vendor" / "browser-use-camoufox" / "browser_use" / "browser" / "adapter.py"
 VIEWPORT = {"width": 1440, "height": 900}
+READINESS_ACTION_SNAPSHOT = r"""({x,y}) => {
+  const fixture=location.hostname==='readiness-fixture.test';
+  const first=(selectors)=>selectors.map(s=>s.startsWith('#')||s.includes(' ')?document.querySelector(s):document.getElementById(s)).find(Boolean)||null;
+  const targets={first_name:first(['firstName','first']),last_name:first(['lastName','last']),email:first(['userEmail','email']),age:first(['age']),salary:first(['salary']),department:first(['department'])};
+  const desktop=first(['[role="checkbox"][aria-label="Select Desktop"]','.rc-tree-checkbox[aria-label="Select Desktop"]','#desktop-role','#tree-node-desktop-input','tree-node-desktop','desktop','#tree-node-desktop input[type="checkbox"]','#tree-node-desktop [role="checkbox"]']);
+  const home=first(['[role="checkbox"][aria-label="Select Home"]','.rc-tree-checkbox[aria-label="Select Home"]','#home-role','#tree-node-home-input','home','#tree-node-home input[type="checkbox"]','#tree-node-home [role="checkbox"]']);
+  const homeRow=home?.closest('.rc-tree-treenode,.rct-node')||document.querySelector('.rc-tree-treenode:has([aria-label="Select Home"]),.rct-node:has(#home-role)');
+  const desktopRow=desktop?.closest('.rc-tree-treenode,.rct-node')||document.querySelector('.rc-tree-treenode:has([aria-label="Select Desktop"]),.rct-node:has(#desktop-role)');
+  const homeNode=first(['tree-node-home']);
+  const homeExpander=fixture?null:homeRow?.querySelector('.rc-tree-switcher,.rct-collapse,.rct-collapse-btn')||homeNode?.querySelector('.rct-collapse,.rct-collapse-btn')||null;
+  const desktopExpander=fixture?null:desktopRow?.querySelector('.rc-tree-switcher,.rct-collapse,.rct-collapse-btn')||null;
+  const fixtureExpander=fixture?document.querySelector('.expander'):null;
+  const targetOf=e=>{if(!e)return 'none';
+    for(const k of ['first_name','last_name','email','age','salary','department'])if(targets[k]&&(e===targets[k]||targets[k].contains(e)))return k;
+    if(home&&(e===home||home.contains(e)))return 'home_checkbox';
+    if(desktop&&(e===desktop||desktop.contains(e)))return 'desktop_checkbox';
+    if(homeExpander&&(e===homeExpander||homeExpander.contains(e)))return 'home_expander';
+    if(desktopExpander&&(e===desktopExpander||desktopExpander.contains(e)))return 'desktop_expander';
+    if(fixtureExpander&&(e===fixtureExpander||fixtureExpander.contains(e)))return 'root_expander';
+    if(homeRow&&homeRow.contains(e))return 'home_label';
+    if(desktopRow&&desktopRow.contains(e))return 'desktop_label';
+    if(fixture&&e.closest('.branch'))return 'home_label';
+    if(fixture&&e.closest('#desktop'))return 'desktop_checkbox';return 'other';};
+  const element=e=>{if(!e)return 'none';if(e===document.body)return 'body';
+    const t=(e.getAttribute('type')||'').toLowerCase();if(t==='checkbox'||t==='radio')return 'checkbox';
+    const tag=e.tagName.toLowerCase();return ['input','textarea','button','select'].includes(tag)?tag:'other';};
+  const focus=document.activeElement;let hit=null,hitCat='none';
+  if(Number.isFinite(x)&&Number.isFinite(y)){hit=document.elementFromPoint(x,y);const sem=hit?.closest('.rc-tree-checkbox,[role="checkbox"],input[type="checkbox"],input[type="radio"]')||hit;
+    hitCat=!hit?'none':(sem.matches('.rc-tree-checkbox,[role="checkbox"],input[type="checkbox"],input[type="radio"]')?'checkbox':
+      (hit.closest('button,[role="button"]')?'button':hit.closest('input')?'input':hit.closest('textarea')?'textarea':hit.closest('select')?'select':hit.closest('a,[role="link"]')?'link':'other'));}
+  const t=targetOf(hit);const targetEl=t==='home_checkbox'?home:t==='desktop_checkbox'?desktop:t==='home_expander'?homeExpander:t==='desktop_expander'?desktopExpander:t==='root_expander'?fixtureExpander:targets[t]||null;
+  let bbox=null;if(targetEl){const r=targetEl.getBoundingClientRect();bbox={x:r.x,y:r.y,width:r.width,height:r.height};}
+  const checked=e=>!e?false:e.checked===true||e.getAttribute('aria-checked')==='true'||e.classList.contains('rc-tree-checkbox-checked')||e.classList.contains('rct-icon-check');
+  const checks={home:checked(home),desktop:checked(desktop)};const filled={};for(const k of Object.keys(targets))if(targets[k])filled[k]=!!targets[k].value;
+  const bounds={};for(const [k,e] of Object.entries({...targets,home_checkbox:home,desktop_checkbox:desktop,home_expander:homeExpander,desktop_expander:desktopExpander,root_expander:fixtureExpander}))if(e){const r=e.getBoundingClientRect();bounds[k]={x:r.x,y:r.y,width:r.width,height:r.height};}
+  return {focus:element(focus),focus_target:targetOf(focus),hit:hitCat,target:t,bbox,bounds,checks,filled};
+}"""
 LEASE_SECONDS = 5.0
 MAX_ACTION_TEXT = 100_000
 GEMINI_PROMPT_ACK_TIMEOUT_SECONDS = 2.0
@@ -462,6 +500,7 @@ class BrowserRuntime:
         self._pointer_position: tuple[float, float] | None = None
         self._start_lock = asyncio.Lock()
         self._capture_lock = asyncio.Lock()
+        self._readiness_trace = ReadinessActionTrace()
         self._observation_pending = False
         self._page_event_handler: Any = None
         self._context_page_handler: Any = None
@@ -1742,6 +1781,66 @@ class BrowserRuntime:
     async def _execute_action(self, action: dict[str, Any], allowed: frozenset[str], *, manual: bool, allow_write: bool,
                               expected_epoch: int, site_capability: SiteCapability | None = None,
                               action_id: str | None = None) -> dict[str, Any]:
+        kind = action.get("kind") if isinstance(action, dict) else None
+        if not (ReadinessActionTrace.enabled() and kind in {"click", "type_text", "press_key", "scroll", "wait", "navigate", "drag", "mouse_move"}):
+            return await self._execute_action_untraced(action, allowed, manual=manual, allow_write=allow_write,
+                expected_epoch=expected_epoch, site_capability=site_capability, action_id=action_id)
+        try:
+            current = urlsplit(await self._adapter.url())
+            trace_paths = {"/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties", "/tree", "/form"}
+            trace_page = current.scheme == "https" and current.path.rstrip("/") in trace_paths and current.hostname in {"demoqa.com", "readiness-fixture.test"}
+        except Exception:
+            trace_page = False
+        if not trace_page:
+            return await self._execute_action_untraced(action, allowed, manual=manual, allow_write=allow_write,
+                expected_epoch=expected_epoch, site_capability=site_capability, action_id=action_id)
+        if kind == "click" and any(type(action.get(key)) not in (int, float) or not math_isfinite(action.get(key)) for key in ("x", "y")):
+            return await self._execute_action_untraced(action, allowed, manual=manual, allow_write=allow_write,
+                expected_epoch=expected_epoch, site_capability=site_capability, action_id=action_id)
+        started = time.monotonic()
+        record: dict[str, Any] = {"kind": kind, "viewport": {"width": self.viewport_width, "height": self.viewport_height}}
+        if kind in {"click", "mouse_move", "drag"}:
+            for key in ("x", "y"):
+                value = action.get(key)
+                if type(value) in (int, float): record[key] = value
+        async def snapshot(x: Any = None, y: Any = None) -> dict[str, Any]:
+            try:
+                result = await asyncio.wait_for(self._page.evaluate(READINESS_ACTION_SNAPSHOT, {"x": x, "y": y}), timeout=1)
+                return result if isinstance(result, dict) else {}
+            except Exception: return {}
+        before = await snapshot(float(action["x"]), float(action["y"])) if kind == "click" else await snapshot()
+        record["focus_before"] = before.get("focus", "unknown")
+        record["target_before"] = before.get("focus_target", "unknown")
+        if isinstance(before.get("bounds"), dict): record["target_boxes"] = before["bounds"]
+        if kind == "click":
+            for key in ("hit", "target", "bbox"):
+                if key in before: record[key] = before[key]
+        if isinstance(before.get("checks"), dict): record["checked_before"] = before["checks"]
+        if isinstance(before.get("filled"), dict): record["filled_before"] = before["filled"]
+        outcome = "applied"
+        try:
+            return await self._execute_action_untraced(action, allowed, manual=manual, allow_write=allow_write,
+                expected_epoch=expected_epoch, site_capability=site_capability, action_id=action_id)
+        except WorkerError as exc:
+            outcome = "unknown" if exc.code in {"ACTION_OUTCOME_UNKNOWN", "STALE_CONTROL_EPOCH"} else "rejected"
+            raise
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            after = await snapshot()
+            record["focus_after"] = after.get("focus", "unknown")
+            record["target_after"] = after.get("focus_target", "unknown")
+            if isinstance(after.get("checks"), dict): record["checked_after"] = after["checks"]
+            if isinstance(after.get("filled"), dict): record["filled_after"] = after["filled"]
+            record["elapsed_ms"] = (time.monotonic() - started) * 1000
+            record["outcome"] = outcome
+            try: self._readiness_trace.append(record)
+            except Exception: pass
+
+    async def _execute_action_untraced(self, action: dict[str, Any], allowed: frozenset[str], *, manual: bool, allow_write: bool,
+                              expected_epoch: int, site_capability: SiteCapability | None = None,
+                              action_id: str | None = None) -> dict[str, Any]:
         kind, action = self._validate_action(action)
         if kind == "gemini_refresh_session":
             from worker.site_capabilities import GEMINI_ORIGIN, GEMINI_SESSION_REFRESH_PREFLIGHT
@@ -2585,6 +2684,80 @@ def create_app(runtime: BrowserRuntime | Any | None = None, token: str | None = 
         provided = authorization[7:]
         if not secrets.compare_digest(provided, expected):
             raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "message": "invalid bearer authorization"})
+
+    def readiness_trace_allowed() -> None:
+        if not ReadinessActionTrace.enabled():
+            raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+
+    @app.get("/diagnostics/readiness-actions", dependencies=[Depends(require_bearer)])
+    async def readiness_actions() -> dict[str, Any]:
+        readiness_trace_allowed()
+        if not getattr(runtime, "_started", False) or getattr(runtime, "_adapter", None) is None:
+            raise HTTPException(status_code=503, detail={"code": "BROWSER_UNAVAILABLE"})
+        try:
+            parsed = urlsplit(await runtime._adapter.url())
+            path = parsed.path.rstrip("/") or "/"
+            permitted = parsed.scheme == "https" and ((parsed.hostname == "demoqa.com" and path in {
+                "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}) or
+                (parsed.hostname == "readiness-fixture.test" and path in {
+                "/tree", "/form", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}))
+            if not permitted:
+                raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+            return {"records": runtime._readiness_trace.snapshot()}
+        except HTTPException: raise
+        except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
+
+    @app.post("/diagnostics/readiness-actions/reset", dependencies=[Depends(require_bearer)])
+    async def reset_readiness_actions() -> dict[str, Any]:
+        readiness_trace_allowed()
+        if not getattr(runtime, "_started", False) or getattr(runtime, "_adapter", None) is None:
+            raise HTTPException(status_code=503, detail={"code": "BROWSER_UNAVAILABLE"})
+        try:
+            parsed = urlsplit(await runtime._adapter.url())
+            if parsed.scheme != "https" or parsed.hostname not in {"demoqa.com", "readiness-fixture.test"} or parsed.path.rstrip("/") not in {
+                    "/tree", "/form", "/checkbox", "/webtables", "/text-box", "/buttons", "/dynamic-properties"}:
+                raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+        except HTTPException: raise
+        except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
+        runtime._readiness_trace.reset()
+        return {"reset": True}
+
+    @app.post("/diagnostics/readiness-fixture", dependencies=[Depends(require_bearer)])
+    async def install_readiness_fixture(body: dict[str, Any]) -> dict[str, Any]:
+        readiness_trace_allowed()
+        if (set(body) != {"scenario"} or not isinstance(body.get("scenario"), str)
+                or body["scenario"] not in {"tree", "form"}):
+            raise HTTPException(status_code=422, detail={"code": "INVALID_FIXTURE_SCENARIO"})
+        if not getattr(runtime, "_started", False) or getattr(runtime, "_page", None) is None:
+            raise HTTPException(status_code=503, detail={"code": "BROWSER_UNAVAILABLE"})
+        if (getattr(runtime, "_action_in_progress", False) or getattr(runtime, "_import_in_progress", False)
+                or getattr(runtime, "control_owner", "none") != "none"):
+            raise HTTPException(status_code=409, detail={"code": "CONTROL_BUSY"})
+        context = getattr(runtime, "_context", None)
+        if context is not None:
+            try:
+                pages = list(context.pages)
+                if len(pages) != 1 or pages[0] is not runtime._page:
+                    raise HTTPException(status_code=409, detail={"code": "PAGE_CONTEXT_UNSAFE"})
+            except HTTPException: raise
+            except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
+        scenario = body["scenario"]
+        fixture_url = f"https://readiness-fixture.test/{scenario}"
+        try:
+            from scripts.readiness_p0_fixture import fixture_html
+            html = fixture_html(scenario)
+            if not isinstance(html, str) or len(html) > 100_000:
+                raise ValueError("invalid static fixture")
+            async def fulfill(route: Any) -> None:
+                request_url = route.request.url
+                if request_url != fixture_url:
+                    await route.abort()
+                    return
+                await route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
+            await runtime._page.route(fixture_url, fulfill)
+            return {"installed": True, "scenario": scenario, "path": f"/{scenario}"}
+        except HTTPException: raise
+        except Exception as exc: raise HTTPException(status_code=503, detail={"code": "CAPABILITY_UNAVAILABLE"}) from exc
 
     def as_http(exc: WorkerError) -> HTTPException:
         return HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message})

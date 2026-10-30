@@ -16,6 +16,8 @@ param(
     [switch]$RunCasesAfterReadableCandidate,
     [switch]$RemoveTestVolume,
     [switch]$DiagnosticGate,
+    [switch]$P0Diagnostics,
+    [string[]]$P0Scenarios = @('checkbox', 'web_table'),
     [ValidateRange(0, 600)][int]$DiagnosticHoldSeconds = 120,
     [ValidatePattern('^[A-Za-z0-9_-]{1,32}$')][string]$ProbeFramePrefix = 'frame',
     [string[]]$FontMatrixVariants = @('baseline', 'arial_normal', 'arial_medium', 'system_normal', 'system_bold', 'monospace')
@@ -31,7 +33,8 @@ $workerKey = $null
 $managedDemoqaEnv = @(
     'DEMOQA_MODEL_BASE_URL', 'DEMOQA_MODEL_ALIAS', 'DEMOQA_MODEL_PROTOCOL', 'DEMOQA_BROWSER_MEMORY_LIMIT',
     'DEMOQA_WORKER_KEY', 'DEMOQA_CASES', 'DEMOQA_EXTENDED_COMPLEX', 'DEMOQA_RUN_LABEL',
-    'DEMOQA_FRAME_PREFIX', 'DEMOQA_FONT_VARIANTS', 'DEMOQA_DIAGNOSTIC_HOLD_SECONDS'
+    'DEMOQA_FRAME_PREFIX', 'DEMOQA_FONT_VARIANTS', 'DEMOQA_DIAGNOSTIC_HOLD_SECONDS',
+    'READINESS_ACTION_TRACE', 'READINESS_P0_SCENARIOS'
 )
 $priorDemoqaEnv = @{}
 $processEnv = [Environment]::GetEnvironmentVariables('Process')
@@ -47,6 +50,8 @@ $preexistingTestContainerIds = @()
 $continueCases = $false
 $readinessCheckAttempted = $false
 $readinessReportError = $null
+$p0ReportAttempted = $false
+$p0ReportError = $null
 $resultLines = [System.Collections.Generic.List[string]]::new()
 
 function Invoke-NativeCaptured {
@@ -259,6 +264,38 @@ function Export-ReadinessReport {
     Write-Host "Saved sanitized readiness report: $target"
 }
 
+function Export-P0Report {
+    $controlQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments ((Get-ComposeArgs) + @('ps', '-q', 'control'))
+    $controlIds = @($controlQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($controlQuery.ExitCode -ne 0 -or $controlIds.Count -ne 1) { throw 'Could not identify the disposable control container for P0 evidence.' }
+    $destinationDirectory = Join-Path (Join-Path $Root 'runtime/demoqa') $RunLabel
+    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+    $target = Join-Path $destinationDirectory 'readiness-p0-report.json'
+    $sourcePath = '/app/runtime/control-data/readiness-p0-report.json'
+    $copy = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('cp', "$($controlIds[0]):$sourcePath", $target)
+    if ($copy.ExitCode -ne 0) {
+        Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        $readerCode = 'import base64,pathlib; print(base64.b64encode(pathlib.Path(''/app/runtime/control-data/readiness-p0-report.json'').read_bytes()).decode(''ascii''))'
+        $encoded = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('exec', $controlIds[0], 'python', '-c', $readerCode)
+        if ($encoded.ExitCode -ne 0) { throw 'Could not export P0 evidence before disposable stack cleanup.' }
+        $encodedText = (($encoded.Output | ForEach-Object { [string]$_ }) -join '').Trim()
+        if ($encodedText.Length -gt 3MB) { throw 'P0 evidence exceeded the export size limit.' }
+        try { [System.IO.File]::WriteAllBytes($target, [Convert]::FromBase64String($encodedText)) }
+        catch { throw 'P0 evidence export was not valid base64.' }
+    }
+    $raw = [System.IO.File]::ReadAllText($target)
+    if ($raw.Length -gt 2MB) { Remove-Item -LiteralPath $target -Force; throw 'P0 report exceeded the 2 MiB export limit.' }
+    try { $report = $raw | ConvertFrom-Json -ErrorAction Stop }
+    catch { Remove-Item -LiteralPath $target -Force; throw 'P0 report was not valid JSON.' }
+    if ($report.schema -ne 'readiness-p0/v1' -or $report.status -notin @('PASS', 'FAIL', 'BLOCKED', 'IN_PROGRESS') -or
+        $report.scenarios.Count -gt 4 -or $report.raw_model_output_recorded -ne $false -or
+        $report.typed_values_recorded -ne $false) {
+        Remove-Item -LiteralPath $target -Force
+        throw 'P0 report did not match the expected bounded schema.'
+    }
+    Write-Host "Saved P0 diagnostic report: $target"
+}
+
 try {
     if (-not (Test-Path -LiteralPath $ComposeFile -PathType Leaf)) { throw 'Disposable DemoQA compose file is missing.' }
     if ($RunLabel -notmatch '^[A-Za-z0-9_-]{1,20}$') { throw 'RunLabel may contain only letters, digits, underscores and dashes.' }
@@ -273,6 +310,19 @@ try {
         if (-not $ProbeOnly -or -not $ExtendedComplex -or ($Cases -join ',') -ne 'checkbox,web_table') {
             throw 'RunCasesAfterReadableCandidate requires ProbeOnly, ExtendedComplex, and exactly checkbox,web_table.'
         }
+    }
+    if ($P0Diagnostics -and ($ProbeOnly -or $DiagnosticGate -or $ReadinessChecks -or $TaskControlChecks -or $RunCasesAfterReadableCandidate)) {
+        throw 'P0Diagnostics cannot be combined with probe, gate, readiness, task-control, or readability-gated modes.'
+    }
+    if ($P0Diagnostics -and ($P0Scenarios.Count -eq 0 -or $P0Scenarios.Count -gt 4 -or @($P0Scenarios | Select-Object -Unique).Count -ne $P0Scenarios.Count)) {
+        throw 'P0Scenarios must contain one to four unique allowlisted scenarios.'
+    }
+    $P0Scenarios = @($P0Scenarios | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $allowedP0 = @('fixture_tree', 'fixture_form', 'checkbox', 'web_table')
+    if ($P0Diagnostics -and ($P0Scenarios.Count -eq 0 -or $P0Scenarios.Count -gt 4 -or
+        @($P0Scenarios | Where-Object { $_ -notin $allowedP0 }).Count -gt 0 -or
+        @($P0Scenarios | Select-Object -Unique).Count -ne $P0Scenarios.Count)) {
+        throw 'P0Scenarios must contain one to four unique allowlisted scenarios.'
     }
 
     # Validate the exact endpoint and served alias before any Docker command can
@@ -290,6 +340,10 @@ try {
     $workerKey = [Convert]::ToBase64String($keyBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
     $env:DEMOQA_WORKER_KEY = $workerKey
     $env:DEMOQA_CASES = ($Cases -join ',')
+    if ($P0Diagnostics) {
+        $env:READINESS_ACTION_TRACE = '1'
+        $env:READINESS_P0_SCENARIOS = ($P0Scenarios -join ',')
+    }
     if ($ExtendedComplex) { $env:DEMOQA_EXTENDED_COMPLEX = '1' } else { Remove-Item Env:DEMOQA_EXTENDED_COMPLEX -ErrorAction SilentlyContinue }
 
     # Building the isolated image is safe while production is live and ensures it is ready
@@ -429,7 +483,16 @@ try {
         }
     }
 
-    if (-not $ProbeOnly -and -not $SkipCases -and (-not $DiagnosticGate -or $continueCases)) {
+    if ($P0Diagnostics) {
+        $p0Args = (Get-ComposeArgs) + @('exec', '-T', '-e', 'APP_ENV=test', '-e', 'READINESS_ACTION_TRACE=1',
+            '-e', "READINESS_P0_SCENARIOS=$($P0Scenarios -join ',')", '-e', 'READINESS_P0_OUTPUT=/app/runtime/control-data/readiness-p0-report.json',
+            'control', 'python', '/app/scripts/readiness_p0.py')
+        $p0ReportAttempted = $true
+        $p0Exit = Invoke-RunnerStream -RunnerArgs $p0Args
+        if ($p0Exit -ne 0) { throw "P0 diagnostic runner failed (exit $p0Exit)." }
+    }
+
+    if (-not $P0Diagnostics -and -not $ProbeOnly -and -not $SkipCases -and (-not $DiagnosticGate -or $continueCases)) {
         $runnerArgs = (Get-ComposeArgs) + @('exec', '-T', '-e', "DEMOQA_CASES=$($Cases -join ',')")
         if ($ExtendedComplex) { $runnerArgs += @('-e', 'DEMOQA_EXTENDED_COMPLEX=1') }
         $runnerArgs += @('control', 'python', '/app/scripts/test_demoqa.py')
@@ -465,6 +528,13 @@ finally {
         catch {
             $readinessReportError = 'Could not export readiness evidence before disposable stack cleanup.'
             $resultLines.Add('{"scenario":"readiness_live","status":"report_export_failed"}')
+        }
+    }
+    if ($p0ReportAttempted) {
+        try { Export-P0Report }
+        catch {
+            $p0ReportError = 'Could not export P0 evidence before disposable stack cleanup.'
+            $resultLines.Add('{"scenario":"readiness_p0","status":"report_export_failed"}')
         }
     }
     if ($stackCleanupNeeded) {
@@ -546,6 +616,8 @@ finally {
     Remove-Item Env:DEMOQA_FRAME_PREFIX -ErrorAction SilentlyContinue
     Remove-Item Env:DEMOQA_FONT_VARIANTS -ErrorAction SilentlyContinue
     Remove-Item Env:DEMOQA_DIAGNOSTIC_HOLD_SECONDS -ErrorAction SilentlyContinue
+    Remove-Item Env:READINESS_ACTION_TRACE -ErrorAction SilentlyContinue
+    Remove-Item Env:READINESS_P0_SCENARIOS -ErrorAction SilentlyContinue
     foreach ($name in $managedDemoqaEnv) {
         if ($priorDemoqaEnv[$name].Present) {
             [Environment]::SetEnvironmentVariable($name, $priorDemoqaEnv[$name].Value, 'Process')
@@ -558,6 +630,7 @@ finally {
     if ($cleanupError -and $readinessReportError) { throw "$cleanupError $readinessReportError" }
     if ($cleanupError) { throw $cleanupError }
     if ($readinessReportError) { throw $readinessReportError }
+    if ($p0ReportError) { throw $p0ReportError }
 }
 
 Write-Host "Saved sanitized test output to $ResultsPath"
