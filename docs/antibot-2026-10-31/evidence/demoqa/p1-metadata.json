@@ -1,0 +1,49 @@
+{
+  "schema": "antibot-probe/v1",
+  "site": "demoqa_elements",
+  "profile_id": "p1",
+  "run": 1,
+  "started_at_utc": "2026-10-30T20:22:50.401176+00:00",
+  "observed_at_utc": "2026-10-30T20:22:56.781064+00:00",
+  "verdict": "PARTIAL",
+  "scope": "fixed public diagnostic navigation; labels only; no outcome inference",
+  "guest_profile": {
+    "provenance": "new dedicated disposable worker_state volume",
+    "cookies_imported": false,
+    "initial_page_origin": "https://coveryourtracks.eff.org",
+    "site_authentication_checked": "not applicable to this diagnostic page"
+  },
+  "runtime": {
+    "application_image": "browser-mcp-readiness-control:candidate",
+    "browser_backend": "camoufox",
+    "browser_version": "not exposed by worker status API",
+    "os": "Linux browser container on Docker/WSL2",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "browser_timezone": "not measured",
+    "host_timezone": "Asia/Qyzylorda",
+    "network_route": "dedicated direct-egress network; no proxy rotation",
+    "route_generation": 1
+  },
+  "navigation": {
+    "expected_origin": "https://demoqa.com",
+    "observed_origin": "https://demoqa.com",
+    "expected_url_loaded": true
+  },
+  "required_label_presence": {
+    "Elements": true,
+    "Text Box": true
+  },
+  "challenge_text_detected": false,
+  "notes": [
+    "No CAPTCHA/challenge was solved or bypassed.",
+    "No IP, cookies, raw fingerprint fields, screenshots, or network dumps retained."
+  ],
+  "evidence": {
+    "safe_screenshot": null,
+    "raw_screenshot_requested": false,
+    "raw_screenshot_retained": false
+  }
+}

@@ -1,8 +1,8 @@
-﻿# Антибот-тесты — 31 октября 2026
+# Антибот-тесты — 31 октября 2026
 
 **Состояние отчёта: RUNNING · итог по production: NOT CONFIRMED**
 
-Это текущий журнал ограниченных публичных гостевых сценариев и браузерных диагностик. Результаты ниже заполняются только после проверки соответствующих evidence. По Sannysoft Profile A подтверждена загрузка страницы и получены частичные диагностические признаки; статус предварительный `PARTIAL`. Остальные сайты/профили — `NOT_RUN`. Общего PASS нет.
+Это текущий журнал ограниченных публичных гостевых сценариев и браузерных диагностик. Результаты ниже заполняются только после проверки соответствующих evidence. По Sannysoft Profile A подтверждена загрузка страницы и получены частичные диагностические признаки; статус предварительный `PARTIAL`. Для Profile A доступны страницы всех шести сайтов, однако ни один полный тестовый путь не завершён; результаты диагностики и guest flow остаются `PARTIAL` или `NOT_RUN` по матрице. Profile B — `NOT_RUN`. Общего PASS нет.
 
 ## Среда прогона
 
@@ -28,15 +28,15 @@ ready=true · human 1 context / 1 page    viewer HTTP 200 · ready=true
 | Сайт / тип | Profile A | Profile B | Что требуется для PASS |
 |---|---|---|---|
 | Sannysoft · диагностика | PARTIAL — страница загружена, сигналы неполны | NOT_RUN | WebDriver: missing (passed); Chrome: missing (failed); permissions: prompt. WebDriver Advanced outcome не подтверждён; plugins label есть, outcome не подтверждён; languages label есть, значение не сохранялось. Challenge text не обнаружен. Это не общий PASS. |
-| BrowserLeaks · диагностика | NOT_RUN | NOT_RUN | Только JS/features и WebGL report; обезличенные заметки. IP lookup, WebRTC и геолокацию не запускать. |
-| EFF Cover Your Tracks · диагностика | NOT_RUN | NOT_RUN | Один завершённый тест на профиль; только обобщённые оценки, без raw fingerprint. Не оценка WAF. |
-| Amazon · гостевой путь | NOT_RUN | NOT_RUN | Главная → публичный нейтральный поиск → карточка → назад/прокрутка; независимая проверка origin и содержимого. |
-| eBay · гостевой путь | NOT_RUN | NOT_RUN | Главная → публичный нейтральный поиск → карточка → назад/прокрутка; независимая проверка origin и содержимого. |
-| DemoQA · гостевой путь | NOT_RUN | NOT_RUN | Главная → Elements → ожидаемый заголовок/таблица → назад; независимая проверка. Это не антибот-тест само по себе. |
+| BrowserLeaks · диагностика | PARTIAL — JavaScript и WebGL проверены, обязательный брендовый элемент отсутствует | NOT_RUN | Expected URL true; exact `BrowserLeaks.com` label false; JavaScript и WebGL labels true; challenge strings false. Диагностика частичная, не PASS. |
+| EFF Cover Your Tracks · диагностика | PARTIAL — landing page доступна, тест не запускался | NOT_RUN | `Cover Your Tracks` label true; `Test Your Browser` false; challenge strings false. Сам тест не запускался; обобщённой оценки нет. Не оценка WAF. |
+| Amazon · гостевой путь | PARTIAL — landing page доступна, guest flow не завершён | NOT_RUN | Expected URL true; `Amazon` marker true; `Search` marker false; challenge strings false. Статус авторизации аккаунта ещё не проверен; guest flow не запускать до проверки signed-out состояния. |
+| eBay · гостевой путь | PARTIAL — страница и маркеры доступны, guest flow не исполнен | NOT_RUN | Expected URL и eBay/Search markers true; challenge strings false. Статус авторизации ещё не проверен; до guest flow подтвердить signed-out. |
+| DemoQA · гостевой путь | PARTIAL — Elements markers доступны, полный flow не завершён | NOT_RUN | Expected URL true; Elements и Text Box markers true; challenge strings false. Прямой Elements marker check; Home → Elements → back не пройден. Не антибот-тест само по себе. |
 
 **Временные метки и среда P1:** время начала не записано; время наблюдения после перехода — 2026-10-30 20:12:06 UTC. Часовой пояс браузера не измерялся. Браузерная версия API не раскрыта. Не выводить TZ браузера из системного timezone.
 
-**Текущий учёт:** Sannysoft Profile A — предварительный `PARTIAL`: независимый GET test viewer подтвердил `available=true`, ожидаемый URL, `owner=none`, 1 context и 1 page. Выполнен один переход без challenge. Получены только перечисленные выше частичные predicates; дополнительные результаты ещё не проверены. Остальные 11 ячеек — `NOT_RUN`. Проверяемые копии evidence ожидаются в `docs/antibot-2026-10-31/evidence/sannysoft/p1/`; пока ссылки не опубликованы.
+**Текущий учёт:** BrowserLeaks Profile A — предварительный `PARTIAL`: expected URL true; exact `BrowserLeaks.com` label false; JavaScript и WebGL labels true; challenge strings false. Sannysoft Profile A — предварительный `PARTIAL`: независимый GET test viewer подтвердил `available=true`, ожидаемый URL, `owner=none`, 1 context и 1 page. Выполнен один переход без challenge. Получены только перечисленные выше частичные predicates; дополнительные результаты ещё не проверены. Все шесть Profile A страниц доступны. Sannysoft, BrowserLeaks, EFF, Amazon и DemoQA дают частичные результаты; eBay подтверждён только на уровне страницы. Полные сценарии не завершены; Profile B всех сайтов — `NOT_RUN`.
 
 ## Как читать выводы
 
@@ -48,10 +48,10 @@ ready=true · human 1 context / 1 page    viewer HTTP 200 · ready=true
 
 ## Ограничения и следующие шаги
 
-Проверенное evidence по Sannysoft P1 пока подтверждает частичную доступность страницы и ограниченный набор диагностических признаков. Остальные сайты ещё не проверены; никаких общих выводов делать нельзя. Статус P1 предварительный: evidence прочитано; итог ограничен проверенными полями metadata и безопасным banner. Сохранить для отчёта только безопасные сводки и скриншоты: не публиковать IP, полные fingerprint-значения, cookies, токены, заголовки авторизации или личные данные.
+Проверенное evidence по Sannysoft P1 подтверждает частичную доступность страницы и ограниченный набор диагностических признаков. Независимый raw-verify proof не сохранён, поэтому воспроизводимость row predicates ограничена сообщением исполнителя и metadata; статус остаётся `PARTIAL`. Временный full-page PNG `/tmp/antibot-artifacts/full-page-temporary.png` удалён исполнителем; проверка `test ! -e` прошла. Сохранённый row-level raw-verify proof отсутствует, поэтому воспроизводимость конкретных predicate ограничена. На опубликованном безопасном banner проблема приватности не обнаружена. BrowserLeaks JS+WebGL, EFF landing, Amazon landing, eBay landing и прямые DemoQA Elements markers дают только частичные результаты или подтверждают лишь страницу; guest flow не завершён. Profile B не оценены. Доступность шести страниц не означает завершение шести тестов. Копии evidence для новых результатов ожидаются и будут связаны после чтения. Никаких общих выводов делать нельзя. Сохранить для отчёта только безопасные сводки и скриншоты: не публиковать IP, полные fingerprint-значения, cookies, токены, заголовки авторизации или личные данные.
 
-1. Прочитать санитизированные Sannysoft P1 evidence-файлы и подтвердить/скорректировать предварительный статус.
-2. Завершить разрешённый детерминированный проход, затем второй свежий профиль; обновить независимую сверку и статусы.
+1. Перед guest flow Amazon/eBay проверить signed-out состояние в чистых профилях; не продолжать при неизвестном или авторизованном аккаунте.
+2. Для Amazon/eBay подтвердить signed-out состояние в предназначенных чистых профилях; начать guest flow только после этого.
 3. Отдельно отметить ручной headed-контроль, если он выполнен, и ограничения сравнения.
 4. Модельный read-only проход учитывать отдельно и только при наличии независимого verifier evidence.
 5. Зафиксировать незавершённые/остановленные сценарии, ссылки на проверенные артефакты и открытые ограничения. Не делать вывод о production readiness по этому отчёту.
@@ -59,7 +59,3 @@ ready=true · human 1 context / 1 page    viewer HTTP 200 · ready=true
 ## Evidence
 
 Sannysoft P1: [metadata](evidence/sannysoft/p1/metadata.json) и [page-banner.png](evidence/sannysoft/p1/page-banner.png). Metadata содержит только allowlisted сводку; banner показывает заголовок страницы, не диагностические строки.
-
-
-
-

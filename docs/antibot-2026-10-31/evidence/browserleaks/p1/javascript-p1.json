@@ -1,0 +1,37 @@
+{
+  "schema": "antibot-current-capture/v1",
+  "site": "browserleaks_js",
+  "profile_id": "p1",
+  "run": 1,
+  "observed_at_utc": "2026-10-30T20:21:26.829863+00:00",
+  "verdict": "PARTIAL",
+  "runtime": {
+    "browser_backend": "camoufox",
+    "viewport": [
+      1440,
+      900
+    ],
+    "network_route": "antibot-2026-10-31-direct",
+    "route_generation": 1
+  },
+  "navigation": {
+    "expected_url": "https://browserleaks.com/javascript",
+    "observed_url": "https://browserleaks.com/javascript",
+    "observed_origin": "https://browserleaks.com",
+    "performed_by_capture": false,
+    "page_url_check_passed": true
+  },
+  "page_labels": {
+    "BrowserLeaks.com": false,
+    "JavaScript": true
+  },
+  "challenge_indicators": {
+    "Verify you are human": false,
+    "Access denied": false,
+    "Robot Check": false,
+    "unusual traffic": false,
+    "Request blocked": false,
+    "Security Measure": false
+  },
+  "evidence_scope": "bounded URL, fixed text-presence checks, no raw page data"
+}
