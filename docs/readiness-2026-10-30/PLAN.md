@@ -17,6 +17,8 @@ Windows Python 3.12–3.13; Node.js для extension tests; Docker Desktop Linux
 
 Базовый Compose закрывает egress worker. `compose.direct.yaml` включает прямой development egress без proxy. Не объявлять его проверкой прокси или production-маршрута. На рабочий профиль допускается один worker, один context и одна основная page; повторно использовать существующий viewer, viewport 1440×900. Перед сайтами, требующими входа, проверить авторизацию и именно нужный аккаунт; cookie наличие этого не доказывает. Для публичных страниц вход не нужен.
 
+Для ручных `docker run` проверок браузерного образа обязательно передавать `--init` (как в Compose `init: true`): без tini Xvfb, запущенный через `xvfb-run`, может зависнуть на PID 1/parent handshake до запуска Python. Если wrapper не воспроизводит Compose runtime, такой прогон считать дефектом invocation/setup и NOT RUN, а не дефектом worker.
+
 Безопасные проверки конфигурации:
 
 ```powershell
@@ -163,4 +165,4 @@ APP_ENV=test READINESS_DISPOSABLE=1 READINESS_BROWSER_AUDIT=1 READINESS_NETWORK_
 
 ### Системный промпт и границы действий
 
-`config/fara-system-prompt.txt` требует остановиться при недостающих персональных данных, неоднозначной задаче или необратимом действии без явного разрешения; заполнение формы не даёт разрешения на submit. Tool schema задаёт действия мыши/клавиатуры и screenshot-driven координаты; 1000×1000 в Fara prompt — нормализованная система координат, runtime переводит её в viewport 1440×900. Это не дефект само по себе; live visual gate сверяет фактическое попадание координаты на цель. TaskSpec/MCP default execution_mode — autonomous, UI default — supervised; post-action verification и максимум одна попытка repair; неизвестный исход внешней операции требует проверки человеком, не слепого retry. Загрузку, диалоги, iframe и multi-window не считать поддержанными без отдельного подтверждения.
+`config/fara-system-prompt.txt` требует остановиться при недостающих персональных данных, неоднозначной задаче или необратимом действии без явного разрешения; заполнение формы не даёт разрешения на submit. Tool schema задаёт действия мыши/клавиатуры и screenshot-driven координаты; 1000×1000 в Fara prompt — нормализованная система координат, runtime переводит её в viewport 1440×900. Это не дефект само по себе; live visual gate сверяет фактическое попадание координаты на цель. TaskSpec/MCP и UI defaults — `execution_mode=autonomous`; post-action verification и максимум одна попытка repair; неизвестный исход внешней операции требует проверки человеком, не слепого retry. Загрузку, диалоги, iframe и multi-window не считать поддержанными без отдельного подтверждения.
