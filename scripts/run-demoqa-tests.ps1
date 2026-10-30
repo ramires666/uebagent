@@ -7,6 +7,7 @@ param(
     [string]$ProductionControlUrl = 'http://127.0.0.1:8090',
     [switch]$ReadinessChecks,
     [switch]$TaskControlChecks,
+    [switch]$SkipCases,
     [switch]$AllowSuspendedTasks,
     [switch]$ExtendedComplex,
     [string]$RunLabel = 'v4',
@@ -42,6 +43,7 @@ $productionContainerId = $null
 $productionWasRunning = $false
 $productionStopAttempted = $false
 $productionStopped = $false
+$preexistingTestContainerIds = @()
 $continueCases = $false
 $readinessCheckAttempted = $false
 $readinessReportError = $null
@@ -85,12 +87,16 @@ function Get-ComposeArgs {
 }
 
 function Wait-TestProjectContainersRemoved {
-    param([ValidateRange(1, 90)][int]$TimeoutSeconds = 30)
+    param(
+        [ValidateRange(1, 90)][int]$TimeoutSeconds = 30,
+        [string[]]$IgnoreContainerIds = @()
+    )
+    $ignore = @($IgnoreContainerIds | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         $remaining = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project")
         if ($remaining.ExitCode -eq 0) {
-            $ids = @($remaining.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+            $ids = @($remaining.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -and $_ -notin $ignore })
             if ($ids.Count -eq 0) { return $true }
         }
         Start-Sleep -Seconds 1
@@ -262,6 +268,7 @@ try {
     $allowed = @('text_box', 'invalid_email', 'checkbox', 'web_table', 'radio', 'double_click', 'single_click', 'dynamic', 'notify_then_click')
     $Cases = @($Cases | ForEach-Object { ([string]$_).Split(',') } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     if ($Cases.Count -eq 0 -or @($Cases | Where-Object { $_ -notin $allowed }).Count -gt 0) { throw 'Cases contains an unknown or empty scenario name.' }
+    if ($ProbeOnly -and $TaskControlChecks) { throw 'TaskControlChecks cannot be combined with ProbeOnly.' }
     if ($RunCasesAfterReadableCandidate) {
         if (-not $ProbeOnly -or -not $ExtendedComplex -or ($Cases -join ',') -ne 'checkbox,web_table') {
             throw 'RunCasesAfterReadableCandidate requires ProbeOnly, ExtendedComplex, and exactly checkbox,web_table.'
@@ -293,6 +300,15 @@ try {
 
     # Never run two Camoufox workers at once. Inspect status before stopping the exact
     # production container, and refuse to interrupt any active worker or task.
+    $existingTestQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project")
+    if ($existingTestQuery.ExitCode -ne 0) { throw 'Could not inspect existing disposable DemoQA containers; production was left running.' }
+    $preexistingTestContainerIds = @($existingTestQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    $activeTestBrowserQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', "label=com.docker.compose.project=$Project", '--filter', 'label=com.docker.compose.service=browser')
+    $activeTestBrowserIds = @($activeTestBrowserQuery.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($activeTestBrowserQuery.ExitCode -ne 0 -or $activeTestBrowserIds.Count -gt 0) {
+        throw 'A disposable DemoQA browser is already running; refusing to start another worker.'
+    }
+
     $productionQuery = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-q', '--filter', 'label=com.docker.compose.project=browser-mcp-local', '--filter', 'label=com.docker.compose.service=browser')
     $productionWorkers = $productionQuery.Output
     if ($productionQuery.ExitCode -ne 0) { throw 'Could not inspect running Docker containers; no test services were started.' }
@@ -413,13 +429,16 @@ try {
         }
     }
 
-    if (-not $ProbeOnly -and (-not $DiagnosticGate -or $continueCases)) {
+    if (-not $ProbeOnly -and -not $SkipCases -and (-not $DiagnosticGate -or $continueCases)) {
         $runnerArgs = (Get-ComposeArgs) + @('exec', '-T', '-e', "DEMOQA_CASES=$($Cases -join ',')")
         if ($ExtendedComplex) { $runnerArgs += @('-e', 'DEMOQA_EXTENDED_COMPLEX=1') }
         $runnerArgs += @('control', 'python', '/app/scripts/test_demoqa.py')
         $testExitCode = Invoke-RunnerStream -RunnerArgs $runnerArgs
         Copy-DemoqaScreenshots
         if ($testExitCode -ne 0) { throw "DemoQA scenario runner failed (exit $testExitCode)." }
+    }
+    elseif ($SkipCases -and -not $ProbeOnly) {
+        $resultLines.Add('{"scenario":"demoqa_cases","status":"skipped_by_request"}')
     }
 
     if ($TaskControlChecks) {
@@ -455,16 +474,16 @@ finally {
         if ($down.ExitCode -ne 0) {
             $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
         }
-        $containersRemoved = Wait-TestProjectContainersRemoved -TimeoutSeconds 30
+        $containersRemoved = Wait-TestProjectContainersRemoved -TimeoutSeconds 30 -IgnoreContainerIds $preexistingTestContainerIds
         if (-not $containersRemoved) {
             # Retry only this disposable compose project, then allow Docker time to
             # finish asynchronous stops before deciding whether production may resume.
             $retryDown = Invoke-NativeCaptured -FilePath 'docker' -Arguments $downArgs
-            $containersRemoved = Wait-TestProjectContainersRemoved -TimeoutSeconds 15
+            $containersRemoved = Wait-TestProjectContainersRemoved -TimeoutSeconds 15 -IgnoreContainerIds $preexistingTestContainerIds
         }
         if (-not $containersRemoved) {
             $testBrowserResult = Invoke-NativeCaptured -FilePath 'docker' -Arguments @('ps', '-aq', '--filter', "label=com.docker.compose.project=$Project", '--filter', 'label=com.docker.compose.service=browser')
-            $testBrowserIds = @($testBrowserResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+            $testBrowserIds = @($testBrowserResult.Output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -and $_ -notin $preexistingTestContainerIds })
             if ($testBrowserResult.ExitCode -eq 0 -and $testBrowserIds.Count -gt 0) {
                 $stopTest = Invoke-NativeCaptured -FilePath 'docker' -Arguments (@('stop') + $testBrowserIds)
             }

@@ -137,6 +137,89 @@ def test_runner_model_mismatch_exits_before_any_production_docker_action(tmp_pat
     assert env["DEMOQA_MODEL_BASE_URL"] == "http://inherited.invalid:8080/v1"
 
 
+@pytest.mark.parametrize(
+    ("docker_ids", "expected"),
+    [
+        (["old-fixture-a", "old-fixture-b"], "True"),
+        (["old-fixture-a", "new-run-browser"], "False"),
+    ],
+)
+def test_container_cleanup_wait_ignores_only_preexisting_ids(tmp_path, docker_ids, expected):
+    powershell = shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("Windows PowerShell is unavailable")
+
+    shim = tmp_path / "docker.cmd"
+    shim.write_text(
+        "@echo off\r\n" + "".join(f"echo {container_id}\r\n" for container_id in docker_ids) + "exit /b 0\r\n",
+        encoding="ascii",
+    )
+    env = os.environ.copy()
+    env["PATH"] = str(tmp_path) + os.pathsep + env.get("PATH", "")
+    runner = ROOT / "scripts" / "run-demoqa-tests.ps1"
+    command = rf'''
+$tokens=$null; $errors=$null
+$ast=[System.Management.Automation.Language.Parser]::ParseFile('{runner}', [ref]$tokens, [ref]$errors)
+if ($errors.Count) {{ throw 'runner parse failed' }}
+$defs=$ast.FindAll({{ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -in @('Invoke-NativeCaptured','Wait-TestProjectContainersRemoved') }}, $true)
+foreach($def in $defs) {{ . ([scriptblock]::Create($def.Extent.Text)) }}
+$Project='browser-mcp-demoqa-test'
+Wait-TestProjectContainersRemoved -TimeoutSeconds 1 -IgnoreContainerIds @('old-fixture-a','old-fixture-b')
+'''
+    result = subprocess.run(
+        [powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines()[-1] == expected
+
+
+def test_probe_only_rejects_task_control_checks_before_docker_actions(tmp_path):
+    powershell = shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("Windows PowerShell is unavailable")
+
+    docker_log = tmp_path / "docker-calls.txt"
+    shim = tmp_path / "docker.cmd"
+    shim.write_text('@echo off\r\necho %*>>"%DOCKER_STUB_LOG%"\r\nexit /b 0\r\n', encoding="ascii")
+    env = os.environ.copy()
+    env["PATH"] = str(tmp_path) + os.pathsep + env.get("PATH", "")
+    env["DOCKER_STUB_LOG"] = str(docker_log)
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(ROOT / "scripts" / "run-demoqa-tests.ps1"),
+            "-ProbeOnly",
+            "-TaskControlChecks",
+            "-SkipBuild",
+            "-ModelBaseUrl",
+            "http://127.0.0.1:1/v1",
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "cannot be combined with probeonly" in (result.stdout + result.stderr).lower()
+    assert not docker_log.exists()
+
+
 def test_fresh_powershell_loads_webrequestsession_before_type_creation():
     powershell = shutil.which("powershell")
     if powershell is None:
