@@ -1,0 +1,366 @@
+{
+  "schema": "readiness.pytest-summary.v1",
+  "source_commit": "81d316f",
+  "result": "PASS",
+  "duration_seconds": 80.07,
+  "tests": 465,
+  "passed": 457,
+  "skipped": 8,
+  "failed": 0,
+  "errors": 0,
+  "skip_reason_counts": {
+    "Camoufox/X11 required: fingerprint migration/integration": 2,
+    "disposable browser container required: runtime audit": 1,
+    "isolated Camoufox/X11 required: cookie persistence": 2,
+    "isolated X11 required: native input": 1,
+    "opt-in real-worker CLI check executed separately": 2
+  },
+  "test_file_groups": [
+    {
+      "file": "test_api.py",
+      "tests": 17,
+      "passed": 17,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_browser_recovery_contract.py",
+      "tests": 6,
+      "passed": 6,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_cookie_camoufox.py",
+      "tests": 2,
+      "passed": 0,
+      "skipped": 2,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_cookie_extension_e2e.py",
+      "tests": 4,
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_cookie_sync.py",
+      "tests": 4,
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_cookie_ui.py",
+      "tests": 3,
+      "passed": 3,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_demo_reuse.py",
+      "tests": 9,
+      "passed": 9,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_demoqa_task_spec.py",
+      "tests": 2,
+      "passed": 2,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_desktop_viewer.py",
+      "tests": 13,
+      "passed": 13,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_domain_storage.py",
+      "tests": 5,
+      "passed": 5,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_fara_conversation.py",
+      "tests": 5,
+      "passed": 5,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_fara_prompt.py",
+      "tests": 2,
+      "passed": 2,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_fingerprint_profile.py",
+      "tests": 9,
+      "passed": 7,
+      "skipped": 2,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_fontconfig_compat.py",
+      "tests": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_gemini_capability.py",
+      "tests": 6,
+      "passed": 6,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_gemini_fast_runtime.py",
+      "tests": 30,
+      "passed": 30,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_gemini_fast_worker.py",
+      "tests": 20,
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_key_normalization.py",
+      "tests": 21,
+      "passed": 21,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_model_client.py",
+      "tests": 46,
+      "passed": 46,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_native_input.py",
+      "tests": 2,
+      "passed": 1,
+      "skipped": 1,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_observation_hints.py",
+      "tests": 8,
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_readiness_live.py",
+      "tests": 4,
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_readiness_p0.py",
+      "tests": 10,
+      "passed": 10,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_readiness_rollback.py",
+      "tests": 6,
+      "passed": 6,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_readiness_runner.py",
+      "tests": 47,
+      "passed": 47,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_readiness_task_control.py",
+      "tests": 5,
+      "passed": 5,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_readiness_trace.py",
+      "tests": 6,
+      "passed": 6,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_resource_policy.py",
+      "tests": 7,
+      "passed": 7,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_resource_retention.py",
+      "tests": 9,
+      "passed": 9,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_runtime.py",
+      "tests": 27,
+      "passed": 27,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_runtime_audit.py",
+      "tests": 1,
+      "passed": 0,
+      "skipped": 1,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_runtime_observation_hints.py",
+      "tests": 8,
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_runtime_overlay_integration.py",
+      "tests": 1,
+      "passed": 0,
+      "skipped": 1,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_runtime_worker_integration.py",
+      "tests": 2,
+      "passed": 1,
+      "skipped": 1,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_site_capabilities.py",
+      "tests": 4,
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_task_ui.py",
+      "tests": 25,
+      "passed": 25,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_verbatim_inputs.py",
+      "tests": 6,
+      "passed": 6,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_verification_repair.py",
+      "tests": 18,
+      "passed": 18,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_worker_browser.py",
+      "tests": 1,
+      "passed": 1,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_worker_drag.py",
+      "tests": 4,
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_worker_gate.py",
+      "tests": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_worker_resources.py",
+      "tests": 20,
+      "passed": 20,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "test_worker_verification.py",
+      "tests": 12,
+      "passed": 12,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    }
+  ],
+  "source_junit_sha256": "7d61e97d1ce027663bb5a1039ce12c9ccaddc6054c30a9c85689c78d141ecd59",
+  "privacy": "Aggregate test-file counters and categorized skip reasons only; no raw logs, hostnames, absolute paths, or per-test records."
+}

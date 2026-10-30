@@ -1,0 +1,116 @@
+{
+  "schema": "readiness.full-g3-summary.v1",
+  "run_label": "hints-fullg3",
+  "product_commit": "7f5151d",
+  "worker_observation_hints_enabled": true,
+  "action_trace_enabled": false,
+  "result": "PASS",
+  "scenario_count": 8,
+  "passed": 8,
+  "baseline_verified_count": 0,
+  "independent_verified_count": 8,
+  "one_context_one_page_each": true,
+  "limits": {
+    "timeout_seconds": 120,
+    "max_steps": 30
+  },
+  "scenario_wall_time_seconds": 385.48,
+  "scenarios": [
+    {
+      "name": "text_box",
+      "result": "PASS",
+      "steps": 9,
+      "elapsed_seconds": 69.4,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 8
+    },
+    {
+      "name": "invalid_email",
+      "result": "PASS",
+      "steps": 11,
+      "elapsed_seconds": 93.42,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 2
+    },
+    {
+      "name": "checkbox",
+      "result": "PASS",
+      "steps": 3,
+      "elapsed_seconds": 31.17,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 2
+    },
+    {
+      "name": "radio",
+      "result": "PASS",
+      "steps": 1,
+      "elapsed_seconds": 12.96,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 2
+    },
+    {
+      "name": "double_click",
+      "result": "PASS",
+      "steps": 3,
+      "elapsed_seconds": 28.97,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 1
+    },
+    {
+      "name": "web_table",
+      "result": "PASS",
+      "steps": 15,
+      "elapsed_seconds": 111.31,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 5
+    },
+    {
+      "name": "dynamic",
+      "result": "PASS",
+      "steps": 1,
+      "elapsed_seconds": 19.31,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 1
+    },
+    {
+      "name": "notify_then_click",
+      "result": "PASS",
+      "steps": 2,
+      "elapsed_seconds": 18.94,
+      "timeout_seconds": 120,
+      "max_steps": 30,
+      "independent_verified": true,
+      "baseline_verified": false,
+      "verification_check_count": 1,
+      "notice_count": 1
+    }
+  ],
+  "unsupported_not_run": [
+    "upload",
+    "browser_dialog",
+    "frame_targeting",
+    "multiple_windows"
+  ],
+  "privacy": "Aggregate allowlist only; no task IDs, labels, selectors, typed values, raw model output, or page text."
+}

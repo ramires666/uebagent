@@ -1,0 +1,32 @@
+{
+  "schema": "readiness.runtime-integration-summary.v1",
+  "run_label": "runtimeint3",
+  "result": "PASS",
+  "runtime_cancel": {
+    "queued_task_result": "CANCELLED",
+    "inflight_task_result": "RECOVERING",
+    "inflight_action_observed": true,
+    "action_kind": "wait",
+    "planned_actions": 1,
+    "resolved_actions": 0,
+    "model_calls": 1,
+    "worker_ready_idle_after": true,
+    "context_count": 1,
+    "page_count": 1,
+    "worker_identity_unchanged": true
+  },
+  "overlay": {
+    "task_result": "waiting_human",
+    "phase": "verification_required",
+    "steps": 2,
+    "target_effect_verified": false,
+    "overlay_effect_verified": true,
+    "click_receipts": 1,
+    "verification_repairs": 1,
+    "click_outcome": "applied",
+    "context_count": 1,
+    "page_count": 1
+  },
+  "test_profile_unchanged": true,
+  "privacy": "Allowlisted booleans, fixed statuses and aggregate counts only; no task IDs, hashes, labels, selectors, values, or model output."
+}

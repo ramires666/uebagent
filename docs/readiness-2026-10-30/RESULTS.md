@@ -1,8 +1,20 @@
 # Readiness evidence — 2026-10-30
 
+## Текущий статус — follow-up 30 октября 2026
+
+**Итог остаётся NO-GO для production.** Предыдущие значения 6/8 live UI PASS и два P0 FAIL ниже — исторический снимок до opt-in observation hints; текущие результаты их заменяют для ограниченного disposable набора:
+
+- Checkbox: 3/3 свежих PASS; web_table: 3/3 свежих PASS.
+- Полный hints-enabled G3: 8/8 PASS с независимой проверкой, лимит 120 секунд / 30 шагов.
+- Последний полный pytest: 457 passed, 8 skipped, 0 failed за 80.07 с ([сводка по test-file группам](evidence/unit-final-summary.json); локальный [JUnit](../../runtime/readiness-2026-10-30/pytest-p0-final.xml)). Два opt-in real-worker CLI checks исполнялись отдельно и оба прошли.
+- P1 runtime integration: queued cancel → `CANCELLED`; in-flight cancel → `RECOVERING` после наблюдаемого действия; overlay → `waiting_human/verification_required` после одного click и одной verification repair. Целевой эффект не подтверждён; ложного SUCCESS и повторного клика нет. [Allowlisted summary](evidence/runtime-integration.json).
+- Hints были включены только в test worker; feature остаётся default-off и не развёрнута в production. Остались restart/concurrency и другие dispatch lifecycle cases, capability contract для неподдержанных сценариев, capacity/soak при заявлении SLO и DB migration marker перед изменением schema.
+
+Подробности и текущая матрица gates: [REPORT.md](REPORT.md). Хронология P0 и артефакты повторов: [P0_PROGRESS.md](P0_PROGRESS.md). Разделы ниже содержат исторические baseline результаты и их ограничения; они не описывают нынешний статус checkbox/web_table/G3.
+
 Эта ведомость отражает проверенные локальные артефакты и переданные оператором результаты. Секреты и модельные пути не сохраняются. Сводный PASS отдельного сценария не подменяет gate полного стека.
 
-## Итог
+## Исторический итог исходного аудита (до opt-in hints)
 
 **Readiness audit завершён: NO-GO.** Из восьми различных live UI сценариев шесть прошли независимую проверку (`text_box`, `invalid_email`, `notify_then_click`, `radio`, `double_click`, `dynamic`); два не прошли (`checkbox`, `web_table`). G6 candidate/rollback/redeploy PASS с ограничением по control DB migration marker. Unit baseline, security matrix и model smoke прошли в своих заявленных пределах. Эти результаты не дают production GO при двух live path failures и неполном capacity/in-flight evidence.
 
@@ -20,7 +32,7 @@
 |---|---|---|---|---|
 | G0 | `python -m pytest -q` на `f6af7ed` | PASS | 403 passed, 6 skipped, 84.71 с. Включает контракт `test_finish_without_conditions_is_marked_unverified`: успешная задача без условий завершается как `completed_unverified` с `verified=false`; отдельный API consumer проверяет это состояние. | Результат baseline; полный лог не сохранён. |
 | G0 | `python -m pytest -q` на `c895246` | PASS (historical baseline) | 417 passed, 6 skipped, 77.35 с. Позже superseded полным запуском на `b8c319a`. | Результат полного запуска. |
-| G0 | `python -m pytest -q --basetemp=runtime/pytest-final-release --junitxml=runtime/readiness-2026-10-30/pytest-final.xml` на `b8c319a` | PASS (latest full suite) | JUnit summary: 424 total, 418 passed, 6 skipped, 0 failures, 0 errors, 82.605 с. | [sanitized final regression summary](evidence/regression-final-summary.json) |
+| G0 | `python -m pytest -q --basetemp=runtime/pytest-final-release --junitxml=runtime/readiness-2026-10-30/pytest-final.xml` на `b8c319a` | PASS (historical baseline) | JUnit summary: 424 total, 418 passed, 6 skipped, 0 failures, 0 errors, 82.605 с. | [sanitized historical regression summary](evidence/regression-final-summary.json) |
 | G0 | Focused all-shapes prompt cases | PASS | 40 focused cases PASS. Это prompt coverage, не live model/browser evidence. | Результат запуска; отдельный артефакт не сохранён. |
 | G0 | Docker preflight quoting guard tests | PASS | Shim tests включены в latest full pytest (6 cases). Не прибавлять к 418 как отдельный набор. | В составе [final regression summary](evidence/regression-final-summary.json) |
 | G0 | `node --test chrome_extension/tests/contract.test.js` | PASS | 29/29. | Результат baseline; отдельный лог не сохранён. |
