@@ -102,6 +102,8 @@ async def test_viewer_task_progress_and_explicit_control():
         assert not any(method == "POST" for method, _, _ in calls)
         assert await page.locator("#takeover").is_enabled()
         assert await page.locator("#release-control").is_disabled()
+        assert await page.locator("#notice").inner_text() == ""
+        assert not await page.locator("#notice").is_visible()
         await page.locator("#takeover").click()
         await page.locator("#release-control").wait_for(state="visible")
         await page.wait_for_function("!document.getElementById('release-control').disabled")
@@ -117,6 +119,93 @@ async def test_viewer_task_progress_and_explicit_control():
         await asyncio.sleep(2.2)
         assert 1 <= sum(path == "/tasks" for _, path, _ in calls) <= 2
         assert "busy" not in await page.locator("#notice").inner_text()
+    finally:
+        if browser:
+            await browser.close()
+        await playwright.stop()
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_viewer_task_composer_posts_exact_goal_once_and_reuses_key_after_unknown_outcome():
+    playwright_async = pytest.importorskip("playwright.async_api")
+    if not CHROME.is_file():
+        pytest.skip("local Chrome unavailable")
+    server = _viewer_server()
+    thread = Thread(target=server.serve_forever, daemon=True); thread.start()
+    playwright = await playwright_async.async_playwright().start()
+    browser = None
+    posts = []
+    post_started = asyncio.Event()
+    release_first = asyncio.Event()
+    current_url = "https://example.test/account?private=path"
+    try:
+        browser = await playwright.chromium.launch(executable_path=str(CHROME), headless=True)
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+
+        async def api(route):
+            nonlocal current_url
+            req = route.request
+            path = req.url.split("/api/v1", 1)[1]
+            if path == "/operator/session":
+                await route.fulfill(json={"authenticated": True, "csrf_token": "fixture-csrf"})
+            elif path == "/desktop/state":
+                await route.fulfill(json={"available": True, "control_owner": "agent", "control_epoch": 1,
+                                          "url": current_url, "width": 1440, "height": 900})
+            elif path == "/desktop/screenshot":
+                await route.fulfill(status=409, json={"error": {"code": "CAPTURE_BUSY", "message": "busy"}})
+            elif path == "/tasks" and req.method == "GET":
+                await route.fulfill(json={"tasks": []})
+            elif path == "/status":
+                await route.fulfill(json={})
+            elif path == "/tasks" and req.method == "POST":
+                posts.append({"payload": req.post_data_json, "csrf": req.headers.get("x-csrf-token")})
+                if len(posts) == 1:
+                    post_started.set()
+                    await release_first.wait()
+                    await route.fulfill(status=503, json={"error": {"message": "temporary outage"}})
+                else:
+                    await route.fulfill(status=201, json={"task_id": "created-task", "status": "queued", "version": 1,
+                                                          "spec": req.post_data_json})
+            else:
+                await route.fulfill(status=404, json={})
+
+        await page.route("**/api/v1/**", api)
+        await page.goto(f"http://127.0.0.1:{server.server_port}/desktop.html")
+        await page.wait_for_function("document.getElementById('task-site-hint').textContent === 'Сайт: https://example.test'")
+        assert "private" not in await page.locator("#task-site-hint").inner_text()
+        command = "  Open the account and summarize its status.\n"
+        await page.locator("#task-command").fill(command)
+        await page.evaluate("""() => {
+          const button = document.getElementById('task-command-submit');
+          button.click(); button.click();
+        }""")
+        await asyncio.wait_for(post_started.wait(), timeout=5)
+        assert len(posts) == 1
+        assert await page.locator("#task-command-submit").is_disabled()
+        release_first.set()
+        await page.wait_for_function("document.getElementById('task-command-status').textContent.includes('Проверьте текущую задачу')")
+        assert await page.locator("#task-command").input_value() == command
+        current_url = "https://new.example/path"
+        await page.locator("#refresh").click()
+        await page.wait_for_function("document.getElementById('task-site-hint').textContent === 'Повторная отправка для сайта: https://example.test'")
+        await page.locator("#task-command-submit").click()
+        await page.wait_for_function("document.getElementById('task-command-status').textContent.includes('Задача создана: created-task')")
+        assert len(posts) == 2
+        assert posts[0] == posts[1]
+        assert posts[0]["csrf"] == "fixture-csrf"
+        payload = posts[0]["payload"]
+        assert payload == {
+            "goal_language": "ru", "success_conditions": [], "user_inputs": {}, "secret_refs": [],
+            "policy_grant_id": None, "sync_cookies": True, "site_capabilities": [],
+            "limits": {"timeout_s": 900, "max_steps": 80}, "profile_id": "default", "goal": command,
+            "workflow": "agent", "verbatim_text": None, "allowed_origins": ["https://example.test"],
+            "execution_mode": "autonomous", "idempotency_key": payload["idempotency_key"]
+        }
+        await page.evaluate("document.documentElement.classList.add('desktop-embed')")
+        assert not await page.locator("#task-composer").is_visible()
     finally:
         if browser:
             await browser.close()

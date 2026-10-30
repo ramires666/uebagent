@@ -38,7 +38,8 @@
     mutationPending: false,
     actionQueue: [], queueBytes: 0, draining: false, inputError: false,
     pendingPointer: null, pendingPointerClient: null, pendingPointerGeometry: null, lastPointer: null, lastPointerClient: null, lastPointerGeometry: null, lastPointerSentAt: 0, pendingWheel: null, pointerFlushTimer: null,
-    captureBackoffMs: 0, captureRetryAt: 0, controlError: false
+    captureBackoffMs: 0, captureRetryAt: 0, controlError: false,
+    taskSubmitting: false, taskSubmitAttempt: null
   };
 
   function setText(id, value) {
@@ -46,10 +47,19 @@
     if (node) node.textContent = value == null ? '' : String(value);
   }
 
+  function updateTaskComposer() {
+    const command = $('task-command')?.value || '';
+    const attemptedOrigin = ui.taskSubmitAttempt?.payload?.goal === command ? ui.taskSubmitAttempt.payload.allowed_origins[0] : '';
+    if (attemptedOrigin) { setText('task-site-hint', `Повторная отправка для сайта: ${attemptedOrigin}`); return; }
+    const origin = safeOrigin(ui.current?.url);
+    setText('task-site-hint', origin ? `Сайт: ${origin}` : 'Откройте HTTPS-сайт в браузере перед запуском');
+  }
+
   function showNotice(message, type = '') {
     const notice = $('notice');
     notice.className = `notice${type ? ` ${type}` : ''}`;
     notice.textContent = message;
+    notice.dataset.source = '';
   }
 
   function timeoutSignal(parentSignal) {
@@ -101,6 +111,7 @@
         }
         const error = new Error(message);
         error.code = code;
+        error.status = response.status;
         throw error;
       }
       return response;
@@ -124,6 +135,7 @@
     const changed = !previous || previous.control_owner !== data.control_owner || previous.control_epoch !== data.control_epoch ||
       previous.available !== data.available || previous.width !== data.width || previous.height !== data.height || previous.url !== data.url;
     ui.current = data;
+    updateTaskComposer();
     if (changed) {
       ui.screenshotGeneration += 1;
       ui.lastFrameAt = 0;
@@ -144,10 +156,11 @@
     const safeUrl = safeOrigin(data.url);
     setText('browser-runtime', data.runtime_environment === 'docker' ? `${data.backend || 'Браузер'} · Docker / WSL2` : (data.backend || ''));
     setText('site-label', data.available ? (safeUrl || 'Браузер доступен') : 'Браузер недоступен');
-    if (!data.available && !ui.inputError && !ui.controlError) showNotice(data.detail || 'Содержимое браузера сейчас недоступно.', 'warning');
-    else if (!human && !ui.inputError && !ui.controlError) showNotice(data.detail || 'Сейчас доступен только просмотр. Передайте управление оператору, чтобы вводить текст или нажимать кнопки.');
-    else if (!ui.csrf && !ui.controlError) showNotice('Нет CSRF-токена операторской сессии. Обновите страницу и войдите в панель снова.', 'error');
-    else if (!ui.inputError && !ui.controlError) showNotice(data.detail || 'Вы управляете браузером. Нажмите на снимок или используйте ручные действия.');
+    if (!ui.csrf && !ui.controlError) showNotice('Нет CSRF-токена операторской сессии. Обновите страницу и войдите в панель снова.', 'error');
+    else if (!data.available && !ui.inputError && !ui.controlError) {
+      showNotice(data.detail || 'Содержимое браузера сейчас недоступно.', 'warning');
+      $('notice').dataset.source = 'state';
+    } else if ($('notice').dataset.source === 'state') showNotice('');
   }
 
   function updateViewerPill(force = '') {
@@ -159,7 +172,7 @@
   function safeOrigin(value) {
     try {
       const url = new URL(value);
-      return url.protocol === 'https:' ? url.origin : null;
+      return url.protocol === 'https:' && !url.username && !url.password ? url.origin : null;
     } catch { return null; }
   }
 
@@ -903,6 +916,61 @@
       showNotice(error.message || 'Введите корректный HTTPS-адрес.', 'error');
     }
   });
+
+  $('task-command-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (ui.taskSubmitting) return;
+    const command = $('task-command').value;
+    const origin = safeOrigin(ui.current?.url);
+    const status = $('task-command-status');
+    status.className = 'task-composer-status';
+    if (!command.trim()) { status.classList.add('error'); status.textContent = 'Введите команду модели.'; return; }
+    const sameAttempt = ui.taskSubmitAttempt?.payload?.goal === command;
+    if ((!ui.current?.available || !origin) && !sameAttempt) { status.classList.add('error'); status.textContent = 'Откройте HTTPS-сайт в браузере перед запуском.'; return; }
+    if (!ui.csrf) { status.classList.add('error'); status.textContent = 'Нет операторской сессии. Обновите страницу панели и войдите снова.'; return; }
+    const fingerprint = JSON.stringify({ goal: command, origin: sameAttempt ? ui.taskSubmitAttempt.payload.allowed_origins[0] : origin });
+    if (!ui.taskSubmitAttempt || ui.taskSubmitAttempt.fingerprint !== fingerprint) {
+      ui.taskSubmitAttempt = {
+        fingerprint,
+        payload: {
+          goal_language: 'ru', success_conditions: [], user_inputs: {}, secret_refs: [], policy_grant_id: null,
+          sync_cookies: true, site_capabilities: [], limits: { timeout_s: 900, max_steps: 80 },
+          profile_id: 'default', goal: command, workflow: 'agent', verbatim_text: null,
+          allowed_origins: [origin], execution_mode: 'autonomous',
+          idempotency_key: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+        }
+      };
+    }
+    updateTaskComposer();
+    ui.taskSubmitting = true;
+    $('task-command-submit').disabled = true;
+    $('task-command').disabled = true;
+    status.textContent = 'Создаём задачу…';
+    try {
+      const response = await fetchBounded('/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ui.taskSubmitAttempt.payload) });
+      const task = await response.json();
+      if (!task || typeof task !== 'object' || typeof task.task_id !== 'string' || !task.task_id) throw new Error('Ответ сервера не подтвердил создание задачи.');
+      ui.taskSubmitAttempt = null;
+      updateTaskComposer();
+      status.className = 'task-composer-status success';
+      status.textContent = `Задача создана: ${task.task_id || 'ID не получен'}.`;
+      ui.lastTaskPoll = 0;
+      void refreshTask();
+    } catch (error) {
+      if (error.status >= 400 && error.status < 500 && error.status !== 408) {
+        ui.taskSubmitAttempt = null;
+      }
+      updateTaskComposer();
+      status.className = 'task-composer-status error';
+      if (error.status >= 400 && error.status < 500 && error.message) status.textContent = error.message;
+      else status.textContent = `Не удалось подтвердить создание задачи (${error.message || 'сбой запроса'}). Проверьте текущую задачу перед повторной отправкой.`;
+    } finally {
+      ui.taskSubmitting = false;
+      $('task-command-submit').disabled = false;
+      $('task-command').disabled = false;
+    }
+  });
+  $('task-command').addEventListener('input', updateTaskComposer);
 
   $('refresh').addEventListener('click', () => { releaseScreenshot(); void refreshState(); });
 

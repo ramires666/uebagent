@@ -9,12 +9,12 @@
     :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background: #10151a; color: #e4ebe7; }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 50% -15%, #26322c 0, #10151a 58%); }
-    button, input { font: inherit; }
+    button, input, textarea { font: inherit; }
     button, .link { border: 1px solid #3c4b45; border-radius: 8px; background: #1b2525; color: #dce7df; padding: 9px 12px; cursor: pointer; text-decoration: none; }
     button:hover:not(:disabled), .link:hover { border-color: #a6d47e; background: #253126; }
     button:disabled { opacity: .45; cursor: not-allowed; }
-    input { min-width: 0; border: 1px solid #39474a; border-radius: 8px; padding: 9px 11px; color: #ecf2ef; background: #121a20; outline: none; }
-    input:focus { border-color: #a6d47e; box-shadow: 0 0 0 2px #a6d47e22; }
+    input, textarea { min-width: 0; border: 1px solid #39474a; border-radius: 8px; padding: 9px 11px; color: #ecf2ef; background: #121a20; outline: none; }
+    input:focus, textarea:focus { border-color: #a6d47e; box-shadow: 0 0 0 2px #a6d47e22; }
     .shell { max-width: 1500px; margin: 0 auto; padding: 20px clamp(12px, 3vw, 36px) 34px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
     .brand { display: flex; align-items: center; gap: 12px; }
@@ -27,14 +27,23 @@
     .status.good .dot { background: #a6d47e; box-shadow: 0 0 10px #a6d47e55; }
     .status.warning .dot { background: #e2c67d; }
     .status.bad .dot { background: #e18f83; }
-    .notice { min-height: 39px; margin-bottom: 12px; padding: 10px 13px; border: 1px solid #39434a; border-radius: 9px; color: #b5c1c0; background: #161d22; font-size: 12px; }
+    .notice { margin-bottom: 12px; padding: 10px 13px; border: 1px solid #39434a; border-radius: 9px; color: #b5c1c0; background: #161d22; font-size: 12px; }
+    .notice:empty { display: none; }
     .notice.error { color: #f0aaa1; border-color: #62413e; background: #251b1c; }
     .notice.warning { color: #e2c67d; border-color: #5a4e32; background: #242117; }
     .task-progress { margin-bottom: 12px; padding: 12px 14px; border: 1px solid #344147; border-radius: 9px; background: #161e23; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    .task-composer { margin-top: 12px; padding: 13px; border: 1px solid #2d393e; border-radius: 10px; background: #161e23; }
+    .task-composer label { display: block; margin-bottom: 7px; color: #d2ddd8; font-size: 13px; font-weight: 650; }
+    .task-composer textarea { display: block; width: 100%; min-height: 84px; resize: vertical; }
+    .task-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+    .task-composer-hint, .task-composer-status { color: #94a19e; font-size: 11px; }
+    .task-composer-status.error { color: #f0aaa1; }
+    .task-composer-status.success { color: #a6d47e; }
+    .task-composer-status:empty { display: none; }
     html, body { min-height: 100%; }
     html.desktop-embed, html.desktop-embed body { width: 100%; height: 100%; min-height: 0; margin: 0; overflow: hidden; background: #080b0e; }
     html.desktop-embed .shell { width: 100%; max-width: none; height: 100%; margin: 0; padding: 0; }
-    html.desktop-embed header, html.desktop-embed #notice, html.desktop-embed .progress-panels, html.desktop-embed .screen-head, html.desktop-embed .manual-controls, html.desktop-embed .controls, html.desktop-embed footer { display: none !important; }
+    html.desktop-embed header, html.desktop-embed #notice, html.desktop-embed .progress-panels, html.desktop-embed .screen-head, html.desktop-embed #task-composer, html.desktop-embed .manual-controls, html.desktop-embed .controls, html.desktop-embed footer { display: none !important; }
     html.desktop-embed .screen-card { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; display: flex; }
     html.desktop-embed .viewport { width: 100%; height: 100%; min-height: 0; max-height: none; flex: 1; overflow: hidden; }
     html.desktop-embed #browser-image { max-width: 100%; max-height: 100%; }
@@ -121,7 +130,7 @@
       </div>
     </header>
 
-    <div id="notice" class="notice" role="status">Подключение к локальному браузеру…</div>
+    <div id="notice" class="notice" role="status"></div>
 
     <div class="progress-panels">
     <section class="task-progress" aria-label="Ход задачи" aria-live="polite">
@@ -146,6 +155,18 @@
         <img id="browser-image" alt="Текущий снимок содержимого браузера" hidden draggable="false">
         <input id="remote-keyboard" type="password" aria-label="Клавиатура браузера" tabindex="-1" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
       </div>
+    </section>
+
+    <section id="task-composer" class="task-composer" aria-label="Создать задачу модели">
+      <form id="task-command-form">
+        <label for="task-command">Команда модели</label>
+        <textarea id="task-command" maxlength="4000" spellcheck="false" aria-describedby="task-site-hint task-command-status"></textarea>
+        <div class="task-composer-footer">
+          <span id="task-site-hint" class="task-composer-hint">Ожидание состояния браузера…</span>
+          <button id="task-command-submit" type="submit">Выполнить</button>
+        </div>
+        <div id="task-command-status" class="task-composer-status" role="status" aria-live="polite"></div>
+      </form>
     </section>
 
     <details class="manual-controls">
