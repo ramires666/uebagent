@@ -1,0 +1,1496 @@
+{
+  "schema": "readiness-p0/v1",
+  "status": "PASS",
+  "hints_enabled": true,
+  "requested_scenarios": 2,
+  "completed_scenarios": 2,
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "scenarios": [
+    {
+      "scenario": "checkbox",
+      "status": "passed",
+      "steps": 3,
+      "timeout_s": 180,
+      "max_steps": 40,
+      "hints_enabled": true,
+      "hint_control_counts": [
+        12,
+        13,
+        22,
+        22
+      ],
+      "baseline_verified": false,
+      "action_kinds": {
+        "click": 3
+      },
+      "model_action_observed": true,
+      "task_status": "succeeded",
+      "error_code": null,
+      "independent_verified": true,
+      "verification_checks": [
+        {
+          "kind": "element_checked",
+          "passed": true
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": true
+        }
+      ],
+      "planned_events": [
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": null
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 5969
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 5525
+        }
+      ],
+      "task_events_truncated": false,
+      "trace": [
+        {
+          "kind": "click",
+          "elapsed_ms": 29,
+          "x": 270.6,
+          "y": 159.5,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 34,
+          "x": 270.6,
+          "y": 235.5,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "home_expander",
+          "bbox": {
+            "x": 262.6,
+            "y": 227.5,
+            "width": 16.0,
+            "height": 16.0
+          },
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 24,
+          "x": 306.1,
+          "y": 261.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "body",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "checkbox",
+          "target": "desktop_checkbox",
+          "bbox": {
+            "x": 299.6,
+            "y": 254.5,
+            "width": 13.0,
+            "height": 13.0
+          },
+          "target_boxes": {
+            "home_checkbox": {
+              "x": 283.6,
+              "y": 230.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "desktop_checkbox": {
+              "x": 299.6,
+              "y": 254.5,
+              "width": 13.0,
+              "height": 13.0
+            },
+            "home_expander": {
+              "x": 262.6,
+              "y": 227.5,
+              "width": 16.0,
+              "height": 16.0
+            },
+            "desktop_expander": {
+              "x": 278.6,
+              "y": 251.5,
+              "width": 16.0,
+              "height": 16.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": true
+          },
+          "filled_before": {},
+          "filled_after": {},
+          "outcome": "applied"
+        }
+      ],
+      "trace_record_count": 3,
+      "task_elapsed_ms": 30106,
+      "scenario_elapsed_ms": 31286
+    },
+    {
+      "scenario": "web_table",
+      "status": "passed",
+      "steps": 15,
+      "timeout_s": 180,
+      "max_steps": 40,
+      "hints_enabled": true,
+      "hint_control_counts": [
+        14,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      "baseline_verified": false,
+      "action_kinds": {
+        "click": 9,
+        "type_text": 6
+      },
+      "model_action_observed": true,
+      "task_status": "succeeded",
+      "error_code": null,
+      "independent_verified": true,
+      "verification_checks": [
+        {
+          "kind": "element_text_contains",
+          "passed": true
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": true
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": true
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": true
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": true
+        },
+        {
+          "kind": "element_text_contains",
+          "passed": true
+        }
+      ],
+      "planned_events": [
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": null
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 7347
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 4566
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 6678
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 6843
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 6657
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 7406
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 6826
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 7610
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 6934
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 7542
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 7090
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 7412
+        },
+        {
+          "kind": "type_text",
+          "elapsed_since_previous_ms": 7215
+        },
+        {
+          "kind": "click",
+          "elapsed_since_previous_ms": 7634
+        }
+      ],
+      "task_events_truncated": false,
+      "trace": [
+        {
+          "kind": "click",
+          "elapsed_ms": 42,
+          "x": 300.96,
+          "y": 250.2,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "body",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "button",
+          "target": "other",
+          "target_boxes": {},
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {},
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 24,
+          "x": 720.0,
+          "y": 104.36,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "other",
+          "target_before": "other",
+          "target_after": "other",
+          "hit": "other",
+          "target": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 27,
+          "x": 720.0,
+          "y": 141.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "other",
+          "focus_after": "input",
+          "target_before": "other",
+          "target_after": "first_name",
+          "hit": "input",
+          "target": "first_name",
+          "bbox": {
+            "x": 534.5,
+            "y": 122.0,
+            "width": 371.0,
+            "height": 38.0
+          },
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 22,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "first_name",
+          "target_after": "first_name",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": false,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 23,
+          "x": 720.0,
+          "y": 187.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "first_name",
+          "target_after": "last_name",
+          "hit": "input",
+          "target": "last_name",
+          "bbox": {
+            "x": 534.5,
+            "y": 168.0,
+            "width": 371.0,
+            "height": 38.0
+          },
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 18,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "last_name",
+          "target_after": "last_name",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": false,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 31,
+          "x": 818.76,
+          "y": 233.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "last_name",
+          "target_after": "email",
+          "hit": "input",
+          "target": "email",
+          "bbox": {
+            "x": 534.5,
+            "y": 214.0,
+            "width": 568.5,
+            "height": 38.0
+          },
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 21,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "email",
+          "target_after": "email",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": false,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 28,
+          "x": 588.33,
+          "y": 279.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "email",
+          "target_after": "age",
+          "hit": "input",
+          "target": "age",
+          "bbox": {
+            "x": 534.5,
+            "y": 260.0,
+            "width": 107.67,
+            "height": 38.0
+          },
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 41,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "age",
+          "target_after": "age",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": false,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 23,
+          "x": 818.76,
+          "y": 325.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "age",
+          "target_after": "salary",
+          "hit": "input",
+          "target": "salary",
+          "bbox": {
+            "x": 534.5,
+            "y": 306.0,
+            "width": 568.5,
+            "height": 38.0
+          },
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": false,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 17,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "salary",
+          "target_after": "salary",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": false,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": true,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 23,
+          "x": 720.0,
+          "y": 371.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "salary",
+          "target_after": "department",
+          "hit": "input",
+          "target": "department",
+          "bbox": {
+            "x": 534.5,
+            "y": 352.0,
+            "width": 371.0,
+            "height": 38.0
+          },
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": true,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": true,
+            "department": false
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "type_text",
+          "elapsed_ms": 18,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "input",
+          "target_before": "department",
+          "target_after": "department",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": true,
+            "department": false
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": true,
+            "department": true
+          },
+          "outcome": "applied"
+        },
+        {
+          "kind": "click",
+          "elapsed_ms": 44,
+          "x": 1033.33,
+          "y": 433.0,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "focus_before": "input",
+          "focus_after": "button",
+          "target_before": "department",
+          "target_after": "other",
+          "hit": "button",
+          "target": "other",
+          "target_boxes": {
+            "first_name": {
+              "x": 534.5,
+              "y": 122.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "last_name": {
+              "x": 534.5,
+              "y": 168.0,
+              "width": 371.0,
+              "height": 38.0
+            },
+            "email": {
+              "x": 534.5,
+              "y": 214.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "age": {
+              "x": 534.5,
+              "y": 260.0,
+              "width": 107.67,
+              "height": 38.0
+            },
+            "salary": {
+              "x": 534.5,
+              "y": 306.0,
+              "width": 568.5,
+              "height": 38.0
+            },
+            "department": {
+              "x": 534.5,
+              "y": 352.0,
+              "width": 371.0,
+              "height": 38.0
+            }
+          },
+          "checked_before": {
+            "home": false,
+            "desktop": false
+          },
+          "checked_after": {
+            "home": false,
+            "desktop": false
+          },
+          "filled_before": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": true,
+            "department": true
+          },
+          "filled_after": {
+            "first_name": true,
+            "last_name": true,
+            "email": true,
+            "age": true,
+            "salary": true,
+            "department": true
+          },
+          "outcome": "applied"
+        }
+      ],
+      "trace_record_count": 15,
+      "task_elapsed_ms": 112332,
+      "scenario_elapsed_ms": 113373
+    }
+  ],
+  "raw_model_output_recorded": false,
+  "typed_values_recorded": false
+}

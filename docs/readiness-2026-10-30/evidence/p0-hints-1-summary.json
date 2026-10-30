@@ -1,0 +1,38 @@
+{
+  "schema": "readiness-p0-hints-summary/v1",
+  "artifact": "p0-hints-1.json",
+  "sha256": "ee31bf26b6cda84534e3a8bff29e50f3a2855f5ad30a069cfc5020b6a76816f2",
+  "hints_enabled": true,
+  "baseline_verified": false,
+  "independent_verified": true,
+  "task_events_truncated": false,
+  "scenarios": [
+    {
+      "scenario": "checkbox",
+      "status": "passed",
+      "steps": 3,
+      "scenario_elapsed_ms": 31286,
+      "task_elapsed_ms": 30106,
+      "action_kinds": {
+        "click": 3
+      },
+      "independent_verified": true,
+      "trace_record_count": 3
+    },
+    {
+      "scenario": "web_table",
+      "status": "passed",
+      "steps": 15,
+      "scenario_elapsed_ms": 113373,
+      "task_elapsed_ms": 112332,
+      "action_kinds": {
+        "click": 9,
+        "type_text": 6
+      },
+      "independent_verified": true,
+      "trace_record_count": 15
+    }
+  ],
+  "raw_model_output_recorded": false,
+  "typed_values_recorded": false
+}

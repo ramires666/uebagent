@@ -71,7 +71,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-demoqa-tests.ps1
 
 Прототип добавляет только к generic model текущего screenshot-turn ограниченные metadata видимых интерактивных controls на HTTPS-страницах: максимум 32 элемента и 4 KiB, normalized-1000 center/bounds, tag/role и label до 80 символов. Password controls исключены; значения полей не передаются, допускается только Boolean `value_present` и безопасные состояния вроде `checked`/`expanded`. Labels являются недоверенными данными страницы. Hints сверяются с размерами PNG того же observation, не сохраняются в следующих ходах; feature по умолчанию выключен (`BROWSER_OBSERVATION_HINTS=0`).
 
-Hints лишь помогают модели выбрать target: runtime не перемещает и не snap-ит координаты, не меняет policy, число попыток, лимиты или verifier. Исходный P0-результат остаётся **FAIL**, а release gate — **NO-GO** до критериев выше; для hints пока нет новых live результатов.
+Hints лишь помогают модели выбрать target: runtime не перемещает и не snap-ит координаты, не меняет policy, число попыток, лимиты или verifier. Исходный P0-результат остаётся историческим **FAIL**; до выполнения критерия выше release gate — **NO-GO**.
 
 Повторить исходные checkbox и web_table с prototype можно в disposable P0 runner, включив `-ObservationHints`; лимиты остаются 180 секунд и 40 шагов:
 
@@ -79,4 +79,17 @@ Hints лишь помогают модели выбрать target: runtime не
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-demoqa-tests.ps1 -ModelBaseUrl http://host.docker.internal:8080/v1 -ModelAlias auto -ModelProtocol generic -AllowSuspendedTasks -P0Diagnostics -ObservationHints -P0Scenarios 'checkbox,web_table' -RunLabel p0hints1
 ```
 
-Проверено локально focused-набором model/runtime/P0 tests: **71 passed**. Полный стабильный unit suite: **455 passed, 6 skipped, 0 failed за 79.55 секунды** ([JUnit](../../runtime/readiness-2026-10-30/pytest-p0-hints.xml)). Этот результат не включает live A/B и не меняет исторический live **FAIL** или release **NO-GO**.
+### Live hints run 1
+
+Первый opt-in прогон завершил оба сценария **PASS** при тех же лимитах 180 секунд и 40 шагов. В обоих `baseline_verified=false`, `independent_verified=true`, `task_events_truncated=false`.
+
+| Сценарий | Исходная база без hints | Hints run 1 | Наблюдение по trace |
+|---|---|---|---|
+| `checkbox` | `expired`, 14 шагов, 187.790 с | `succeeded`, 3 шага, 31.286 с | Первый click промахнулся; второй попал в expander Home, третий выбрал Desktop. Независимая проверка checkbox и результата прошла. |
+| `web_table` | `failed`, 9 шагов, 65.346 с, editable-focus retries exhausted | `succeeded`, 15 шагов, 113.373 с | Все 6 `type_text` были применены с focus на соответствующих полях; 6 условий таблицы прошли независимую проверку. |
+
+Успех одного запуска на каждый сценарий — **1/3 PASS** по release-критерию, поэтому **NO-GO** сохраняется. Web table завершился медленнее исходного отказа; intervals между действиями не являются чистой model latency, и по этой паре нельзя заявлять её снижение. Checkbox trace всё ещё показывает начальный промах. Hints остаются opt-in и выключены по умолчанию; production не развёртывался.
+
+Сохранён полный sanitized allowlisted trace: [p0-hints-1.json](evidence/p0-hints-1.json); [summary](evidence/p0-hints-1-summary.json). SHA-256 отчёта: `ee31bf26b6cda84534e3a8bff29e50f3a2855f5ad30a069cfc5020b6a76816f2`. В artifact отсутствуют task IDs, page labels, selectors, typed values, credentials и raw model output.
+
+Проверено локально focused-набором model/runtime/P0 tests: **71 passed**. Полный стабильный unit suite: **455 passed, 6 skipped, 0 failed за 79.55 секунды** ([JUnit](../../runtime/readiness-2026-10-30/pytest-p0-hints.xml)). Unit tests не заменяют три независимых live PASS на каждый сценарий.
