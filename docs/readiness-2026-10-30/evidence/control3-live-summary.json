@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "checks": {
+    "health_live": {"status": "PASS", "http_status": 200, "latency_ms": 1.52},
+    "health_ready": {"status": "PASS", "http_status": 200, "latency_ms": 12.21},
+    "host_accepted": {"status": "PASS", "http_status": 200},
+    "host_rejected": {"status": "PASS", "http_status": 403},
+    "origin_rejected": {"status": "PASS", "http_status": 403},
+    "ui_session_positive": {"status": "PASS", "http_status": 200},
+    "csrf_missing_rejected": {"status": "PASS", "http_status": 403},
+    "csrf_rejected": {"status": "PASS", "http_status": 403},
+    "csrf_positive": {"status": "PASS", "http_status": 200},
+    "ui_cookie_not_mcp_auth": {"status": "PASS", "http_status": 401},
+    "mcp_invalid_bearer_rejected": {"status": "PASS", "http_status": 401},
+    "mcp_unauth_rejected": {"status": "PASS", "http_status": 401},
+    "mcp_bearer_positive": {"status": "PASS", "http_status": 200, "nonempty_tools": true},
+    "browser_state": {"status": "PASS", "http_status": 200, "browser_started": true, "context_count": 1, "page_count": 1},
+    "read_only_observation": {"status": "PASS", "http_status": 200, "width": 1440, "height": 900, "bytes": 7074},
+    "read_only_load": {"status": "PASS", "concurrency": 2, "iterations": 3, "requests": 6, "http_200": 6,
+      "latency_ms": {"min": 1.77, "mean": 7.16, "p50": 6.48, "p95": 14.23, "max": 14.23}}
+  },
+  "overall_status": "PASS",
+  "runner_postconditions": {
+    "report_export_succeeded": true,
+    "test_cleanup_succeeded": true,
+    "production_browser_restored": true,
+    "profile_digest_unchanged": true,
+    "preexisting_fixtures_preserved": true
+  },
+  "limitations": ["No browser actions or task creation.", "No injected dynamic/overlay/iframe/dialog fixture."]
+}

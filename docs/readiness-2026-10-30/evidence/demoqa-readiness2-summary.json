@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "scenario_counts": {"passed": 3, "failed": 2},
+  "scenarios": [
+    {"scenario": "text_box", "status": "passed", "steps": 9, "elapsed_s": 57.71, "independent_verified": true},
+    {"scenario": "invalid_email", "status": "passed", "steps": 14, "elapsed_s": 98.05, "independent_verified": true},
+    {"scenario": "checkbox", "status": "failed", "steps": 2, "elapsed_s": 15.30, "error_code": "MODEL_OUTPUT_INVALID", "task_status": "waiting_human", "independent_verified": false},
+    {"scenario": "web_table", "status": "failed", "steps": 23, "elapsed_s": 185.48, "error_code": "TASK_EXPIRED", "task_status": "expired", "independent_verified": false},
+    {"scenario": "notify_then_click", "status": "passed", "steps": 10, "elapsed_s": 102.15, "independent_verified": true}
+  ],
+  "limitations": [
+    "Synthetic public DemoQA scenarios; no real account, purchase, or message.",
+    "Two failed cases are retained as failures and are not converted to setup-blocked or PASS."
+  ]
+}

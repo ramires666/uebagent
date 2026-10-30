@@ -1,0 +1,42 @@
+{
+  "schema": "readiness-task-control/v1",
+  "status": "PASS",
+  "checks": {
+    "worker_bearer_positive": "PASS",
+    "worker_bearer_negative": "PASS",
+    "mcp_start_idempotency": "PASS",
+    "cancel_terminal_and_stable": "PASS",
+    "worker_post_cancel_idle": "PASS"
+  },
+  "worker_auth": {
+    "positive_health_ready": true,
+    "unauth_health_status": 401,
+    "wrong_bearer_health_status": 401,
+    "unauth_observe_status": 401,
+    "wrong_bearer_observe_status": 401
+  },
+  "task": {
+    "duplicate_start_same_id": true,
+    "trigger": "first_action_planned",
+    "first_action_planned_count": 1,
+    "status_after_cancel": "recovering",
+    "stable_final_status": "recovering",
+    "repeat_cancel_result_status": "recovering",
+    "repeat_cancel_is_idempotent_claim": false,
+    "planned_count_after_2s": 1,
+    "no_additional_actions_during_2s": true,
+    "in_flight_dispatch_proven": false,
+    "scope": "bounded control smoke; no restart/concurrency/uncertain-dispatch coverage"
+  },
+  "worker_after": {
+    "ready": true,
+    "control_owner": "none",
+    "context_count": 1,
+    "page_count": 1,
+    "action_in_progress": false,
+    "import_in_progress": false,
+    "resource_violation": false,
+    "recovery_needed": false,
+    "recovery_state": "idle"
+  }
+}

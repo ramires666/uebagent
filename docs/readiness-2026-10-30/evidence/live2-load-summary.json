@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "scope": "bounded live2 read-only load and runtime metrics; not a soak test",
+  "read_only_api_load": {
+    "concurrency": 2,
+    "iterations": 3,
+    "requests": 6,
+    "http_200": 6,
+    "latency_ms": {"min": 1.77, "mean": 7.16, "p50": 6.48, "p95": 14.23, "max": 14.23}
+  },
+  "browser_container": {
+    "memory_limit_bytes": 2952790016,
+    "memory_limit_mib": 2816,
+    "memory_peak_bytes": 1522884608,
+    "memory_peak_percent_limit": 51.58,
+    "pids_limit": 512,
+    "pids_peak": 189,
+    "oom": 0,
+    "oom_kill": 0,
+    "oom_group_kill": 0,
+    "cgroup_high_events": 0,
+    "cpu_throttled_periods": 6
+  },
+  "conclusion": "No OOM during this bounded run; does not establish sustained-load or capacity readiness."
+}
